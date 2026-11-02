@@ -690,6 +690,37 @@ devices untouched, reconnect refused, device fixed per socket), e2e `app-api-rea
   (KNOWLEDGE: restart after every deploy that touches it). Until then the old server ignores `dev` and answers 404 to the push
   (reported, events keep flowing — a 404 there doesn't pause publishing), i.e. today's per-user behaviour; nothing breaks.
 
+## BRAI-441 sync feed v2 (`feat/app-api-sync-v2`)
+Gaps the desktop offline mode found (desktop `docs/tasks/brai-366.md` → "API gaps"). App API only; the web's `POST /offline/sync`
+answers stay as they are.
+1. **Entity shape:** `POST /api/v1/sync` renders `entity` with the feed's resources, looked up fresh from the outcome's
+   entity type + id (also on replays: `OfflineSync::replay` now carries both) — `issue.*` / `work.done` → WorkItem, `list_task.create|update`
+   → Task, `list_task.reorder` → the task list (with `can`), `capture.create` → Capture, `my_day.*` → My Day, `issue.comment` → Comment.
+   New `record_type` (`work|task|task_list|capture|my_day|comment`) says which feed record `entity` replaces. Gone / no longer
+   visible → `entity: null`.
+2. **`can` on `task_list` records:** `update`, `delete`, `manage_items` (shared `TaskListDetailResource::abilities`, computed once per
+   project). Role changes don't touch a list's `updated_at`, so the cursor keeps a hash of the abilities: when it changes, the next
+   delta run re-sends every kept list.
+3. **My Day after `work.done`:** the My Day hash already covers each item's `done` + `updated_at` → the next run re-sends `my_day`.
+   Test + doc.
+4. **`task_lists=mine`** (alone or with ids): pinned lists (sidebar pins, every project), lists with my open assigned tasks, lists
+   where I created or was assigned a task changed in the last 30 days, lists I created in the last 30 days — only in projects I can
+   open, not trashed, explicit ids first, at most 50. Resolved at the start of every run; the response says which (`task_lists`).
+5. **Additive list changes:** cursor v2 keeps the resolved list set; at each run start (and when `task_lists` changes) the diff
+   against the previous set gives `fresh` lists (a full pass inside a delta run: the list + all its tasks) and `gone` lists (a
+   `task_list` delete). Scopes / captures-filter changes, expired / foreign / unknown cursors still start a full run. **v1 cursors
+   keep working** (decoded and mapped by phase index; their first run start re-sends the lists with `can`); malformed ones reset.
+6. **`captures=inbox|all`** (default all): inbox = neither processed nor archived. In a delta run a capture that left the inbox
+   comes as a `capture` delete. Changing the filter = a full run.
+Tests in `SyncTest`; e2e step in `app-api-sync.spec.ts`; API.md Sync, BRAI-263 / 264 texts; OpenAPI. No migration.
+
+### BRAI-441 — result
+Built as planned. New: `Support\Sync\SyncRecords`, `SyncTaskListResource`, `TaskListDetailResource::abilities`, cursor v2
+(phase by name, `kept` / `fresh` / `gone`, abilities hash, captures filter; v1 read), answer field `task_lists`, result field
+`record_type`. No migration. Tests: 9 new in `SyncTest` (entities incl. replay / gone, `can` + role change, My Day after
+`work.done`, `mine` across workspaces + hidden / other users' lists, cap, additive lists incl. a self-changing `mine` set, a
+list change mid-run, v1 cursors end-of-run / mid-run / unreadable, inbox filter); e2e `app-api-sync` second test.
+
 ## Release materials (`docs/release-v1.49.0-materials`)
 In-app changelog entry v1.49.0 (`HelpModal.tsx`), homepage (`Welcome.tsx`: "Brainitive on your desktop" spotlight card +
 `#desktop` section with "Open API for apps", both marked beta / coming soon; `e2e/tests/homepage.spec.ts`), docs site

@@ -11,6 +11,8 @@ use App\Models\User;
 use App\Support\AppApi\AppTokens;
 use App\Support\Offline\OfflineSync;
 use App\Support\Sync\ChangeFeed;
+use App\Support\Sync\SyncChange;
+use App\Support\Sync\SyncRecords;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
@@ -36,18 +38,21 @@ class SyncController extends Controller
     /**
      * What changed in the client's offline copy.
      *
-     * Start without a cursor (optionally `scopes` = work,task_lists,my_day,captures and `task_lists` = ids to
-     * keep): a **full run** (`reset: true`) — page with `next_cursor` while `has_more`, then drop every cached
-     * record of the scope the run didn't send. Keep the last `next_cursor` (when `has_more` is false) and call
-     * again with it later: a **delta run** with what changed since — `upsert` (add / replace with `data`) and
-     * `delete` (drop: deleted, reassigned away, a deleted board / list). Always drop cached records of projects
-     * that are not in `project_ids` (lost access, deleted project). A cursor older than 30 days, of another
-     * account or unknown, or new `scopes` / `task_lists` start a full run again. The same change may come
-     * twice (apply it by `updated_at`).
+     * Start without a cursor (optionally `scopes` = work,task_lists,my_day,captures, `task_lists` = ids to
+     * keep and / or `mine`, `captures` = all|inbox): a **full run** (`reset: true`) — page with `next_cursor`
+     * while `has_more`, then drop every cached record of the scope the run didn't send. Keep the last
+     * `next_cursor` (when `has_more` is false) and call again with it later: a **delta run** with what changed
+     * since — `upsert` (add / replace with `data`) and `delete` (drop: deleted, reassigned away, a deleted
+     * board / list, a list no longer kept, a capture that left the inbox). Always drop cached records of
+     * projects that are not in `project_ids` (lost access, deleted project). Other `task_lists` with a cursor
+     * are additive: the new lists come in full, dropped ones as deletes, the rest goes on. A cursor older than
+     * 30 days, of another account or unknown, or new `scopes` / `captures` start a full run again. The same
+     * change may come twice (apply it by `updated_at`).
      */
     public function changes(SyncChangesRequest $request): JsonResponse
     {
-        $page = ChangeFeed::page($request->user(), $request->cursor(), $request->scopes(), $request->taskLists(), $request->limit());
+        [$lists, $mine] = $request->taskLists() ?? [null, null];
+        $page = ChangeFeed::page($request->user(), $request->cursor(), $request->scopes(), $lists, $request->limit(), $mine, $request->captures());
 
         return response()->json([
             'data' => SyncChangeResource::collection($page['changes']),
@@ -59,6 +64,8 @@ class SyncController extends Controller
             'reset' => $page['reset'],
             /** @var list<int> projects the user can open now: drop cached records of any other project */
             'project_ids' => $page['project_ids'],
+            /** @var list<int> the task lists this run keeps (the ids asked for + `mine`, only lists the user can open): drop cached lists not in it */
+            'task_lists' => $page['task_lists'],
         ]);
     }
 
@@ -71,9 +78,10 @@ class SyncController extends Controller
      * `capture.create`, `my_day.add|remove`) plus `work.done`. Updates carry `base.fields` (each changed
      * field as the device saw it): a field someone else changed meanwhile is a `conflict` (409) and is not
      * written — never overwritten. `request_id` makes a change idempotent (30 days): a retry answers the
-     * stored result (`replayed: true`); the same id with another change → `invalid`. `target.ref` /
-     * `data.work_ref` = the request_id of an earlier create (in this batch or before). Budget: 240 changes a
-     * minute per user (`rate_limited`: send it again later).
+     * stored result (`replayed: true`); the same id with another change → `invalid`. `entity` is the server's
+     * current state as the feed's record of `record_type` (work, task, task_list, capture, my_day, comment).
+     * `target.ref` / `data.work_ref` = the request_id of an earlier create (in this batch or before). Budget:
+     * 240 changes a minute per user (`rate_limited`: send it again later).
      */
     public function store(SyncBatchRequest $request): JsonResponse
     {
@@ -91,7 +99,7 @@ class SyncController extends Controller
 
     /**
      * @param  array<mixed>  $change
-     * @return array{request_id: string|null, type: string|null, status: string, http_status: int, body?: array<string, mixed>, errors?: array<string, list<string>>|null}
+     * @return array{request_id: string|null, type: string|null, status: string, http_status: int, body?: array<string, mixed>, errors?: array<string, list<string>>|null, record?: SyncChange|null}
      */
     private function apply(User $user, array $change, ?string $source): array
     {
@@ -146,6 +154,9 @@ class SyncController extends Controller
             return $result('error', 500, ['message' => 'This change could not be applied. Send it again later.']);
         }
 
-        return $result((string) ($outcome->body['status'] ?? 'applied'), $outcome->status, $outcome->body);
+        // the entity as the feed's record (the web engine's snapshot is for the web's own offline mode)
+        $record = $outcome->isFinal() ? SyncRecords::find($user, (string) $type, $outcome->entityType, $outcome->entityId) : null;
+
+        return $result((string) ($outcome->body['status'] ?? 'applied'), $outcome->status, $outcome->body) + ['record' => $record];
     }
 }

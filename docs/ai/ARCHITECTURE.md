@@ -521,8 +521,10 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   change; new applier `Offline\Appliers\WorkMutations` (`work.done` → `WorkCompletion::setDone`), `FieldMerge::BOOL`;
   `CaptureMutations` now writes through `CaptureInbox::create`. Reads: `Support\Sync\ChangeFeed` (phased keyset feed over My Work /
   kept task lists / My Day / captures, built on `AssignedWork`, `TaskLists::withCounts`, `MyDayPlan`, `CaptureConversion::locations`)
-  + `SyncCursor` (opaque cursor: scope, run `since`, phase, keyset, My Day hash) + `SyncChange`; resources `SyncChangeResource`
-  (wraps the existing resources) / `SyncResultResource`. Deletions = soft deletes + table `sync_tombstones` (`SyncTombstone`,
+  + `SyncCursor` (opaque cursor v2: scope, lists asked for + `mine`, captures filter, kept / fresh / gone lists, abilities hash,
+  run `since`, phase name, keyset, My Day hash; reads v1) + `SyncChange`; resources `SyncChangeResource` (wraps the existing
+  resources; `SyncTaskListResource` = list + `can`) / `SyncResultResource`. `POST /sync` results render `entity` through
+  `Support\Sync\SyncRecords` (the feed's record by the outcome's entity type + id, BRAI-441). Deletions = soft deletes + table `sync_tombstones` (`SyncTombstone`,
   migration `2026_11_08_100000`, pruned 30 days at 04:37): written by `Capture::deleted` and the Item / TaskListItem observers when
   the assignee changes. Tests `tests/Feature/AppApi/SyncTest.php`, e2e `e2e/tests/app-api-sync.spec.ts`.
 - **Realtime (phase 09, BRAI-426):** `Controllers\AppApi\RealtimeController` (`GET /realtime`, `POST /realtime/token`, tag

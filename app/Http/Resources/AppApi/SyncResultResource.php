@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\AppApi;
 
+use App\Support\Sync\SyncChange;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -11,7 +12,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * outbox; on a conflict show `conflicts` and let the user pick), `deleted` / `forbidden` / `invalid` →
  * drop it and tell the user, `waiting` / `rate_limited` / `error` → keep it and send it again later.
  *
- * @property-read array{request_id: string|null, type: string|null, status: string, http_status: int, body?: array<string, mixed>, errors?: array<string, list<string>>|null} $resource
+ * @property-read array{request_id: string|null, type: string|null, status: string, http_status: int, body?: array<string, mixed>, errors?: array<string, list<string>>|null, record?: SyncChange|null} $resource
  */
 class SyncResultResource extends JsonResource
 {
@@ -20,6 +21,7 @@ class SyncResultResource extends JsonResource
     {
         $result = $this->resource;
         $body = $result['body'] ?? [];
+        $record = ($result['record'] ?? null) instanceof SyncChange ? $result['record'] : null;
 
         return [
             /** @var string|null the change's request_id (null when it had none: invalid) */
@@ -34,8 +36,10 @@ class SyncResultResource extends JsonResource
             'replayed' => (bool) ($body['replayed'] ?? false),
             // issue | list_task | comment | capture | my_day | task_list | board …
             'entity_type' => $body['entity_type'] ?? null,
-            /** @var array<string, mixed>|null the server's state after the change (applied, conflict) */
-            'entity' => $body['entity'] ?? null,
+            /** @var string|null which feed record `entity` is: work | task | task_list | capture | my_day | comment (null: no entity) */
+            'record_type' => $record?->type,
+            /** @var array<string, mixed>|null the server's state after the change (applied, conflict) as the feed's record of `record_type` — replace your cached copy with it; null when it is gone or hidden now */
+            'entity' => $record ? SyncChangeResource::record($record) : null,
             /** @var array<string, array{base: mixed, mine: mixed, theirs: mixed}>|null conflicting fields: none of them was written */
             'conflicts' => $body['conflicts'] ?? null,
             /** @var list<string>|null fields of a conflicting change that did not conflict and were written */

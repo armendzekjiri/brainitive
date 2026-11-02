@@ -12618,7 +12618,7 @@
         "/sync/changes": {
             "get": {
                 "operationId": "app.v1.sync.changes",
-                "description": "Start without a cursor (optionally `scopes` = work,task_lists,my_day,captures and `task_lists` = ids to\nkeep): a **full run** (`reset: true`) \u2014 page with `next_cursor` while `has_more`, then drop every cached\nrecord of the scope the run didn't send. Keep the last `next_cursor` (when `has_more` is false) and call\nagain with it later: a **delta run** with what changed since \u2014 `upsert` (add / replace with `data`) and\n`delete` (drop: deleted, reassigned away, a deleted board / list). Always drop cached records of projects\nthat are not in `project_ids` (lost access, deleted project). A cursor older than 30 days, of another\naccount or unknown, or new `scopes` / `task_lists` start a full run again. The same change may come\ntwice (apply it by `updated_at`).",
+                "description": "Start without a cursor (optionally `scopes` = work,task_lists,my_day,captures, `task_lists` = ids to\nkeep and / or `mine`, `captures` = all|inbox): a **full run** (`reset: true`) \u2014 page with `next_cursor`\nwhile `has_more`, then drop every cached record of the scope the run didn't send. Keep the last\n`next_cursor` (when `has_more` is false) and call again with it later: a **delta run** with what changed\nsince \u2014 `upsert` (add / replace with `data`) and `delete` (drop: deleted, reassigned away, a deleted\nboard / list, a list no longer kept, a capture that left the inbox). Always drop cached records of\nprojects that are not in `project_ids` (lost access, deleted project). Other `task_lists` with a cursor\nare additive: the new lists come in full, dropped ones as deletes, the rest goes on. A cursor older than\n30 days, of another account or unknown, or new `scopes` / `captures` start a full run again. The same\nchange may come twice (apply it by `updated_at`).",
                 "summary": "What changed in the client's offline copy",
                 "tags": [
                     "Sync"
@@ -12658,14 +12658,26 @@
                     {
                         "name": "task_lists",
                         "in": "query",
-                        "description": "ids of the task lists to keep offline, comma separated (at most 50; lists the user can't open are skipped)",
+                        "description": "ids of the task lists to keep offline and / or `mine` (the lists the user works in: pinned, with open\ntasks assigned to them, recently worked in), comma separated (at most 50 lists; ones the user can't\nopen are skipped). With a cursor, other lists are additive: only the new ones come in full",
                         "schema": {
                             "type": [
                                 "string",
                                 "null"
                             ],
-                            "pattern": "^([1-9][0-9]{0,17}(,[1-9][0-9]{0,17}){0,49})?$",
+                            "pattern": "^((mine|[1-9][0-9]{0,17})(,(mine|[1-9][0-9]{0,17})){0,50})?$",
                             "maxLength": 1000
+                        }
+                    },
+                    {
+                        "name": "captures",
+                        "in": "query",
+                        "description": "all (default) | inbox: only captures in the inbox (one that leaves it comes as a delete)",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "all",
+                                "inbox"
+                            ]
                         }
                     }
                 ],
@@ -12701,6 +12713,13 @@
                                             "items": {
                                                 "type": "integer"
                                             }
+                                        },
+                                        "task_lists": {
+                                            "type": "array",
+                                            "description": "the task lists this run keeps (the ids asked for + `mine`, only lists the user can open): drop cached lists not in it",
+                                            "items": {
+                                                "type": "integer"
+                                            }
                                         }
                                     },
                                     "required": [
@@ -12708,7 +12727,8 @@
                                         "next_cursor",
                                         "has_more",
                                         "reset",
-                                        "project_ids"
+                                        "project_ids",
+                                        "task_lists"
                                     ]
                                 }
                             }
@@ -12729,7 +12749,7 @@
         "/sync": {
             "post": {
                 "operationId": "app.v1.sync.store",
-                "description": "`{changes: [{request_id, type, target?, base?, data}]}` (\u2264 50), applied in order, each on its own: one\nresult per change in the same order, and one bad change never stops the others. Types and their data\nare the web's offline mutations (`list_task.create|update|reorder`, `issue.update|comment|create`,\n`capture.create`, `my_day.add|remove`) plus `work.done`. Updates carry `base.fields` (each changed\nfield as the device saw it): a field someone else changed meanwhile is a `conflict` (409) and is not\nwritten \u2014 never overwritten. `request_id` makes a change idempotent (30 days): a retry answers the\nstored result (`replayed: true`); the same id with another change \u2192 `invalid`. `target.ref` /\n`data.work_ref` = the request_id of an earlier create (in this batch or before). Budget: 240 changes a\nminute per user (`rate_limited`: send it again later).",
+                "description": "`{changes: [{request_id, type, target?, base?, data}]}` (\u2264 50), applied in order, each on its own: one\nresult per change in the same order, and one bad change never stops the others. Types and their data\nare the web's offline mutations (`list_task.create|update|reorder`, `issue.update|comment|create`,\n`capture.create`, `my_day.add|remove`) plus `work.done`. Updates carry `base.fields` (each changed\nfield as the device saw it): a field someone else changed meanwhile is a `conflict` (409) and is not\nwritten \u2014 never overwritten. `request_id` makes a change idempotent (30 days): a retry answers the\nstored result (`replayed: true`); the same id with another change \u2192 `invalid`. `entity` is the server's\ncurrent state as the feed's record of `record_type` (work, task, task_list, capture, my_day, comment).\n`target.ref` / `data.work_ref` = the request_id of an earlier create (in this batch or before). Budget:\n240 changes a minute per user (`rate_limited`: send it again later).",
                 "summary": "Apply a batch of queued offline changes",
                 "tags": [
                     "Sync"
@@ -23691,12 +23711,19 @@
                         ],
                         "description": "issue | list_task | comment | capture | my_day | task_list | board \u2026"
                     },
+                    "record_type": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "which feed record `entity` is: work | task | task_list | capture | my_day | comment (null: no entity)"
+                    },
                     "entity": {
                         "type": [
                             "object",
                             "null"
                         ],
-                        "description": "the server's state after the change (applied, conflict)",
+                        "description": "the server's state after the change (applied, conflict) as the feed's record of `record_type` \u2014 replace your cached copy with it; null when it is gone or hidden now",
                         "additionalProperties": {}
                     },
                     "conflicts": {
@@ -23757,6 +23784,7 @@
                     "http_status",
                     "replayed",
                     "entity_type",
+                    "record_type",
                     "entity",
                     "conflicts",
                     "applied",
@@ -23764,6 +23792,133 @@
                     "errors"
                 ],
                 "title": "SyncResultResource"
+            },
+            "SyncTaskListResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "counts": {
+                        "type": "object",
+                        "description": "open and completed tasks",
+                        "properties": {
+                            "todo": {
+                                "type": "integer"
+                            },
+                            "done": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "todo",
+                            "done"
+                        ]
+                    },
+                    "project": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "key": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "key"
+                        ]
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "can": {
+                        "type": "object",
+                        "description": "as GET /task-lists/{id}: manage_items = add, edit, complete, reorder and delete tasks",
+                        "properties": {
+                            "update": {
+                                "type": "boolean"
+                            },
+                            "delete": {
+                                "type": "boolean"
+                            },
+                            "manage_items": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "update",
+                            "delete",
+                            "manage_items"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "slug",
+                    "name",
+                    "description",
+                    "position",
+                    "counts",
+                    "project",
+                    "workspace",
+                    "url",
+                    "created_at",
+                    "updated_at",
+                    "can"
+                ],
+                "title": "SyncTaskListResource"
             },
             "TaskCollection": {
                 "type": "array",

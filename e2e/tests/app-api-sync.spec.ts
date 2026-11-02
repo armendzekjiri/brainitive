@@ -8,6 +8,7 @@ import { captureCard, openCaptures } from '../helpers/quick-capture';
  * App API v1 offline sync (v1.49.0, BRAI-425), as the desktop app runs it after being offline: a full run of
  * the change feed, a batch from the outbox (applied once, a retry answers the stored result), the web inbox
  * showing the synced idea, and the next delta run carrying the change and, after a delete, its tombstone.
+ * v2 (BRAI-441): results carry the feed's record, `captures=inbox` turns an archived capture into a delete.
  */
 
 type Change = { type: string; id: string; op: string; data: { text?: string } | null };
@@ -60,6 +61,33 @@ test.describe('app api: offline sync', () => {
         // deleted (archive, then delete — as the web): the feed tells the device to drop it
         await ok(await page.request.post(`/api/v1/captures/${uuid}/archive`, { headers: auth }));
         expect((await page.request.delete(`/api/v1/captures/${uuid}`, { headers: auth })).status()).toBe(204);
+        const after = await run(page, auth, `cursor=${encodeURIComponent(delta.cursor)}`);
+        expect(after.changes).toContainEqual(expect.objectContaining({ type: 'capture', id: uuid, op: 'delete', data: null }));
+
+        await page.request.post('/api/v1/auth/logout', { headers: auth });
+    });
+
+    // v2 (BRAI-441): results carry the feed's record, the inbox filter turns "left the inbox" into a delete
+    test('results carry the feed record and the inbox filter drops archived captures', async ({ page }) => {
+        const token = await seedAppToken(page);
+        const auth = { Authorization: `Bearer ${token}` };
+
+        const full = await ok(await page.request.get('/api/v1/sync/changes?scopes=captures,task_lists&captures=inbox&task_lists=mine&limit=100', { headers: auth }));
+        expect(full.reset).toBe(true);
+        expect(Array.isArray(full.task_lists)).toBe(true);
+        let cursor: string = full.next_cursor;
+        if (full.has_more) cursor = (await run(page, auth, `cursor=${encodeURIComponent(cursor)}`)).cursor;
+
+        const idea = uid('Inbox idea');
+        const result = await ok(await page.request.post('/api/v1/sync', { headers: auth, data: { changes: [{ request_id: crypto.randomUUID(), type: 'capture.create', data: { text: idea } }] } }));
+        expect(result.data[0]).toMatchObject({ status: 'applied', record_type: 'capture', entity: { text: idea } });
+        const uuid: string = result.data[0].entity.id;
+
+        const delta = await run(page, auth, `cursor=${encodeURIComponent(cursor)}`);
+        expect(delta.reset).toBe(false);
+        expect(delta.changes).toContainEqual(expect.objectContaining({ type: 'capture', id: uuid, op: 'upsert' }));
+
+        await ok(await page.request.post(`/api/v1/captures/${uuid}/archive`, { headers: auth }));
         const after = await run(page, auth, `cursor=${encodeURIComponent(delta.cursor)}`);
         expect(after.changes).toContainEqual(expect.objectContaining({ type: 'capture', id: uuid, op: 'delete', data: null }));
 
