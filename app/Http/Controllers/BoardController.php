@@ -31,6 +31,7 @@ use App\Support\Entitlements\LimitGate;
 use App\Support\Github\ItemDevelopment;
 use App\Support\Live\BoardLive;
 use App\Support\References\ContentReferences;
+use App\Support\Validation\ContentLimits;
 use App\Support\Work\WorkCompletion;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -752,7 +753,7 @@ class BoardController extends Controller
         $this->authorize('update', $item);
 
         $validated = $request->validate([
-            'body' => 'required|string',
+            'body' => ['required', ...ContentLimits::comment()],
             // A reply belongs to a comment on this issue.
             'parent_id' => ['nullable', Rule::exists('comments', 'id')->where('item_id', $item->id)],
         ]);

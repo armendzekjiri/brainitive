@@ -3,6 +3,7 @@
 namespace App\Http\Requests\AppApi;
 
 use App\Support\TaskLists\TaskLists;
+use App\Support\Validation\ContentLimits;
 
 /**
  * `PATCH /api/v1/task-lists/{id}/items/{item}`: only the sent fields change (`null` clears one).
@@ -16,7 +17,7 @@ class UpdateTaskRequest extends TaskRequest
         return [
             ...TaskLists::taskRules($this->listForRules(), update: true),
             // Markdown; stored as the web editor's HTML; null clears it
-            'notes' => ['sometimes', 'nullable', 'string', 'max:10000'],
+            'notes' => ['sometimes', 'nullable', 'string', 'max:'.ContentLimits::BODY],
         ];
     }
 }

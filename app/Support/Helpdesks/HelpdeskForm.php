@@ -90,7 +90,7 @@ class HelpdeskForm
 
         $rules = [
             'subject' => [self::subject($helpdesk)['hidden'] ? 'nullable' : 'required', 'string', 'max:255'],
-            'description' => [$messageRequired ? 'required' : 'nullable', 'string', 'max:200000'],
+            'description' => [$messageRequired ? 'required' : 'nullable', 'string', 'max:'.ContentLimits::TICKET_BODY],
             'contact_email' => ['required', 'email', 'max:255'],
             'contact_name' => [$nameRequired ? 'required' : 'nullable', 'string', 'max:255'],
         ];

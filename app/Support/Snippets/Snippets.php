@@ -6,6 +6,7 @@ use App\Models\Snippet;
 use App\Models\SnippetCollection;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Support\Str;
 
 /**
@@ -36,7 +37,7 @@ final class Snippets
             'title' => $update ? 'sometimes|required|string|max:255' : 'required|string|max:255',
             'description' => 'nullable|string|max:2000',
             'language' => 'nullable|string|max:50',
-            'content' => 'nullable|string',
+            'content' => ['nullable', ...ContentLimits::body()],
             // inherit (the collection's) | private | public
             'visibility' => 'nullable|in:inherit,private,public',
         ];

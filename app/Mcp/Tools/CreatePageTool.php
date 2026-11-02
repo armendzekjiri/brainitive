@@ -9,6 +9,7 @@ use App\Support\Entitlements\LimitReached;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\Mcp\ResourceLocator;
 use App\Support\Pages\PageWrites;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -28,7 +29,7 @@ class CreatePageTool extends Tool
             'workspace' => 'required|string',
             'project' => 'required|string',
             'title' => 'required|string|max:255',
-            'markdown' => 'nullable|string',
+            'markdown' => 'nullable|string|max:'.ContentLimits::PAGE_BODY,
             'parent_uuid' => 'nullable|string',
             'publish' => 'nullable|boolean',
         ]);

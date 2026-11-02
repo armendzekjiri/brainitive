@@ -16,6 +16,7 @@ use App\Support\Offline\FieldMerge;
 use App\Support\Offline\MutationContext;
 use App\Support\Offline\SyncAbort;
 use App\Support\Offline\SyncOutcome;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -77,7 +78,7 @@ final class IssueMutations
     /** A plain-text comment written offline (also "keep both" for a conflicting title). */
     public static function comment(MutationContext $ctx): SyncOutcome
     {
-        $data = $ctx->validate(['body' => 'required|string|max:10000']);
+        $data = $ctx->validate(['body' => ['required', ...ContentLimits::comment()]]);
         $item = self::item($ctx);
         Gate::forUser($ctx->user)->authorize('update', $item); // as BoardController::storeComment
 
@@ -117,7 +118,7 @@ final class IssueMutations
         $data = $ctx->validate($rules + [
             // the board's first column when not given
             'column_id' => ['nullable', 'integer', Rule::exists('board_columns', 'id')->where('board_id', $board->id)],
-            'description' => ['nullable', 'string', 'max:100000'],
+            'description' => ['nullable', ...ContentLimits::body()],
         ]);
 
         $data['column_id'] ??= $board->columns()->value('id');

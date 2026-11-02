@@ -23,6 +23,7 @@ use App\Support\Helpdesks\HelpdeskForm;
 use App\Support\Helpdesks\TicketActions;
 use App\Support\Legal\PublicOperator;
 use App\Support\Uploads;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
@@ -48,7 +49,7 @@ class TicketController extends Controller
 
         $rules = [
             'subject' => 'required|string|max:255',
-            'description' => [$messageRequired ? 'required' : 'nullable', 'string', 'max:50000'],
+            'description' => [$messageRequired ? 'required' : 'nullable', 'string', 'max:'.ContentLimits::TICKET_BODY],
             'contact_email' => 'required|email|max:255',
             'contact_name' => [$nameRequired ? 'required' : 'nullable', 'string', 'max:255'],
             'column_id' => ['required', Rule::exists('helpdesk_columns', 'id')->where('helpdesk_id', $helpdesk->id)],
@@ -241,7 +242,7 @@ class TicketController extends Controller
 
         $validated = $request->validate([
             'subject' => 'sometimes|required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => 'nullable|string|max:'.ContentLimits::TICKET_BODY,
             'priority_id' => 'nullable|exists:item_priorities,id',
             'assigned_to' => ['nullable', 'integer', new ProjectMember($project)], // Codex web review I
         ]);
@@ -271,7 +272,7 @@ class TicketController extends Controller
         $this->authorize('update', $ticket);
 
         $validated = $request->validate([
-            'body' => 'required|string',
+            'body' => 'required|string|max:'.ContentLimits::TICKET_REPLY,
             'is_internal_note' => 'boolean',
         ]);
 
@@ -287,7 +288,7 @@ class TicketController extends Controller
     public function storePublicReply(Request $request, Helpdesk $helpdesk, Ticket $ticket)
     {
         $validated = $request->validate([
-            'body' => 'required|string|max:50000',
+            'body' => 'required|string|max:'.ContentLimits::TICKET_REPLY,
             'access_token' => 'required|string',
             'file' => 'nullable|array|max:5',
             'file.*' => ['file', 'max:10240', new NotExecutableUpload],

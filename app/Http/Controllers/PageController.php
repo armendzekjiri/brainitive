@@ -6,6 +6,7 @@ use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Rules\JsonSize;
 use App\Support\Collab\CollabConfig;
 use App\Support\Collab\PageCollab;
 use App\Support\Collab\WhiteboardCollab;
@@ -14,6 +15,7 @@ use App\Support\PageReviews\ReviewGate;
 use App\Support\PageReviews\ReviewPresenter;
 use App\Support\Pages\PageMover;
 use App\Support\Pages\PageWrites;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -224,7 +226,7 @@ class PageController extends Controller
         abort_if($page->review_required && ! $page->is_whiteboard, 422, 'This page needs an approved review before publishing.');
 
         $validated = $request->validate([
-            'diagram_data' => 'required',
+            'diagram_data' => ['required', new JsonSize(ContentLimits::DIAGRAM)],
             'image' => 'nullable|image|mimes:png|max:10240',
             'base_revision' => 'nullable|integer|min:0',
             'force' => 'boolean',
@@ -281,7 +283,7 @@ class PageController extends Controller
         $this->authorize('update', $page);
 
         $validated = $request->validate([
-            'diagram_data' => 'required',
+            'diagram_data' => ['required', new JsonSize(ContentLimits::DIAGRAM)],
             'diagram_id' => 'required|string|max:255',
             'block_id' => 'required|string|max:255',
             'image' => 'required|image|mimes:png|max:10240',
@@ -329,7 +331,7 @@ class PageController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'icon' => 'nullable|string|max:2000000',
-            'content' => 'nullable',
+            'content' => ['nullable', ...ContentLimits::pageContent()],
             'parent_id' => [
                 'nullable',
                 Rule::exists('pages', 'id')->where('project_id', $project->id),
@@ -376,7 +378,7 @@ class PageController extends Controller
         $this->authorize('update', $page);
 
         $validated = $request->validate([
-            'content' => 'sometimes|nullable',
+            'content' => ['sometimes', 'nullable', ...ContentLimits::pageContent()],
             'name' => 'sometimes|required|string|max:255',
             'icon' => 'sometimes|nullable|string|max:2000000',
             'base_revision' => 'nullable|integer|min:0',
@@ -472,7 +474,7 @@ class PageController extends Controller
         $this->authorize('update', $page);
 
         $validated = $request->validate([
-            'content' => 'sometimes|nullable',
+            'content' => ['sometimes', 'nullable', ...ContentLimits::pageContent()],
             'name' => 'sometimes|required|string|max:255',
             'icon' => 'sometimes|nullable|string|max:2000000',
             'message' => 'nullable|string|max:255',
@@ -560,7 +562,7 @@ class PageController extends Controller
         $this->authorize('create', [Page::class, $project]);
 
         $validated = $request->validate([
-            'pages' => 'required|array',
+            'pages' => 'required|array|max:'.ContentLimits::REORDER_IDS,
             'pages.*.id' => ['required', Rule::exists('pages', 'id')->where('project_id', $project->id)],
             'pages.*.position' => 'required|integer|min:0',
             'pages.*.parent_id' => ['nullable', Rule::exists('pages', 'id')->where('project_id', $project->id)],

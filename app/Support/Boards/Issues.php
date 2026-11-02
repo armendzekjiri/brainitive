@@ -15,6 +15,7 @@ use App\Rules\ProjectMember;
 use App\Support\Entitlements\LimitGate;
 use App\Support\Entitlements\LimitReached;
 use App\Support\Live\BoardLive;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -37,7 +38,7 @@ final class Issues
     {
         $rules = [
             'title' => $item ? 'sometimes|required|string|max:255' : 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => ['nullable', ...ContentLimits::body()],
             // enabled types; a card may keep the switched-off type it already has
             'item_type_id' => ['nullable', 'integer', Rule::in(ItemType::selectableIdsFor($project, $item?->item_type_id))],
             'priority_id' => ['nullable', 'integer', Rule::in(ItemPriority::forProject($project)->pluck('id')->map(fn ($id) => (int) $id)->all())],
