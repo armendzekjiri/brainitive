@@ -5,11 +5,15 @@
 // Same guards for POST /internal/live/devices/revoked {devices: [ids]}: Brainitive signed these app devices
 // out, their sockets are closed at once — live channels and live co-editing documents (BRAI-377); the minute
 // re-checks catch what this misses.
+// And for POST /internal/live/sessions/ended {sessions?: [sid], users?: [{id, generation}]}: browser sessions signed
+// out / users signed out everywhere — their web sockets close with 4401 "Signed out" (Codex realtime review 1).
 import { timingSafeEqual } from 'node:crypto';
+import { SESSION_ID } from '../token.js';
 import { CHANNEL } from './token.js';
 
 export const PUBLISH_PATH = '/internal/live/publish';
 export const REVOKED_DEVICES_PATH = '/internal/live/devices/revoked';
+export const ENDED_SESSIONS_PATH = '/internal/live/sessions/ended';
 const MAX_DEVICES = 1000;
 const EVENT = /^[a-z][a-z0-9_.-]{0,63}$/;
 const PROXY_HEADERS = ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip', 'forwarded'];
@@ -78,7 +82,7 @@ export function createPublishHandler({ key, hub, allowFrom = 'loopback', logger 
     return async function handle(request, response) {
         const path = (request.url ?? '').split('?')[0];
         if (!path.startsWith('/internal/')) return false;
-        if (path !== PUBLISH_PATH && path !== REVOKED_DEVICES_PATH) {
+        if (path !== PUBLISH_PATH && path !== REVOKED_DEVICES_PATH && path !== ENDED_SESSIONS_PATH) {
             reply(response, 404, { message: 'Not found.' });
             return true;
         }
@@ -114,6 +118,22 @@ export function createPublishHandler({ key, hub, allowFrom = 'loopback', logger 
             const closed = hub.revokeDevices(devices);
             reply(response, 202, { closed });
             if (closed > 0) logger.debug?.(`[live] closed ${closed} socket(s) of revoked device(s)`);
+            return true;
+        }
+        if (path === ENDED_SESSIONS_PATH) {
+            const sessions = data?.sessions ?? [];
+            const users = data?.users ?? [];
+            const valid = Array.isArray(sessions) && sessions.length <= MAX_DEVICES && sessions.every((sid) => typeof sid === 'string' && SESSION_ID.test(sid))
+                && Array.isArray(users) && users.length <= MAX_DEVICES
+                && users.every((u) => u && Number.isInteger(u.id) && u.id > 0 && Number.isInteger(u.generation) && u.generation >= 0)
+                && sessions.length + users.length > 0;
+            if (!valid) {
+                reply(response, 422, { message: 'Invalid sessions.' });
+                return true;
+            }
+            const closed = hub.endSessions({ sessions, users: users.map(({ id, generation }) => ({ id, generation })) });
+            reply(response, 202, { closed });
+            if (closed > 0) logger.debug?.(`[live] closed ${closed} socket(s) of signed-out session(s)`);
             return true;
         }
         const entries = Array.isArray(data?.messages) ? data.messages : null;

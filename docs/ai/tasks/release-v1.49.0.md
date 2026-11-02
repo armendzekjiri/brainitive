@@ -846,6 +846,40 @@ itself from the folders and `order:`), public download page `GET /download` (`De
 `e2e/tests/desktop-download.spec.ts`). The Cloud homepage is the separate Astro website (brainitive-website repo): its own copy of
 the desktop section is the owner's to do.
 
+## Codex realtime review (`fix/v1.49-realtime`, 2026-11-02)
+Codex's read-only review of the realtime service (`/private/tmp/brainitive-realtime-review.md`): 6 findings, each
+reproduced first with a failing Node test (`realtime/test/*`) and / or PHPUnit (PostgreSQL), one commit per finding.
+Decisions and traps: KNOWLEDGE.md → "Codex realtime review v1.49.0".
+
+| # | Finding | Verified? | Fix | Tests |
+|---|---|---|---|---|
+| 1 | HIGH: browser logout doesn't revoke its realtime sockets / still-valid tokens | **yes** — after logout the socket stayed and both access endpoints still allowed the user (per-user checks, no session in web tokens) | web live + collab tokens carry `sid` (HMAC of the session id) + `gen` (`users.app_auth_generation`), `RealtimeSession`; `Logout` / `CurrentDeviceLogout` → cache marker (6 h) + push `POST /internal/live/sessions/ended {sessions}`; `SignOutEverywhere` → `{users: [{id, generation}]}`; realtime closes those web sockets with **4401 "Signed out"** (4410 stays for devices) and refuses their tokens; connect checks + minute re-checks send `sessions`, the access endpoints answer `ended_sessions` + `generations` | `RealtimeSessionTest` (5), `LiveChannelsTest` (updated), `live.test.js` (+5), `server.test.js` (+3), e2e `live-channel` (+1: logout closes that browser's socket, the other browser stays live) |
+| 2 | HIGH: collab sockets stay authorized while access re-checks keep failing | **yes** — 4 × HTTP 500, the editor kept editing | fail closed after `COLLAB_ACCESS_MAX_FAILURES` (2) unanswered rounds → CLOSE "Access could not be checked" (browser fetches a session and reconnects); re-checks batched ≤ 200 users / ≤ 500 devices + sessions (a big document got a permanent 422); a clear denial still closes at once | `server.test.js` (+3) |
+| 3 | MEDIUM: live sockets use stale grants until the first re-check | **yes** — a removed channel / revoked device was granted on `auth` | every `auth` asks Brainitive before `ready` (channels, device, session), batched per 10 ms (≤ 100 entries); no answer → 4403 | `live.test.js` (+4, fake access endpoint adapted) |
+| 4 | MEDIUM: collab sockets lack per-user / rate / size limits | **yes** | 30 document sockets and 30 open documents per user (`too-many-connections`, 4429), 300 burst / 100 msg/s per socket (4429, rest dropped before Hocuspocus), message ≤ state limit + 64 KiB (1009); env `COLLAB_MAX_SOCKETS_PER_USER`, `COLLAB_MESSAGE_BURST`, `COLLAB_MESSAGES_PER_SECOND`, `COLLAB_MAX_MESSAGE_BYTES` | `limits.test.js` (4) |
+| 5 | MEDIUM: oversized state reaches peers before Laravel refuses it | **yes** — with a 2 KiB limit a 3 000-char insert reached the peer | `beforeHandleMessage` charges each Yjs update an upper bound of its growth (`growthBound()`; real size measured on load / store): only the sender's document closes ("Document too large"), peers never see it. Limit = Laravel's `collab.max_state_bytes` — the Yjs-state limit, not `ContentLimits::PAGE_BODY` (HTML characters): same env var / default (`COLLAB_MAX_STATE_BYTES`, 16 MiB; a Node test compares them) and the access answer's new `max_state_bytes` | `limits.test.js` (+4), `PageCollabTest` (updated) |
+| 6 | LOW: a crafted document name injects text into the refusal log | **yes** — a newline started a forged `[realtime]` line | `realtime/src/log.js`: control characters / line separators → `?`, cut to 100 (detail 300), `key="value"` fields | `reasons.test.js` (+1, 1 updated) |
+
+Follow-up (a security review of these fixes): the size check re-encoded the whole document per message near the limit
+(one editor could stall the process) and underestimated deletions (~6× growth) → `growthBound()` per update, real size
+only on load / store; one socket could carry unlimited documents → 30 open documents per user
+(`COLLAB_MAX_DOCUMENTS_PER_USER`); sessions ending without a Logout (expiry, remember-me rebuild) → issued `sid`s are an
+allowlist checked against the `sessions` row, and `ReadOnlySession` saves a session remember-me just rebuilt; a push
+during document load → re-checked in the `connected` hook. Tests: `limits.test.js` (+3), `server.test.js` (+1),
+`RealtimeSessionTest` (+2); e2e realtime specs 33/33.
+
+Browser: `useLiveDocument` / whiteboard reconnect on "Access could not be checked"; refusal texts for `too-many-connections`
+and `signed-out`. Desktop: no change — the Tauri app opens no realtime sockets itself (its webview runs the web client,
+which reconnects on 4401 and then gets 401 / 419 for a new token).
+
+Deploy (adds to "Deploy checklist" below): **restart `brainitive-realtime`** (prod `:6201`, dev `:6202`) right after the
+app deploy — until then the session push answers 404 (reported once, harmless) and old sockets aren't session-bound. No
+migration. After the deploy, web sockets whose Laravel session expired (no saved request for `SESSION_LIFETIME`) close
+with 4401 at the next minute re-check — expected. New, optional realtime env vars (`/etc/brainitive/realtime.env` or the unit; defaults fine):
+`COLLAB_ACCESS_MAX_FAILURES=2`, `COLLAB_MAX_SOCKETS_PER_USER=30`, `COLLAB_MAX_DOCUMENTS_PER_USER=30`, `COLLAB_MESSAGE_BURST=300`,
+`COLLAB_MESSAGES_PER_SECOND=100`, `COLLAB_MAX_MESSAGE_BYTES` (state limit + 64 KiB), `COLLAB_MAX_STATE_BYTES` (only if
+the app's `.env` changes it — the app's access answers carry it anyway).
+
 ## Deploy checklist v1.49.0
 Before: nothing to build specially; `desktop/` is its own repo and is not part of this deploy.
 1. **Migration:** `php artisan migrate` — additive: one new table `sync_tombstones` (`2026_11_08_100000_create_sync_tombstones_table`)

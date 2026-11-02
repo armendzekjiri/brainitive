@@ -14,12 +14,14 @@ const keys = deriveLiveKeys(SECRET);
 const internal = deriveKeys(SECRET).internal;
 
 /** Brainitive's internal access endpoint, in memory: user id → channels they may still use. */
-const laravel = { allowed: new Map(), calls: [], fail: false, revokedDevices: new Set() };
+const laravel = { allowed: new Map(), calls: [], fail: false, revokedDevices: new Set(), endedSessions: new Set(), generations: new Map() };
 let api;
 let collab;
 let live;
 /** devices the publish endpoint passed on to the collab server (BRAI-377) */
 const pushedToCollab = [];
+/** sessions / users the session push passed on to the collab server (Codex realtime review 1) */
+const sessionsToCollab = [];
 let base;
 
 before(async () => {
@@ -30,9 +32,11 @@ before(async () => {
         const failing = laravel.fail || JSON.parse(body || '{}').users?.some(({ id }) => laravel.failFor?.has(id));
         if (request.headers.authorization !== `Bearer ${internal}` || failing) return response.writeHead(failing ? 500 : 401).end();
         const entries = JSON.parse(body).users;
-        const users = Object.fromEntries(entries.map(({ id, channels }) => [String(id), channels.filter((c) => laravel.allowed.get(id)?.has(c))]));
+        const users = Object.fromEntries(entries.map(({ id, channels }) => [String(id), channels.filter((c) => !laravel.allowed.has(id) || laravel.allowed.get(id).has(c))]));
         const revoked = entries.flatMap(({ devices = [] }) => devices).filter((device) => laravel.revokedDevices.has(device));
-        response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ users, revoked_devices: revoked }));
+        const ended = entries.flatMap(({ sessions = [] }) => sessions).filter((sid) => laravel.endedSessions.has(sid));
+        const generations = Object.fromEntries(entries.map(({ id }) => [String(id), laravel.generations.get(id) ?? 0]));
+        response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ users, revoked_devices: revoked, ended_sessions: ended, generations }));
     });
     api.listen(0, '127.0.0.1');
     await once(api, 'listening');
@@ -48,6 +52,10 @@ before(async () => {
         onDevicesRevoked: (ids) => {
             pushedToCollab.push(...ids);
             return collab.revokeDevices(ids);
+        },
+        onSessionsEnded: (ended) => {
+            sessionsToCollab.push(ended);
+            return collab.endSessions(ended);
         },
     });
     await collab.listen();
@@ -100,9 +108,9 @@ async function open(path = '/collab?live=1') {
     return client;
 }
 
-async function joined(sub, channels, { presence = false, path, dev } = {}) {
+async function joined(sub, channels, { presence = false, path, dev, sid, gen } = {}) {
     const client = await open(path);
-    client.send({ type: 'auth', token: token(sub, channels, dev === undefined ? {} : { dev }) });
+    client.send({ type: 'auth', token: token(sub, channels, { ...(dev === undefined ? {} : { dev }), ...(sid === undefined ? {} : { sid }), ...(gen === undefined ? {} : { gen }) }) });
     await client.next('ready');
     for (const channel of channels) {
         client.send({ type: 'subscribe', channel, presence });
@@ -330,6 +338,7 @@ test('access re-check: channels a user lost are dropped; Brainitive down keeps e
     // a token issued before the revocation can't bring it back; a newer one (Brainitive asked again) can
     ada.send({ type: 'auth', token: token(1, ['item.5'], { iat: now() - 30 }) });
     assert.ok(!(await ada.next('ready')).channels.includes('item.5'));
+    laravel.allowed.set(1, new Set(['user.1', 'item.5'])); // Ada was added back: Brainitive issues a new token
     ada.send({ type: 'auth', token: token(1, ['item.5'], { iat: now() + 1 }) });
     assert.ok((await ada.next('ready')).channels.includes('item.5'));
     ada.close();
@@ -338,10 +347,10 @@ test('access re-check: channels a user lost are dropped; Brainitive down keeps e
 
 test('access re-check: a failing entry doesn’t shield the others; a user whose check keeps failing is disconnected', async () => {
     laravel.allowed.set(6, new Set(['item.6']));
-    laravel.allowed.set(7, new Set());
-    laravel.failFor = new Set([6]);
     const six = await joined(6, ['item.6']);
     const seven = await joined(7, ['item.7']);
+    laravel.allowed.set(7, new Set());
+    laravel.failFor = new Set([6]);
 
     await live.recheckAccess();
     assert.deepEqual(await seven.next('revoked'), { type: 'revoked', channel: 'item.7' }, 'checked one by one after the batch failed');
@@ -453,4 +462,172 @@ test('the device push reaches live co-editing too (onDevicesRevoked)', async () 
     assert.deepEqual(pushedToCollab, [131, 132]);
     await until(() => desktop.closed);
     assert.equal(desktop.closed.code, 4410);
+});
+
+// ── Codex realtime review 3: a token is confirmed with Brainitive when it is used ───────────────────
+
+test('on connect Brainitive is asked: a channel removed since the token was issued is never granted', async () => {
+    laravel.allowed.set(30, new Set(['user.30']));
+    const client = await open();
+    client.send({ type: 'auth', token: token(30, ['user.30', 'item.30']) });
+    assert.deepEqual((await client.next('ready')).channels, ['user.30']);
+    const asked = laravel.calls.find((c) => c.body.users?.some((u) => u.id === 30));
+    assert.deepEqual(asked.body.users.find((u) => u.id === 30).channels.sort(), ['item.30', 'user.30'], 'asked before ready');
+    client.send({ type: 'subscribe', channel: 'item.30' });
+    assert.equal((await client.next('error')).code, 'forbidden');
+    await publish([{ channel: 'item.30', event: 'item.updated', payload: { id: 30 } }]);
+    await client.none('event');
+    // a second token on the same socket is confirmed too
+    client.send({ type: 'auth', token: token(30, ['board.30']) });
+    laravel.allowed.set(30, new Set(['user.30']));
+    assert.deepEqual((await client.next('ready')).channels, ['user.30']);
+    client.close();
+});
+
+test('on connect: a device revoked while its push was missed closes with 4410 before anything is delivered', async () => {
+    laravel.revokedDevices = new Set([140]);
+    const client = await open();
+    client.send({ type: 'auth', token: token(31, ['user.31'], { dev: 140 }) });
+    await until(() => client.closed);
+    assert.equal(client.closed.code, 4410);
+    assert.equal(client.messages.filter((m) => m.type === 'ready').length, 0);
+    laravel.revokedDevices = new Set();
+});
+
+test('on connect: Brainitive unreachable → refused (4403), nothing granted; fine again once it answers', async () => {
+    laravel.fail = true;
+    const client = await open();
+    client.send({ type: 'auth', token: token(32, ['user.32']) });
+    await until(() => client.closed);
+    assert.equal(client.closed.code, 4403);
+    assert.equal(client.messages.filter((m) => m.type === 'ready').length, 0);
+    laravel.fail = false;
+    const again = await joined(32, ['user.32']);
+    again.close();
+});
+
+test('connect checks of many sockets at once share one request', async () => {
+    laravel.calls = [];
+    const clients = await Promise.all([40, 41, 42, 43].map(() => open()));
+    clients.forEach((client, i) => client.send({ type: 'auth', token: token(40 + i, [`user.${40 + i}`]) }));
+    await Promise.all(clients.map((client) => client.next('ready')));
+    assert.ok(laravel.calls.length <= 2, `${laravel.calls.length} requests`);
+    assert.deepEqual(laravel.calls.flatMap((c) => c.body.users.map((u) => u.id)).sort(), [40, 41, 42, 43]);
+    clients.forEach((client) => client.close());
+});
+
+// ── Codex realtime review 1: a signed-out browser session loses its sockets and tokens ──────────────
+
+const SID_A = 'a'.repeat(32);
+const SID_B = 'b'.repeat(32);
+const SID_C = 'c'.repeat(32);
+const SID_D = 'd'.repeat(32);
+const SID_E = 'e'.repeat(32);
+const SID_F = 'f'.repeat(32);
+
+async function endSessions(body, key = keys.publish) {
+    return fetch(`http://${base}/internal/live/sessions/ended`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify(body),
+    });
+}
+
+test('live tokens: `sid` is 32 hex characters, `gen` a non-negative integer (both optional)', () => {
+    assert.equal(verifyLiveToken(token(1, ['user.1'], { sid: SID_A, gen: 0 }), keys.token).sid, SID_A);
+    assert.equal(verifyLiveToken(token(1, ['user.1'], { sid: 'short' }), keys.token), null);
+    assert.equal(verifyLiveToken(token(1, ['user.1'], { sid: 7 }), keys.token), null);
+    assert.equal(verifyLiveToken(token(1, ['user.1'], { gen: -1 }), keys.token), null);
+    assert.equal(verifyLiveToken(token(1, ['user.1'], { gen: '1' }), keys.token), null);
+});
+
+test('session ended (pushed): only that browser session’s sockets close with 4401 "Signed out"; its tokens are refused', async () => {
+    const tabA = await joined(50, ['user.50'], { sid: SID_A, gen: 0 });
+    const tabA2 = await joined(50, ['user.50'], { sid: SID_A, gen: 0 });
+    const otherBrowser = await joined(50, ['user.50'], { sid: SID_B, gen: 0 });
+    const app = await joined(50, ['user.50'], { dev: 150 });
+
+    assert.equal((await endSessions({ sessions: [SID_A] }, 'wrong')).status, 401, 'needs the publish key');
+    assert.equal((await endSessions({ sessions: ['nope'] })).status, 422);
+    assert.equal((await endSessions({ users: [{ id: 50, generation: -1 }] })).status, 422);
+    assert.equal((await endSessions({})).status, 422);
+    sessionsToCollab.length = 0;
+    const response = await endSessions({ sessions: [SID_A] });
+    assert.equal(response.status, 202);
+    assert.deepEqual(await response.json(), { closed: 2 });
+    await until(() => tabA.closed && tabA2.closed);
+    assert.deepEqual(tabA.closed, { code: 4401, reason: 'Signed out' });
+    assert.deepEqual(sessionsToCollab, [{ sessions: [SID_A], users: [] }], 'passed on to live co-editing');
+
+    await publish([{ channel: 'user.50', event: 'notifications.changed', payload: { unread_count: 1 } }]);
+    await otherBrowser.next('event');
+    await app.next('event');
+
+    // a still-valid token of the ended session can't come back
+    const again = await open();
+    again.send({ type: 'auth', token: token(50, ['user.50'], { sid: SID_A, gen: 0 }) });
+    await until(() => again.closed);
+    assert.deepEqual(again.closed, { code: 4401, reason: 'Signed out' });
+    otherBrowser.close();
+    app.close();
+});
+
+test('session ended (push missed): the connect check refuses it, the re-check closes what is open', async () => {
+    const open1 = await joined(51, ['user.51'], { sid: SID_C, gen: 0 });
+    const other = await joined(51, ['user.51'], { sid: SID_B, gen: 0 });
+    laravel.endedSessions = new Set([SID_C]);
+
+    await live.recheckAccess();
+    const asked = laravel.calls.at(-1).body.users.filter((u) => u.id === 51).flatMap((u) => u.sessions ?? []);
+    assert.deepEqual([...new Set(asked)].sort(), [SID_B, SID_C]);
+    await until(() => open1.closed);
+    assert.deepEqual(open1.closed, { code: 4401, reason: 'Signed out' });
+    assert.equal(other.closed, null);
+
+    const fresh = await open();
+    fresh.send({ type: 'auth', token: token(51, ['user.51'], { sid: SID_C, gen: 0 }) });
+    await until(() => fresh.closed);
+    assert.equal(fresh.closed.code, 4401);
+    assert.equal(fresh.messages.filter((m) => m.type === 'ready').length, 0);
+    laravel.endedSessions = new Set();
+    other.close();
+});
+
+test('signed out everywhere (generation): every web socket of the user closes, newer tokens and devices stay', async () => {
+    const tab = await joined(52, ['user.52'], { sid: SID_D, gen: 0 });
+    const otherTab = await joined(52, ['user.52'], { sid: SID_E, gen: 0 });
+    const someoneElse = await joined(53, ['user.53'], { sid: SID_F, gen: 0 });
+    const app = await joined(52, ['user.52'], { dev: 152 });
+
+    const response = await endSessions({ users: [{ id: 52, generation: 1 }] });
+    assert.deepEqual(await response.json(), { closed: 2 });
+    await until(() => tab.closed && otherTab.closed);
+    assert.equal(tab.closed.code, 4401);
+    assert.equal(someoneElse.closed, null);
+    assert.equal(app.closed, null, 'app devices go through their own revocation (4410)');
+
+    // the kept session reconnects with a new token (generation 1); an old one is refused
+    laravel.generations.set(52, 1);
+    const renewed = await joined(52, ['user.52'], { sid: SID_E, gen: 1 });
+    const stale = await open();
+    stale.send({ type: 'auth', token: token(52, ['user.52'], { sid: SID_E, gen: 0 }) });
+    await until(() => stale.closed);
+    assert.equal(stale.closed.code, 4401);
+
+    // pushed nowhere (missed): the re-check's generations close old sockets too
+    laravel.generations.set(53, 4);
+    await live.recheckAccess();
+    await until(() => someoneElse.closed);
+    assert.equal(someoneElse.closed.code, 4401);
+    assert.equal(renewed.closed, null);
+    laravel.generations = new Map();
+    renewed.close();
+    app.close();
+});
+
+test('a socket keeps its browser session: a token of another session closes it', async () => {
+    const tab = await joined(54, ['user.54'], { sid: SID_D, gen: 0 });
+    tab.send({ type: 'auth', token: token(54, ['item.54'], { sid: SID_E, gen: 0 }) });
+    await until(() => tab.closed);
+    assert.equal(tab.closed.code, 4401);
 });

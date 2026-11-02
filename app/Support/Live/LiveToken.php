@@ -9,7 +9,8 @@ use App\Models\User;
  * `base64url(json payload) . "." . base64url(HMAC-SHA256(first part, LiveConfig::tokenKey()))`.
  * Payload: `v` (1), `typ` ("live"), `sub` (user id), `name`, `avatar` (URL or null), `ch` (the
  * channels Brainitive authorized), `iat`, `exp` (unix), and `dev` (the app device, App API tokens only:
- * the realtime server closes that device's sockets once it is revoked; the web's tokens have none).
+ * the realtime server closes that device's sockets once it is revoked; the web's tokens have none) — the web's carry
+ * `sid` + `gen` instead (RealtimeSession: closed with 4401 "Signed out" when the browser session signs out).
  * Verified by `realtime/src/live/token.js` — keep both in sync.
  */
 final class LiveToken
@@ -28,8 +29,8 @@ final class LiveToken
             'v' => 1,
             'typ' => 'live',
             'sub' => $user->id,
-            // the app device: its sockets are closed when it is revoked (AppTokens::revoke)
-            ...($device !== null ? ['dev' => $device] : []),
+            // the app device: its sockets are closed when it is revoked (AppTokens::revoke); the web: the session
+            ...($device !== null ? ['dev' => $device] : RealtimeSession::claims($user)),
             'name' => mb_substr((string) $user->name, 0, 80),
             'avatar' => is_string($avatar) && strlen($avatar) <= 500 ? $avatar : null,
             'ch' => array_values($channels),

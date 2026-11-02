@@ -18,7 +18,10 @@ return [
     // the realtime server also asks Brainitive about the user's access when they connect.
     'token_ttl' => (int) env('COLLAB_TOKEN_TTL', 120),
 
-    // Largest Yjs state the realtime server may store for one document (bytes, before base64).
+    // Largest Yjs state the realtime server may store for one document (bytes, before base64). The realtime
+    // server reads the same variable (same default: realtime/src/server.js DEFAULT_MAX_STATE_BYTES, a Node test
+    // compares them) and takes this value from every access answer (`max_state_bytes`): an update that would
+    // grow a document past it is refused before other editors see it (Codex realtime review 5).
     'max_state_bytes' => (int) env('COLLAB_MAX_STATE_BYTES', 16 * 1024 * 1024),
 
     // e2e only (APP_ENV=e2e): live editing only for requests with `X-E2E-Collab: 1`, so the other

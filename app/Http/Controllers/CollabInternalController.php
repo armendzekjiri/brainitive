@@ -13,6 +13,7 @@ use App\Support\Collab\CollabDocument;
 use App\Support\Collab\ItemCollab;
 use App\Support\Collab\PageCollab;
 use App\Support\Collab\WhiteboardCollab;
+use App\Support\Live\RealtimeSession;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -76,7 +77,11 @@ class CollabInternalController extends Controller
      * Who of the connected users may still view / edit (on connect and every minute by the server). `devices`
      * (optional): the app devices of the connections whose token carries `dev` (App API), each with its user;
      * the answer's `revoked_devices` names those revoked, gone or not that user's — the server closes their
-     * sockets with 4410 (BRAI-377, as LiveInternalController does for live channels).
+     * sockets with 4410 (BRAI-377, as LiveInternalController does for live channels). `max_state_bytes`: the largest
+     * state store() accepts — the realtime server refuses updates that would grow a document past it before any
+     * peer sees them (Codex realtime review 5), so its limit always follows this one. `sessions` (optional): the
+     * browser sessions of web connections (token claim `sid`); `ended_sessions` names those signed out, `generations`
+     * the users' current generations — older web tokens are signed out (4401, RealtimeSession — Codex realtime review 1).
      */
     public function access(Request $request): JsonResponse
     {
@@ -87,14 +92,17 @@ class CollabInternalController extends Controller
             'devices' => 'sometimes|array|max:500',
             'devices.*.id' => 'required|integer|min:1',
             'devices.*.user_id' => 'required|integer|min:1',
+            'sessions' => 'sometimes|array|max:500',
+            'sessions.*' => 'string|max:64',
         ]);
+        $ended = RealtimeSession::endedAmong($validated['sessions'] ?? []);
         $revoked = AppTokens::revokedAmong(array_column(
             array_map(fn (array $device) => ['id' => (int) $device['id'], 'user_id' => (int) $device['user_id']], $validated['devices'] ?? []),
             'user_id',
             'id',
         ));
         if ($item = $this->resolveItem($validated['document'])) {
-            return $this->itemAccess($item[0], $item[1], $validated['user_ids'], $revoked);
+            return $this->itemAccess($item[0], $item[1], $validated['user_ids'], $revoked, $ended);
         }
         [$page, $epoch, $kind] = $this->resolve($validated['document']);
 
@@ -108,6 +116,9 @@ class CollabInternalController extends Controller
             'current' => (PageCollab::epoch($page) ?? 0) === $epoch,
             'users' => (object) $access,
             'revoked_devices' => $revoked,
+            'ended_sessions' => $ended,
+            'generations' => (object) RealtimeSession::generations($users),
+            'max_state_bytes' => CollabConfig::maxStateBytes(),
         ]);
     }
 
@@ -182,8 +193,9 @@ class CollabInternalController extends Controller
     /**
      * @param  array<int, int>  $userIds
      * @param  list<int>  $revokedDevices
+     * @param  list<string>  $endedSessions
      */
-    private function itemAccess(Item $item, int $epoch, array $userIds, array $revokedDevices): JsonResponse
+    private function itemAccess(Item $item, int $epoch, array $userIds, array $revokedDevices, array $endedSessions): JsonResponse
     {
         $ids = array_unique($userIds);
         $users = User::whereIn('id', $ids)->get()->keyBy('id');
@@ -196,6 +208,9 @@ class CollabInternalController extends Controller
             'current' => (ItemCollab::epoch($item) ?? 0) === $epoch,
             'users' => (object) $access,
             'revoked_devices' => $revokedDevices,
+            'ended_sessions' => $endedSessions,
+            'generations' => (object) RealtimeSession::generations($users),
+            'max_state_bytes' => CollabConfig::maxStateBytes(),
         ]);
     }
 }

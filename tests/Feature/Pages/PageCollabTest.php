@@ -200,7 +200,13 @@ class PageCollabTest extends TestCase
             ->assertJsonPath("users.{$this->editor->id}", 'edit')
             ->assertJsonPath("users.{$this->viewer->id}", null)
             ->assertJsonPath("users.{$this->outsider->id}", null)
-            ->assertJsonPath('users.999999', null);
+            ->assertJsonPath('users.999999', null)
+            // Codex realtime review 5: the realtime server refuses updates past the size this API stores
+            ->assertJsonPath('max_state_bytes', CollabConfig::maxStateBytes());
+        config(['collab.max_state_bytes' => 4096]);
+        $this->postJson(route('internal.collab.access'), ['document' => $document, 'user_ids' => [$this->editor->id]], $this->internal())
+            ->assertJsonPath('max_state_bytes', 4096);
+        $this->putJson(route('internal.collab.documents.store', $document), ['state' => base64_encode(str_repeat('x', 4097))], $this->internal())->assertStatus(413);
 
         // removed from the project → no longer allowed
         $this->project->users()->detach($this->editor->id);

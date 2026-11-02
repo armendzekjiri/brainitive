@@ -3,13 +3,15 @@
 namespace App\Support\Collab;
 
 use App\Models\User;
+use App\Support\Live\RealtimeSession;
 
 /**
  * Short-lived connection token for the realtime server (BRAI-54):
  * `base64url(json payload) . "." . base64url(HMAC-SHA256(first part, CollabConfig::tokenKey()))`.
  * Payload: `v` (1), `sub` (user id), `name`, `doc` (the one document it opens), `edit`, `exp` (unix), and
  * `dev` (the app device, App API tokens only: the realtime server closes its sockets with 4410 once it is
- * revoked — BRAI-377; the web's tokens have none). Verified by `realtime/src/token.js` — keep both in sync.
+ * revoked — BRAI-377; the web's tokens have none) — the web's carry `sid` + `gen` instead (RealtimeSession: closed with
+ * 4401 "Signed out" when the browser session signs out). Verified by `realtime/src/token.js` — keep both in sync.
  */
 final class CollabToken
 {
@@ -23,7 +25,7 @@ final class CollabToken
         $payload = self::encode((string) json_encode([
             'v' => 1,
             'sub' => $user->id,
-            ...($device !== null ? ['dev' => $device] : []),
+            ...($device !== null ? ['dev' => $device] : RealtimeSession::claims($user)),
             'name' => $user->name,
             'doc' => $document,
             'edit' => $edit,

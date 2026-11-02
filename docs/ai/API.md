@@ -1139,8 +1139,13 @@ tabs get (`LiveToken::grant`, shared with the web's `POST /live/token`). Access 
 - **Server → client:** `{type: "event", channel, event, payload}` · `{type: "presence", channel, members: [{id, name, avatar}]}`
   (with `presence: true`) · `{type: "signal", channel, name, data, from: {id, name}}` · `{type: "revoked", channel}` ·
   `{type: "error", code: forbidden|too_many_subscriptions|not_subscribed|invalid_signal|rate_limited, channel?}`. Close codes:
-  4400 bad request, 4401 bad / expired token (or a token of another device on the same socket), 4403 access check failed,
+  4400 bad request, 4401 bad / expired token (or a token of another device / browser session on the same socket) — reason
+  **"Signed out"**: a web token's browser session signed out (web only: `sid` / `gen` claims, never on App API tokens),
+  4403 access check failed (also: Brainitive couldn't confirm the token on connect — reconnect with a new token later),
   **4410 device signed out**, 4429 too many messages / sockets, 1001 server restart.
+- **Every `auth` is confirmed with Brainitive** before `ready` (a few ms, batched — Codex realtime review v1.49.0):
+  `ready.channels` lists only the token's channels the user may join *now*, so a token issued before access was removed,
+  or of a device whose sign-out push was missed, grants nothing (the device closes with 4410).
 - **4410 = this device was signed out** (sign-out, "revoke device" in Profile / another device, refresh-token reuse, password
   change, suspension, "sign out everywhere"): live tokens **and live co-editing tokens** (`POST /pages/{uuid}/collab-token`,
   claim `dev`, BRAI-377) of the App API carry the device, and the realtime server closes its live-channel **and document**
@@ -1150,6 +1155,14 @@ tabs get (`LiveToken::grant`, shared with the web's `POST /live/token`). Access 
 - **Client → server signals:** `{type: "signal", channel, name, data}` (subscribed channels, ≤ 1 KB, ~4/s): today only `typing`
   on `item.{id}` — `{}` while typing (≤ every 2 s), `{stop: true}` on send / cancel; receivers expire it after 4.5 s.
 - **Limits:** 50 subscriptions per socket, 20 sockets per user, 8 messages/s (burst 40).
+- **Live documents (Yjs, `collab-token`)** — same server, own limits (v1.49.0, Codex realtime review): 30 document sockets and
+  30 open documents per user (more → refused, reason `too-many-connections`; a socket over the limit closes with 4429), 100 messages/s per socket (burst 300; beyond → 4429
+  "Too many messages"), one message ≤ the document limit + 64 KiB (else 1009). An update that would make the document
+  larger than Brainitive stores (`COLLAB_MAX_STATE_BYTES`, 16 MiB) is refused **before anyone else sees it**: only the
+  sender's document closes (CLOSE message "Document too large"; don't resend it). When Brainitive can't answer the
+  access re-check twice in a row the document closes with "Access could not be checked": fetch a new `collab-token`
+  and reconnect (refused while Brainitive is down). Close reasons arrive as Hocuspocus CLOSE messages (code 1000) for one
+  document, or as a socket close code (4401 / 4410 / 4429) for the whole socket.
 - **Payloads are ids, never content** (a socket whose access just ended can still get up to a minute of events): on an event,
   **refetch through the normal endpoint** (`GET /items/{id}`, `GET /boards/{id}/items`, `GET /notifications` …). Events during a
   disconnect are lost: refetch everything a view shows after every (re)connect.
