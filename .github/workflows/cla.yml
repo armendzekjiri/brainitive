@@ -1,4 +1,10 @@
 # Asks first-time contributors to sign CLA.md; signatures are stored in the cla-signatures branch.
+#
+# Security (pull_request_target runs with a write token on fork PRs): this workflow must NEVER check
+# out, build or run the PR's code — no actions/checkout, no scripts from the PR. It only runs the
+# pinned CLA action, which reads the PR's commit authors through the API and writes the signature
+# file to the cla-signatures branch. The token gets exactly what the action documents it needs, on
+# the job only (the workflow default is no permissions).
 name: CLA
 
 on:
@@ -7,19 +13,21 @@ on:
   pull_request_target:
     types: [opened, closed, synchronize]
 
-permissions:
-  actions: write
-  contents: write
-  pull-requests: write
-  statuses: write
+permissions: {}
 
 jobs:
   cla:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write # re-runs the PR's CLA check after a "recheck" / signing comment
+      contents: write # commits the signature to the cla-signatures branch
+      pull-requests: write # the comment asking to sign
+      statuses: write # the CLA commit status
     steps:
       - name: CLA assistant
         if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target'
-        uses: contributor-assistant/github-action@v2.6.1
+        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

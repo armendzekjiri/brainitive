@@ -12,9 +12,8 @@ on:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: write
-  packages: write
+# Least privilege: nothing by default, each job asks for what it needs
+permissions: {}
 
 concurrency:
   group: release
@@ -23,12 +22,14 @@ concurrency:
 jobs:
   version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # creates the tag + GitHub Release
     outputs:
       version: ${{ steps.changelog.outputs.version }}
       tag: ${{ steps.changelog.outputs.tag }}
       released: ${{ steps.release.outputs.released }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - id: changelog
         run: node .github/scripts/changelog-release.mjs "$RUNNER_TEMP/notes.md" >> "$GITHUB_OUTPUT"
@@ -58,12 +59,14 @@ jobs:
   extension:
     needs: version
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # uploads the zips to the release
     defaults:
       run:
         working-directory: browser-extension
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -86,12 +89,14 @@ jobs:
   cli:
     needs: version
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # uploads the binaries to the release
     defaults:
       run:
         working-directory: cli
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: cli/go.mod
           check-latest: true # newest patch of that Go line, so stdlib security fixes ship in the binaries
@@ -124,5 +129,8 @@ jobs:
   docker:
     needs: version
     uses: ./.github/workflows/docker-publish.yml
+    permissions:
+      contents: read
+      packages: write # pushes ghcr.io/<owner>/brainitive
     with:
       version: ${{ needs.version.outputs.released == 'true' && needs.version.outputs.version || '' }}
