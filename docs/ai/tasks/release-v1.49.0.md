@@ -797,3 +797,8 @@ Before: nothing to build specially; `desktop/` is its own repo and is not part o
    - `/docs/api` opens as an instance admin;
    - the homepage shows the new "Brainitive on your desktop" section; Help → Changelog lists v1.49.0;
    - realtime: open a board in two browsers, a card move shows live (the service restarted correctly).
+
+## feat/create-shortcut
+- `N` (not `C`, which is Quick capture) opens the Create modal on the Task tab; guarded like the capture shortcut (`isTypingTarget`, open dialogs/palette, defaultPrevented, composing).
+- AppLayout handles the desktop menu's cancelable `brainitive-desktop:command` event (`new-issue`, `new-doc`, `search`).
+- Create remembers the last project/board/type per workspace in localStorage (`lib/createMemory.ts`); the current project still wins. E2E: `e2e/tests/create-shortcut.spec.ts`.

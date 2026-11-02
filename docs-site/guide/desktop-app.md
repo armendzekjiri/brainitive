@@ -33,6 +33,7 @@ The app never sees your password. It gets a token that belongs to this computer 
 |---|---|---|
 | ⇧⌘Space | Ctrl+Shift+Space | Quick capture, from any app |
 | ⌥⌘K | Ctrl+Alt+K | Quick switcher |
+| ⌘N | Ctrl+N | New issue (File → New issue); File → New doc opens Create on the Page tab |
 | Tray icon | Tray icon | My Day, the running timer and unread notifications |
 
 Change or turn off the global shortcuts under **Settings** (⌘, or Ctrl+,). These shortcuts may change before version 1.0.

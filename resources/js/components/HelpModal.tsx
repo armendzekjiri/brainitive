@@ -115,6 +115,7 @@ const CHANGELOG = [
             'Fixed: the workspace "Projects" address no longer shows an error page; it takes you to the workspace home.',
             'Fixed: renaming a bookmark group gives it its own address, so it no longer clashes with another group (also with deleted ones) of the same name.',
             'Fixed: issue attachments and bookmark files are now checked against the storage limit everywhere, and images are kept when text is converted to or from Markdown (docs, descriptions, comments).',
+            'Press N anywhere (when you are not typing) to open Create on the Task tab. Create now remembers the project and board you last created in, and in the desktop app File → New issue / New doc and Search work.',
             'Self-hosted: add the new migration (php artisan migrate) and restart the realtime service. If your proxy forwards only selected paths, also forward /api/v1/ and /app/. APP_API_MIN_DESKTOP_VERSION sets the oldest desktop app version your server accepts.',
         ]
     },

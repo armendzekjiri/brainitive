@@ -116,6 +116,8 @@ import {
 } from '@/components/ui/select';
 import { flattenPagesForParentSelect } from '@/lib/pageTree';
 import { GlobalCreateModal } from '@/components/GlobalCreateModal';
+import { isTypingTarget } from '@/lib/captures';
+import { readRememberedCreate } from '@/lib/createMemory';
 import CreateProjectDialog, { openCreateProject } from '@/components/projects/CreateProjectDialog';
 import { QuickCaptureDialog, QuickCaptureFab, openQuickCapture } from '@/components/captures/QuickCaptureDialog';
 import HelpdeskTemplatePicker from '@/components/helpdesk/HelpdeskTemplatePicker';
@@ -1881,9 +1883,44 @@ export default function AppLayout({ children, title }: Props) {
         setPreSelectedProjectId(projectId ?? currentProjectId ?? undefined);
         setPreSelectedBoardId(boardId ?? currentBoardId ?? undefined);
         setPreSelectedColumnId(columnId);
-        if (type) setDefaultCreateType(type);
+        setDefaultCreateType(type ?? readRememberedCreate(currentWorkspace?.id).type ?? 'task');
         setCreateTaskModalOpen(true);
-    }, [currentProjectId, currentBoardId]);
+    }, [currentProjectId, currentBoardId, currentWorkspace?.id]);
+
+    // "N" (new) opens Create on the Task tab. "C" is already Quick capture. Never while typing, in a dialog
+    // or the palette, or when an editor already handled the key.
+    useEffect(() => {
+        const handleNew = (e: KeyboardEvent) => {
+            if (e.defaultPrevented || e.isComposing || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+            if (typeof e.key !== 'string' || e.key.toLowerCase() !== 'n') return;
+            if (createTaskModalOpen || commandPaletteOpen) return;
+            if (isTypingTarget(e.target) || isTypingTarget(document.activeElement)) return;
+            if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+            e.preventDefault();
+            openCreateTaskModal(undefined, undefined, undefined, 'task');
+        };
+        window.addEventListener('keydown', handleNew);
+        return () => window.removeEventListener('keydown', handleNew);
+    }, [createTaskModalOpen, commandPaletteOpen, openCreateTaskModal]);
+
+    // Brainitive Desktop's menu (File → New issue / New doc, Search) sends a cancelable command event.
+    useEffect(() => {
+        const handleDesktopCommand = (e: Event) => {
+            const command = (e as CustomEvent<{ command?: string }>).detail?.command;
+            if (command === 'new-issue') {
+                e.preventDefault();
+                openCreateTaskModal(undefined, undefined, undefined, 'task');
+            } else if (command === 'new-doc') {
+                e.preventDefault();
+                openCreateTaskModal(undefined, undefined, undefined, 'page');
+            } else if (command === 'search') {
+                e.preventDefault();
+                openPalette();
+            }
+        };
+        window.addEventListener('brainitive-desktop:command', handleDesktopCommand);
+        return () => window.removeEventListener('brainitive-desktop:command', handleDesktopCommand);
+    }, [openCreateTaskModal, openPalette]);
 
     const closeCreateTaskModal = useCallback(() => {
         setCreateTaskModalOpen(false);
