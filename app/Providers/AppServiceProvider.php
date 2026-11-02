@@ -44,6 +44,7 @@ use App\Policies\SnippetPolicy;
 use App\Policies\WorkloadPolicy;
 use App\Policies\WorkspacePolicy;
 use App\Support\Admin\InstanceMailConfig;
+use App\Support\Admin\ProductionConfigWarnings;
 use App\Support\Billing\ReportBuilder;
 use App\Support\Helpdesks\Mail\FakeMailboxConnector;
 use App\Support\Helpdesks\Mail\ImapMailboxConnector;
@@ -56,6 +57,7 @@ use App\Support\Push\WebPushClient;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
@@ -91,6 +93,11 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         InstanceSettings::flushCache();
+
+        // Production with a development .env (APP_DEBUG=true, http APP_URL, mail to the log): a
+        // warning in the log, at most hourly; mail is checked when it is sent (admin SMTP wins).
+        ProductionConfigWarnings::reportAtBoot();
+        Event::listen(MessageSending::class, [ProductionConfigWarnings::class, 'onMessageSending']);
 
         // Reset links carry a secret token: build them from APP_URL, never from the request's
         // Host / X-Forwarded-Host (host-header poisoning would send the token elsewhere).
