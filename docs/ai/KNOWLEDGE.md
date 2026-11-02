@@ -619,6 +619,50 @@ the allowlist renaming only.
   `realtime/src/index.js`. Old realtime ↔ new Laravel stay compatible (`devices` optional); restart the realtime
   service after the deploy.
 
+### Codex security review of v1.49.0 (2026-11-02, `fix/app-api-codex-review`)
+Decisions and traps from the review; the finding list is in `docs/ai/tasks/release-v1.49.0.md` → Codex security review.
+- **Never remember an app webview.** A remember-me cookie rebuilds an authenticated session from scratch — without
+  `app_device_id` — once the session expires or is lost, so `EndRevokedAppDeviceSessions` never sees the device and a
+  revoked device is back in. `/app/session` signs in **without** remember-me and expires an older recaller; a
+  native-app webview (UA ` BrainitiveDesktop/` / ` BrainitiveMobile/`) that was signed in *via the recaller* (no
+  device binding) is logged out of that browser with `logoutCurrentDevice()` — **not** `logout()`, which cycles
+  `users.remember_token` and signs every normal browser of the user out of remember-me too (Laravel keeps one token
+  per user). The app then lands on `/login` and mints a fresh session with its token (desktop: `flows::on_web_session_lost`).
+  The revoked-device path still uses `logout()` (cycles the token) to kill recallers webviews got before the fix.
+- **Pending approvals live in the cache, so they carry a generation.** Consent-page codes and approved TV codes can't be
+  listed per user; each carries `users.app_auth_generation` from the approval, `SignOutEverywhere` bumps it, and
+  `AppDeviceSignIn::create` compares it under the user row lock it already takes (no gap between check and insert).
+- **A replay must re-check visibility.** `CreatesOnce` and the template-project replay answer the model as it is
+  *now*; the caller must still see it (policy `view`, else the call site's `$visible`) — otherwise 404, never its data.
+  A model without a `view` policy and without `$visible` throws a LogicException on replay (caught by the tests).
+- **Editor uploads are metered and reserved.** `editor_uploads` rows (workspace, size) are counted by
+  `WorkspaceUsageMeter`; `LimitGate::reserveFiles` checks and adds the bytes under a row lock of `workspace_usages`, so
+  repeated / concurrent uploads stop at the limit before the nightly measure (which recomputes the real total). The
+  web `/upload/*` needs a workspace (field, else the `/workspaces/{slug}` referrer; none → 422, not theirs → 404).
+  Editor files are never attachments, so nothing counts twice. Attachments / bookmark files still use the stale check
+  (`FileRoom::ensure` / `file.room`): a follow-up, not a leak.
+- **The content limit covers pages and issues only** (`Issues::create` holds the issue check, so sync and every caller
+  get it). Task lists, tasks, snippets, bookmark items and comments are metered but not blocked on any surface (web,
+  App API, MCP, CLI, extension) — a product decision, not an MCP bypass.
+- **Project membership needs the workspace membership.** There is no project-only role. `User::projectRole` /
+  `hasProjectAccess` / `adminProjectIds` ignore project rows of workspaces the user left, `Workspace::removeUser` drops
+  both in one transaction, `php artisan memberships:prune-orphans [--force]` cleans rows from before.
+- **Refresh reuse: any earlier token.** Every used refresh hash is kept (`app_device_refresh_uses`, pruned after the
+  refresh TTL and on revoke). A token-format counter (`brr_<device>.<n>.<secret>`) was rejected: without the old
+  token's hash, anyone could forge `brr_<id>.0.x` and sign out any device by id.
+- **A calendar's `is_active` is an off switch** ("turn single calendars on or off"; the app also switches a connection
+  off when its Google access expired, so Google isn't called). Lists *and* explicit ids (MCP tools, App API
+  create / show / update / delete) require it.
+- **Provider ids are one path segment.** `rawurlencode` keeps `.` and `..`, so ids that are dot segments or hold `/`,
+  `\` or controls are refused before building a URL (`GoogleTasksService::segment`).
+- **Series vs occurrence.** Lists hand out occurrence ids only; a CalDAV id without `~<occurrence>` or a Google id
+  without `_<time>` names the whole series. `CalendarProvider::deleteEvent(…, $wholeSeries)` refuses a series unless
+  asked (MCP `scope: series`); meetings / bookings pass `true` for their own single events (skips Google's extra GET).
+- **MCP:** no request logging before `auth:api` (the `[MCP-DEBUG]` logger is gone); `/mcp` is `throttle:120,1,mcp`
+  per user after auth (connectors share egress IPs). Scope-less Passport tokens still reach MCP on purpose: the CLI /
+  Copilot token `brainitive-cli` has no scopes (see the review section for the enforcement plan).
+- **Google failures log reason codes only** (`GoogleCalendarService::errorSummary`), never the response body.
+
 ### Lead form logic lives twice
 Which steps / questions a visitor sees is evaluated in the browser (`lib/leadForms.ts`) *and*
 on submit (`LeadFormDefinition::visibleFields`) — hidden questions are never validated and

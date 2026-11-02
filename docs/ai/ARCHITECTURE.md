@@ -767,9 +767,12 @@ Code name "entitlements", never "plan" (`App\Models\Plan` is the Gantt plan).
   may update the workspace. Callers: invite (`WorkspaceController`), invitation accept (`InvitationController`,
   `WorkspaceInvitation::acceptPendingForUser` skips when full), `WorkspaceController::store`,
   `ProjectController::store` / move, `ImportController::ensureRoom`, page / issue creation (web, MCP tools return
-  `Response::error`, `ContentCapture`), files via middleware `EnsureFileRoom` (`file.room`, on the
-  `workspaces/{workspace}` group, `/upload/*` (workspace field or Referer), public widget POSTs, extension items);
-  inbound helpdesk mail drops attachments that don't fit.
+  `Response::error`, `ContentCapture`; issues: inside `Issues::create`, so sync is covered), files via middleware
+  `EnsureFileRoom` (`file.room`, on the `workspaces/{workspace}` group, public widget POSTs, extension items; fails
+  closed when files come without a resolvable workspace); inbound helpdesk mail drops attachments that don't fit.
+  Editor uploads (`/upload/*`, App API `POST /uploads`) go through `EditorUploads::store`: a required workspace
+  (`workspaceFor`), `LimitGate::reserveFiles` (check + add the bytes under a row lock of `workspace_usages`;
+  `releaseFiles` on failure) and an `editor_uploads` row the meter counts (Codex review).
 - **Membership event:** `Workspace::addUser` / `removeUser` (and `UserDeletion`) dispatch
   `WorkspaceMembershipChanged`; the package syncs Paddle seats from it.
 - **Usage:** `WorkspaceUsageMeter` + `usage:measure` (nightly 02:30) → `workspace_usages` (`WorkspaceUsage`,

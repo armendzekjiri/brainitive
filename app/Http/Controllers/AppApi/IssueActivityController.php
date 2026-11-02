@@ -77,7 +77,8 @@ class IssueActivityController extends Controller
         $html = (string) IssueMarkdown::toHtml($input['body'], $item->board->project);
 
         [$comment, $replayed] = $this->createOnce($request, 'items.comments.store', Comment::class, ['item' => $item->id] + $input,
-            fn () => ItemComments::add($item, $request->user(), $html, isset($input['parent_id']) ? (int) $input['parent_id'] : null));
+            fn () => ItemComments::add($item, $request->user(), $html, isset($input['parent_id']) ? (int) $input['parent_id'] : null),
+            fn (Comment $comment) => $comment->item !== null && $request->user()->can('view', $comment->item));
 
         $comment->load('user');
         if ($replayed) {
@@ -167,7 +168,8 @@ class IssueActivityController extends Controller
                 FileRoom::ensure($item->board->project->workspace, $file);
 
                 return ItemAttachments::add($item, $request->user(), $file);
-            });
+            },
+            fn (Attachment $attachment) => $attachment->item !== null && $request->user()->can('view', $attachment->item));
 
         $attachment->load('user');
         if ($replayed) {

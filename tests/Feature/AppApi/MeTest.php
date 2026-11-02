@@ -70,7 +70,7 @@ class MeTest extends TestCase
         $this->assertMatchesRegularExpression('/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/', $response->json('data.created_at'));
         // explicit fields only: nothing from the model's toArray()
         $body = $response->getContent();
-        foreach (['password', 'remember_token', 'notification_preferences', 'sidebar_preferences', 'access_token_hash'] as $field) {
+        foreach (['password', 'remember_token', 'app_auth_generation', 'notification_preferences', 'sidebar_preferences', 'access_token_hash'] as $field) {
             $this->assertStringNotContainsString($field, $body);
         }
     }

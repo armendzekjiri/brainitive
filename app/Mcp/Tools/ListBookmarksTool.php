@@ -33,8 +33,9 @@ class ListBookmarksTool extends Tool
         $bookmarks = $workspace->bookmarks()
             ->withCount('items')
             ->orderBy('position')
-            ->get(['id', 'name', 'slug', 'description'])
-            ->filter(fn ($b) => $b->isViewableBy($user))
+            ->get()
+            // the web's rule (BookmarkPolicy::view): own, shared, public — and every group for a workspace admin
+            ->filter(fn ($b) => $user->can('view', $b))
             ->map(fn ($b) => [
                 'name' => $b->name,
                 'slug' => $b->slug,

@@ -14,8 +14,9 @@ use Illuminate\Support\Facades\DB;
  * - content: the stored size of the rows (`pg_column_size`, compressed / TOASTed) in the tables
  *   below — an approximation, the tables are shared. Not measured on other databases (SQLite
  *   self-hosted installs are unlimited anyway): stays 0 there.
- * - files: the `size` columns of the upload tables. Editor images (`uploads/`), bookmark files,
- *   icons and logos have no size column and don't count; whiteboard images live in the page content.
+ * - files: the `size` columns of the upload tables, editor uploads (`editor_uploads`, since the Codex review)
+ *   included. Bookmark files, icons and logos have no size column and don't count; whiteboard images live in
+ *   the page content. Editor uploads are never attachments (their own table and folder): nothing counts twice.
  */
 final class WorkspaceUsageMeter
 {
@@ -53,6 +54,7 @@ final class WorkspaceUsageMeter
     private const FILES = [
         ['attachments', ['item_id' => 'items'], 'project_id'],
         ['ticket_attachments', ['ticket_id' => 'tickets', 'helpdesk_id' => 'helpdesks'], 'project_id'],
+        ['editor_uploads', [], 'workspace_id'],
     ];
 
     public function measure(Workspace $workspace): WorkspaceUsage

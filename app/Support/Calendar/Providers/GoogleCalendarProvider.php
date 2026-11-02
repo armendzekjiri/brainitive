@@ -162,9 +162,13 @@ class GoogleCalendarProvider extends BaseCalendarProvider
             ?? throw new CalendarSyncFailed('Google rejected the change. Try again, or reconnect this calendar.');
     }
 
-    public function deleteEvent(CalendarConnection $connection, string $eventId): void
+    public function deleteEvent(CalendarConnection $connection, string $eventId, bool $wholeSeries = false): void
     {
         $this->assertWritable($connection);
+        // a series id (an instance id without its "_<time>") deletes every occurrence: only when asked for
+        if (! $wholeSeries && ! empty($this->service->getEvent($connection, $eventId)['recurrence'] ?? null)) {
+            throw new CalendarSyncFailed(CaldavCalendarProvider::SERIES_REFUSED);
+        }
         if (! $this->service->deleteEvent($connection, $eventId)) {
             throw new CalendarSyncFailed('Google refused to delete the event. Try again, or reconnect this calendar.');
         }

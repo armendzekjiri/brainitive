@@ -78,6 +78,24 @@ class CalendarWritesTest extends TestCase
 
     // ── events ────────────────────────────────────────────────────────────────────────────────
 
+    /** Codex review, finding 15: a calendar the user switched off is neither read nor written by explicit id. */
+    public function test_a_switched_off_calendar_is_off_for_explicit_ids_too(): void
+    {
+        FakeCalendarProvider::$events = [NormalizedEvent::allDay('e1', 'Offsite', '2026-11-12', '2026-11-13')];
+        $this->connection->update(['is_active' => false]);
+
+        $this->postJson('/api/v1/calendar/events', ['connection_id' => $this->connection->id, 'title' => 'X', 'date' => '2026-11-12'], $this->headers())
+            ->assertUnprocessable()->assertJsonValidationErrors('connection_id');
+        $this->getJson('/api/v1/calendar/events/'.$this->eventId('e1'), $this->headers())->assertNotFound();
+        $this->patchJson('/api/v1/calendar/events/'.$this->eventId('e1'), ['title' => 'Y'], $this->headers())->assertNotFound();
+        $this->deleteJson('/api/v1/calendar/events/'.$this->eventId('e1'), [], $this->headers())->assertNotFound();
+        $this->assertSame([], FakeCalendarProvider::$calls);
+
+        // switched on again: works
+        $this->connection->update(['is_active' => true]);
+        $this->getJson('/api/v1/calendar/events/'.$this->eventId('e1'), $this->headers())->assertOk();
+    }
+
     public function test_create_a_timed_event_in_the_users_zone(): void
     {
         $res = $this->postJson('/api/v1/calendar/events', [

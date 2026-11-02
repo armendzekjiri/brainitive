@@ -12,6 +12,8 @@ use App\Models\Release;
 use App\Models\Sprint;
 use App\Models\User;
 use App\Rules\ProjectMember;
+use App\Support\Entitlements\LimitGate;
+use App\Support\Entitlements\LimitReached;
 use App\Support\Live\BoardLive;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -75,11 +77,16 @@ final class Issues
      *
      * @param  array<string, mixed>  $data
      *
+     * The workspace's content limit is checked here (Codex review, finding 5), so every caller — the issue dialog,
+     * the App API, offline sync (web and apps) — stops at it the same way.
+     *
      * @throws ValidationException a subtask without a parent, an invalid custom field value
+     * @throws LimitReached the workspace's content storage is used up (402 limit_reached)
      */
     public static function create(Board $board, User $user, array $data): Item
     {
         $project = $board->project;
+        app(LimitGate::class)->ensureContentRoom($project->workspace);
         $itemTypeId = $data['item_type_id'] ?? ItemType::defaultIdFor($project);
         self::ensureSubtaskHasParent($project, $itemTypeId, $data['parent_id'] ?? null);
 

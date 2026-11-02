@@ -6,6 +6,8 @@ use App\Models\CalendarConnection;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\RateLimiter;
+use Laravel\Mcp\Response;
 
 /**
  * Helpers for the MCP calendar tools. Calendar connections are personal (owned
@@ -15,6 +17,20 @@ use Illuminate\Database\Eloquent\Collection;
  */
 trait ResolvesCalendarConnections
 {
+    /** Calendar / Google Tasks writes per user and minute over all MCP write tools (Codex review, finding 17). */
+    public const WRITES_PER_MINUTE = 30;
+
+    /**
+     * A tool error once the user's write budget for this minute is used up, else null (and one write is counted).
+     * Writes reach other people too (invitations, Google's cancellation emails), so a runaway assistant stops here.
+     */
+    protected function calendarWriteLimited(Authenticatable $user): ?Response
+    {
+        $allowed = RateLimiter::attempt('mcp-calendar-writes:'.$user->getAuthIdentifier(), self::WRITES_PER_MINUTE, fn () => true, 60);
+
+        return $allowed ? null : Response::error('Too many calendar changes in a minute ('.self::WRITES_PER_MINUTE.'). Wait a minute, then continue.');
+    }
+
     /**
      * Active connections of a given kind ('calendar' or 'tasks'), or all kinds.
      *
@@ -31,7 +47,8 @@ trait ResolvesCalendarConnections
     }
 
     /**
-     * Resolve one connection the user owns, of the expected kind.
+     * Resolve one connection the user owns, of the expected kind, and switched on: a calendar the user turned off
+     * (or that was switched off because its access expired) is off for the AI too (Codex review, finding 15).
      *
      * @throws AuthorizationException
      */
@@ -40,6 +57,7 @@ trait ResolvesCalendarConnections
         $connection = CalendarConnection::query()
             ->where('user_id', $user->id)
             ->where('kind', $kind)
+            ->where('is_active', true)
             ->find($connectionId);
 
         if (! $connection) {

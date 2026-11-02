@@ -3,6 +3,7 @@
 namespace App\Support\AppApi;
 
 use App\Models\AppDevice;
+use App\Models\AppDeviceRefreshUse;
 use App\Models\User;
 use App\Support\Live\Live;
 use Illuminate\Http\Request;
@@ -31,7 +32,8 @@ final class AppTokens
 
     /**
      * Give the device a new pair (sign-in or refresh); the old pair stops working and its refresh
-     * hash is kept to recognise reuse. The plain tokens exist only in the returned array.
+     * hash is kept to recognise reuse — every one the device used, not only the last (Codex review,
+     * finding 7: AppDeviceRefreshUse). The plain tokens exist only in the returned array.
      *
      * @return array{token_type: string, access_token: string, expires_in: int, refresh_token: string, refresh_expires_in: int}
      */
@@ -41,6 +43,10 @@ final class AppTokens
         $refresh = self::REFRESH_PREFIX.Str::random(48);
         $accessTtl = (int) config('app-api.access_ttl');
         $refreshTtl = (int) config('app-api.refresh_ttl');
+
+        if ($device->refresh_token_hash !== null && $device->exists) {
+            AppDeviceRefreshUse::query()->insertOrIgnore(['app_device_id' => $device->id, 'token_hash' => $device->refresh_token_hash, 'created_at' => now()]);
+        }
 
         $device->forceFill([
             'previous_refresh_hash' => $device->refresh_token_hash,
@@ -116,6 +122,9 @@ final class AppTokens
             'refresh_token_hash' => null,
             'refresh_expires_at' => null,
         ])->save();
+
+        // its used refresh tokens no longer matter: presenting one now is simply invalid
+        AppDeviceRefreshUse::query()->where('app_device_id', $device->id)->delete();
 
         Live::deviceRevoked((int) $device->id);
         // the web session its webview opened ends on its next request (EndRevokedAppDeviceSessions); again

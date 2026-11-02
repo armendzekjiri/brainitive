@@ -208,6 +208,8 @@ class AppSignInTest extends TestCase
             'client' => 'desktop',
             'code_challenge' => self::CHALLENGE,
             'device_name' => 'Ada’s MacBook',
+            // "sign out everywhere" before the exchange kills it (Codex review)
+            'auth_generation' => 0,
         ], AppAuthCodes::consume(AppAuthCodes::EXCHANGE, $query['code']));
     }
 
@@ -253,7 +255,7 @@ class AppSignInTest extends TestCase
         return $this->withHeader('User-Agent', self::DESKTOP_UA)->get($uri);
     }
 
-    public function test_a_web_session_code_signs_the_webview_in_and_remembers_it(): void
+    public function test_a_web_session_code_signs_the_webview_in_without_remember_me(): void
     {
         $user = User::factory()->create();
         $device = $this->appDevice($user);
@@ -262,9 +264,10 @@ class AppSignInTest extends TestCase
             ->assertRedirect(route('dashboard', absolute: false));
 
         $this->assertAuthenticatedAs($user, 'web');
+        // never remembered (Codex review): a recaller would rebuild a session without the device binding below;
+        // the app opens a new session with its token when this one expires
         $remember = collect($response->headers->getCookies())->first(fn ($c) => str_starts_with($c->getName(), 'remember_web_'));
-        $this->assertNotNull($remember, 'remember-me cookie, so the webview stays signed in across app restarts');
-        $this->assertGreaterThan(now()->addYear()->getTimestamp(), $remember->getExpiresTime());
+        $this->assertTrue($remember === null || $remember->isCleared(), 'no remember-me cookie for an app webview');
         // bound to the device: revoking it ends this session (EndRevokedAppDeviceSessions)
         $response->assertSessionHas(AppWebSessions::SESSION_KEY, $device->id);
     }
@@ -386,11 +389,12 @@ class AppSignInTest extends TestCase
             $this->assertGuest('web');
         }
 
-        // Continue: signed in, remembered, bound to the device, `to` kept from the link
+        // Continue: signed in (not remembered), bound to the device, `to` kept from the link
         $response = $this->post('/app/session', ['decision' => 'continue'])->assertRedirect('/my-work');
         $this->assertAuthenticatedAs($user, 'web');
         $response->assertSessionHas(AppWebSessions::SESSION_KEY, $device->id);
-        $this->assertNotNull(collect($response->headers->getCookies())->first(fn ($c) => str_starts_with($c->getName(), 'remember_web_')));
+        $remember = collect($response->headers->getCookies())->first(fn ($c) => str_starts_with($c->getName(), 'remember_web_'));
+        $this->assertTrue($remember === null || $remember->isCleared());
     }
 
     public function test_cancel_in_a_browser_without_a_session_signs_nobody_in(): void

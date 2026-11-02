@@ -192,7 +192,8 @@ class HelpdeskController extends Controller
 
         [$reply, $replayed] = $this->createOnce($request, 'tickets.replies.store', TicketReply::class,
             ['ticket' => $row->id, 'body' => $v['body'], 'internal' => (bool) ($v['internal'] ?? false)],
-            fn () => TicketActions::reply($row, $request->user(), $html, (bool) ($v['internal'] ?? false)));
+            fn () => TicketActions::reply($row, $request->user(), $html, (bool) ($v['internal'] ?? false)),
+            fn (TicketReply $reply) => $reply->ticket !== null && $request->user()->can('view', $reply->ticket));
         $reply->load(['user', 'contact', 'attachments']);
 
         if ($replayed) {

@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Passport\Contracts\OAuthenticatable;
 use Laravel\Passport\HasApiTokens;
 use NotificationChannels\WebPush\HasPushSubscriptions;
@@ -58,6 +59,7 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'app_auth_generation',
     ];
 
     /**
@@ -77,6 +79,7 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
             'task_digest' => 'boolean',
             'notification_preferences' => 'array',
             'sidebar_preferences' => 'array',
+            'app_auth_generation' => 'integer',
         ];
     }
 
@@ -200,13 +203,24 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
     }
 
     /**
-     * Get the user's role in a specific project.
+     * Get the user's role in a specific project — only while they are a member of its workspace (Codex review,
+     * finding 6): a project membership left over after the workspace removed them grants nothing.
      */
     public function projectRole(Project $project): ?string
     {
-        return $this->projects()
+        return $this->currentProjects()
             ->where('project_id', $project->id)
             ->first()?->pivot->role;
+    }
+
+    /**
+     * The user's project memberships in workspaces they still belong to. Project members are always workspace
+     * members (there is no project-only role); Workspace::removeUser drops both, `memberships:prune-orphans`
+     * cleans up rows from before that.
+     */
+    private function currentProjects(): BelongsToMany
+    {
+        return $this->projects()->whereIn('projects.workspace_id', DB::table('workspace_user')->select('workspace_id')->where('user_id', $this->id));
     }
 
     /**
@@ -230,8 +244,8 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
             return true;
         }
 
-        // Check direct project assignment
-        return $this->projects()
+        // Check direct project assignment (in a workspace they are still a member of)
+        return $this->currentProjects()
             ->where('project_id', $project->id)
             ->exists();
     }
@@ -266,7 +280,7 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
 
         return Project::whereIn('workspace_id', $workspaceIds)
             ->pluck('id')
-            ->merge($this->projects()->wherePivot('role', 'admin')->pluck('projects.id'))
+            ->merge($this->currentProjects()->wherePivot('role', 'admin')->pluck('projects.id'))
             ->unique()
             ->values()
             ->all();

@@ -13,6 +13,7 @@ use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Socialite\Facades\Socialite;
@@ -297,6 +298,61 @@ class GoogleCalendarProviderTest extends TestCase
             // An end before the start becomes start + 30 minutes.
             && $r['end'] === ['dateTime' => '2026-11-06T09:30:00+01:00', 'timeZone' => 'Europe/Berlin']
             && ! isset($r['summary']));
+    }
+
+    /** Codex review, finding 16: Google's series id (an instance id without its "_<time>") isn't deleted by accident. */
+    public function test_a_series_id_is_deleted_only_when_the_whole_series_is_asked_for(): void
+    {
+        $this->connection->update(['token_expires_at' => now()->addHour()]);
+        Http::fake(function (HttpRequest $r) {
+            $id = rawurldecode(basename((string) parse_url($r->url(), PHP_URL_PATH)));
+
+            return $r->method() === 'DELETE'
+                ? Http::response('', 204)
+                : Http::response($id === 'standup' ? ['id' => 'standup', 'recurrence' => ['RRULE:FREQ=DAILY']] : ['id' => $id, 'recurringEventId' => 'standup']);
+        });
+        $provider = CalendarProviders::make('google');
+
+        try {
+            $provider->deleteEvent($this->connection, 'standup');
+            $this->fail('expected CalendarSyncFailed');
+        } catch (CalendarSyncFailed $e) {
+            $this->assertStringContainsString('whole recurring series', $e->getMessage());
+        }
+        Http::assertNotSent(fn (HttpRequest $r) => $r->method() === 'DELETE');
+
+        $provider->deleteEvent($this->connection, 'standup_20261112T090000Z');
+        Http::assertSent(fn (HttpRequest $r) => $r->method() === 'DELETE' && str_contains($r->url(), '/events/standup_20261112T090000Z'));
+
+        $provider->deleteEvent($this->connection, 'standup', wholeSeries: true);
+        Http::assertSent(fn (HttpRequest $r) => $r->method() === 'DELETE' && str_ends_with(strtok($r->url(), '?'), '/events/standup'));
+    }
+
+    /** Codex review (low): a failed Google answer logs its reason codes, never the body. */
+    public function test_failed_google_answers_log_reason_codes_only(): void
+    {
+        $this->connection->update(['token_expires_at' => now()->addHour()]);
+        Http::fake(['www.googleapis.com/calendar/v3/calendars/*' => Http::response(['error' => [
+            'code' => 403, 'status' => 'PERMISSION_DENIED', 'message' => 'Event "Salary talk with Dana" belongs to ceo@corp.example',
+            'errors' => [['reason' => 'forbidden', 'message' => 'Salary talk with Dana']],
+        ]], 403)]);
+        $logged = [];
+        Log::listen(function ($m) use (&$logged) {
+            $logged[] = $m->message.' '.json_encode($m->context);
+        });
+
+        try {
+            $this->google->createEvent($this->connection, ['title' => 'X', 'start_date' => '2026-11-10']);
+        } catch (CalendarSyncFailed) {
+            // expected
+        }
+
+        $line = collect($logged)->first(fn ($l) => str_contains($l, 'Google event create failed'));
+        $this->assertNotNull($line);
+        $this->assertStringContainsString('PERMISSION_DENIED', $line);
+        $this->assertStringContainsString('forbidden', $line);
+        $this->assertStringNotContainsString('Salary', $line);
+        $this->assertStringNotContainsString('ceo@corp.example', $line);
     }
 
     public function test_rejected_writes_throw_a_user_facing_error(): void

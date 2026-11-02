@@ -4,6 +4,8 @@ namespace App\Support\Entitlements;
 
 use App\Models\User;
 use App\Models\Workspace;
+use App\Models\WorkspaceUsage;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The only place that enforces plan limits (v1.46.0). Every entry point that adds members,
@@ -83,6 +85,46 @@ final class LimitGate
         if ($usage + $bytes > $limits->fileBytes) {
             throw $this->reached('files', $limits->fileBytes, $usage, $limits, $workspace);
         }
+    }
+
+    /**
+     * Check and reserve file storage in one step (Codex review, finding 4): under a row lock of the workspace's usage
+     * row, the bytes must fit and are added to `file_bytes` at once — so repeated uploads stop at the limit before the
+     * nightly measure, and two concurrent uploads can't both take the last room. The measure recomputes the real
+     * total from the tables later; callers release() what they reserved when storing fails.
+     *
+     * @throws LimitReached
+     */
+    public function reserveFiles(Workspace $workspace, int $bytes): void
+    {
+        $limits = $this->limitsWhenEnforced($workspace);
+        if ($limits?->fileBytes === null || $bytes <= 0) {
+            return;
+        }
+
+        $usage = DB::transaction(function () use ($workspace, $bytes, $limits) {
+            WorkspaceUsage::query()->insertOrIgnore(['workspace_id' => $workspace->id, 'created_at' => now(), 'updated_at' => now()]);
+            $usage = WorkspaceUsage::query()->where('workspace_id', $workspace->id)->lockForUpdate()->firstOrFail();
+            if ($usage->file_bytes + $bytes > $limits->fileBytes) {
+                throw $this->reached('files', $limits->fileBytes, $usage->file_bytes, $limits, $workspace);
+            }
+            $usage->forceFill(['file_bytes' => $usage->file_bytes + $bytes])->save();
+
+            return $usage;
+        });
+        $workspace->setRelation('usage', $usage);
+    }
+
+    /** Give back a reservation whose upload wasn't stored. */
+    public function releaseFiles(Workspace $workspace, int $bytes): void
+    {
+        if ($bytes <= 0 || $this->limitsWhenEnforced($workspace)?->fileBytes === null) {
+            return;
+        }
+
+        WorkspaceUsage::query()->where('workspace_id', $workspace->id)
+            ->update(['file_bytes' => DB::raw('GREATEST(file_bytes - '.(int) $bytes.', 0)'), 'updated_at' => now()]);
+        $workspace->unsetRelation('usage');
     }
 
     public static function memberCount(Workspace $workspace): int

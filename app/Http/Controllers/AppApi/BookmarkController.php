@@ -75,7 +75,8 @@ class BookmarkController extends Controller
         $data = $request->safe()->except(['request_id']);
 
         [$group, $replayed] = $this->createOnce($request, 'bookmarks.store', Bookmark::class, ['workspace' => $workspace->id] + $data,
-            fn () => Bookmarks::createGroup($workspace, $request->user(), $data));
+            fn () => Bookmarks::createGroup($workspace, $request->user(), $data),
+            fn (Bookmark $group) => (bool) $this->visibleBookmarkGroup($request, $group->id));
 
         $group = $this->counted($group);
         if ($replayed) {
@@ -174,7 +175,8 @@ class BookmarkController extends Controller
                 FileRoom::ensure($group->workspace, $file);
 
                 return Bookmarks::createItem($group, $request->user(), $data, $file);
-            });
+            },
+            fn (BookmarkItem $item) => (bool) $this->visibleBookmarkGroup($request, (int) $item->bookmark_id));
 
         if ($replayed) {
             return (new BookmarkItemResource($item))->response();

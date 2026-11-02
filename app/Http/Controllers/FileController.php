@@ -14,9 +14,10 @@ class FileController extends Controller
     public function uploadImage(Request $request)
     {
         $request->validate(['image' => EditorUploads::IMAGE_RULES]); // 10MB max; no SVG (scripts on our origin)
+        $workspace = EditorUploads::workspaceFor($request); // 422 / 404 (Codex review 8)
 
-        // shared with the App API's POST /uploads
-        $stored = EditorUploads::storeImage($request->file('image'));
+        // shared with the App API's POST /uploads: reserves the bytes (402 when full), counted in the usage
+        $stored = EditorUploads::store($request->file('image'), true, $workspace, $request->user());
 
         // Editor.js format response
         return response()->json([
@@ -36,8 +37,9 @@ class FileController extends Controller
     public function uploadDocument(Request $request)
     {
         $request->validate(['document' => EditorUploads::DOCUMENT_RULES]); // 20MB max
+        $workspace = EditorUploads::workspaceFor($request);
 
-        $stored = EditorUploads::storeDocument($request->file('document'));
+        $stored = EditorUploads::store($request->file('document'), false, $workspace, $request->user());
 
         // Editor.js Attaches format response
         return response()->json([

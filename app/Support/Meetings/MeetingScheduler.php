@@ -147,7 +147,8 @@ final class MeetingScheduler
     public static function remove(Meeting $meeting, bool $cancel): void
     {
         if ($cancel) {
-            CalendarProviders::writable($meeting->connection)->deleteEvent($meeting->connection, $meeting->external_event_id);
+            // the event this meeting created itself (never a series): no series check needed
+            CalendarProviders::writable($meeting->connection)->deleteEvent($meeting->connection, $meeting->external_event_id, wholeSeries: true);
         }
 
         $subject = $meeting->subject;

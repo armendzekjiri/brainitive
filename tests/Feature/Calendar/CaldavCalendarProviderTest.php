@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Calendar;
 
+use App\Mcp\Servers\BrainitiveServer;
+use App\Mcp\Tools\DeleteCalendarEventTool;
 use App\Models\CalendarConnection;
 use App\Models\User;
 use App\Support\Calendar\Caldav\CaldavClient;
@@ -393,6 +395,38 @@ class CaldavCalendarProviderTest extends TestCase
         // already gone: nothing else to do
         $this->provider()->deleteEvent($connection, $this->id('/123456/calendars/home/gone.ics'));
         $this->assertCount(5, $this->requests);
+    }
+
+    /** Codex review, finding 16: an occurrence id without its "~<occurrence>" suffix must not delete the whole series. */
+    public function test_a_series_id_deletes_the_series_only_when_asked_for_explicitly(): void
+    {
+        $connection = $this->connection();
+        $this->server([
+            'GET /123456/calendars/home/series.ics' => Http::response($this->fixture('series.ics'), 200, ['ETag' => '"s1"']),
+            'DELETE /123456/calendars/home/series.ics' => Http::response('', 204),
+            'PUT /123456/calendars/home/series.ics' => Http::response('', 204),
+        ]);
+        $series = $this->id('/123456/calendars/home/series.ics');
+
+        try {
+            $this->provider()->deleteEvent($connection, $series);
+            $this->fail('expected CalendarSyncFailed');
+        } catch (CalendarSyncFailed $e) {
+            $this->assertStringContainsString('whole recurring series', $e->getMessage());
+        }
+        $this->assertSame([], array_filter($this->requests, fn ($r) => $r->method() === 'DELETE'));
+
+        // the MCP tool: an occurrence by default, the whole series only with scope=series
+        BrainitiveServer::actingAs($this->user)->tool(DeleteCalendarEventTool::class, ['connection_id' => $connection->id, 'event_id' => $series])
+            ->assertHasErrors(['whole recurring series']);
+        BrainitiveServer::actingAs($this->user)->tool(DeleteCalendarEventTool::class, ['connection_id' => $connection->id, 'event_id' => $this->id('/123456/calendars/home/series.ics', '20261123T080000Z')])
+            ->assertOk();
+        $this->assertSame('PUT', end($this->requests)->method(), 'one occurrence: an EXDATE, the series stays');
+        $this->assertSame([], array_filter($this->requests, fn ($r) => $r->method() === 'DELETE'));
+
+        BrainitiveServer::actingAs($this->user)->tool(DeleteCalendarEventTool::class, ['connection_id' => $connection->id, 'event_id' => $series, 'scope' => 'series'])
+            ->assertOk();
+        $this->assertSame('DELETE', end($this->requests)->method());
     }
 
     public function test_server_refusals_have_clear_messages(): void

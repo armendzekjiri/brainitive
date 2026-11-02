@@ -154,7 +154,7 @@ class FakeCalendarProvider extends BaseCalendarProvider
         return NormalizedEvent::allDay($eventId, $data['title'] ?? 'Updated', $data['start_date'] ?? '2026-11-05');
     }
 
-    public function deleteEvent(CalendarConnection $connection, string $eventId): void
+    public function deleteEvent(CalendarConnection $connection, string $eventId, bool $wholeSeries = false): void
     {
         $this->assertWritable($connection);
         self::$calls[] = ['delete', $eventId];

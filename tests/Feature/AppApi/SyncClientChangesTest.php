@@ -9,9 +9,12 @@ use App\Models\ItemType;
 use App\Models\Project;
 use App\Models\TimeEntry;
 use App\Models\User;
+use App\Models\WorkspaceUsage;
 use App\Models\WorkTimer;
 use App\Support\AppApi\AppApiErrors;
 use App\Support\Billing\WorkTimers;
+use App\Support\Entitlements\ConfigEntitlements;
+use App\Support\Entitlements\Entitlements;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
@@ -269,6 +272,35 @@ class SyncClientChangesTest extends TestCase
         $this->assertSame(['invalid', 422], [$invalid['status'], $invalid['http_status']]);
         $this->assertArrayHasKey('item_type_id', $invalid['errors']);
         $this->assertSame(0, Item::where('title', 'Typed elsewhere')->count());
+    }
+
+    /** Codex review, finding 5: the content limit holds for offline creates exactly as for the REST create. */
+    public function test_issue_create_respects_the_content_limit_like_the_rest_create(): void
+    {
+        $this->app->instance(Entitlements::class, new ConfigEntitlements(['enforced' => true, 'content_bytes' => 1000]));
+        $usage = WorkspaceUsage::create(['workspace_id' => $this->workspace->id, 'content_bytes' => 999]);
+
+        // under the limit: both work
+        $this->postJson("/api/v1/boards/{$this->board->id}/items", ['title' => 'Online, room left'], $this->appHeaders($this->token))->assertCreated();
+        $this->assertSame('applied', $this->sync([$this->change('issue.create', ['board_id' => $this->board->id, 'title' => 'Offline, room left'])])->json('data.0.status'));
+
+        // full: REST 402, sync the same answer per change, nothing created
+        $usage->update(['content_bytes' => 1000]);
+        $rest = $this->postJson("/api/v1/boards/{$this->board->id}/items", ['title' => 'Online, full'], $this->appHeaders($this->token))
+            ->assertStatus(402)->assertJsonPath('code', 'limit_reached')->json();
+        $change = $this->change('issue.create', ['board_id' => $this->board->id, 'title' => 'Offline, full']);
+        $result = $this->sync([$change])->assertOk()->json('data.0');
+
+        $this->assertSame(0, Item::whereIn('title', ['Online, full', 'Offline, full'])->count(), 'nothing created over the limit');
+        $this->assertSame(['limit_reached', 402], [$result['status'], $result['http_status']]);
+        $this->assertSame('limit_reached', $result['code'] ?? null);
+        $this->assertSame($rest['limit'], $result['limit'] ?? null);
+        $this->assertSame($rest['message'], $result['message']);
+
+        // not stored as final: once there is room again, the same change applies
+        $usage->update(['content_bytes' => 10]);
+        $this->assertSame('applied', $this->sync([$change])->json('data.0.status'));
+        $this->assertSame(1, Item::where('title', 'Offline, full')->count());
     }
 
     public function test_issue_create_without_type_or_column_uses_the_defaults(): void

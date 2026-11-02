@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class Workspace extends Model
@@ -229,11 +230,18 @@ class Workspace extends Model
     }
 
     /**
-     * Remove a user from this workspace.
+     * Remove a user from this workspace, and from its projects in the same transaction (Codex review, finding 6):
+     * a project membership must never outlive the workspace membership.
      */
     public function removeUser(User $user): void
     {
-        $this->users()->detach($user->id);
+        DB::transaction(function () use ($user) {
+            DB::table('project_user')
+                ->where('user_id', $user->id)
+                ->whereIn('project_id', Project::withTrashed()->where('workspace_id', $this->id)->select('id'))
+                ->delete();
+            $this->users()->detach($user->id);
+        });
         WorkspaceMembershipChanged::dispatch($this);
     }
 

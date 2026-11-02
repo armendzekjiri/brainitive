@@ -138,7 +138,8 @@ class AppApiFoundationTest extends TestCase
         $code = AppAuthCodes::issue(AppAuthCodes::EXCHANGE, ['user_id' => 7]);
 
         $this->assertNull(AppAuthCodes::consume(AppAuthCodes::WEB_SESSION, $code));
-        $this->assertSame(['user_id' => 7], AppAuthCodes::consume(AppAuthCodes::EXCHANGE, $code));
+        // an exchange code carries the user's sign-in generation (Codex review 2; no such user: 0)
+        $this->assertSame(['user_id' => 7, 'auth_generation' => 0], AppAuthCodes::consume(AppAuthCodes::EXCHANGE, $code));
         $this->assertNull(AppAuthCodes::consume(AppAuthCodes::EXCHANGE, $code));
         $this->assertNull(AppAuthCodes::consume(AppAuthCodes::EXCHANGE, 'nope'));
     }

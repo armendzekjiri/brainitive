@@ -22,6 +22,7 @@ use App\Support\Admin\UserDeletion;
 use App\Support\Entitlements\ConfigEntitlements;
 use App\Support\Entitlements\Entitlements;
 use App\Support\Entitlements\WorkspaceMembershipChanged;
+use App\Support\Entitlements\WorkspaceUsageMeter;
 use App\Support\Imports\Importer;
 use App\Support\Imports\ImportProgress;
 use App\Support\Imports\ImportRegistry;
@@ -348,8 +349,32 @@ class LimitChecksTest extends TestCase
 
         $this->actingAs($this->editor)->withHeader('referer', $page)->postJson(route('upload.image'), ['image' => $image()])->assertStatus(402);
         $this->actingAs($this->editor)->postJson(route('upload.image'), ['image' => $image(), 'workspace' => $this->workspace->slug])->assertStatus(402);
-        // a workspace the uploader doesn't belong to says nothing about them
-        $this->actingAs($this->outsider)->withHeader('referer', $page)->postJson(route('upload.image'), ['image' => $image()])->assertSuccessful();
+        // a workspace the uploader doesn't belong to: 404 (Codex review 8: never an upload that counts nowhere)
+        $this->actingAs($this->outsider)->withHeader('referer', $page)->postJson(route('upload.image'), ['image' => $image()])->assertNotFound();
+    }
+
+    /** Codex review, findings 4 + 8: an editor upload needs a workspace it counts against, and counts at once. */
+    public function test_editor_uploads_need_a_workspace_and_stop_at_the_limit(): void
+    {
+        Storage::fake('public');
+        $this->useLimits(['file_bytes' => 100 * 1024]);
+        $image = fn () => UploadedFile::fake()->image('shot.png')->size(40);
+        $send = fn (array $data, ?User $user = null) => $this->actingAs($user ?? $this->editor)->postJson(route('upload.image'), ['image' => $image()] + $data);
+
+        // no workspace and no referrer: refused, nothing stored
+        $send([])->assertUnprocessable()->assertJsonValidationErrors('workspace');
+        // a workspace the user isn't in, or that doesn't exist
+        $send(['workspace' => $this->workspace->slug], $this->outsider)->assertNotFound();
+        $send(['workspace' => 'nope'])->assertNotFound();
+        $this->assertSame([], Storage::disk('public')->allFiles());
+
+        $send(['workspace' => $this->workspace->slug])->assertOk()->assertJsonPath('success', 1);
+        $this->actingAs($this->editor)->postJson(route('upload.document'), ['document' => UploadedFile::fake()->create('a.pdf', 40, 'application/pdf'), 'workspace' => $this->workspace->slug])
+            ->assertOk()->assertJsonPath('success', 1);
+        // full now, without waiting for the nightly measure
+        $send(['workspace' => $this->workspace->slug])->assertStatus(402)->assertJsonPath('limit_reached.kind', 'files');
+        $this->assertCount(2, Storage::disk('public')->allFiles());
+        $this->assertSame(80 * 1024, app(WorkspaceUsageMeter::class)->fileBytes($this->workspace));
     }
 
     public function test_public_uploads_count_against_the_helpdesk_workspace_without_revealing_the_plan(): void

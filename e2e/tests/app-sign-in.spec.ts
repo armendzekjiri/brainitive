@@ -115,7 +115,12 @@ test('Continue hands the app a code it exchanges for tokens, and the webview lin
     await webviewPage.goto(link);
     // signed in: the dashboard (which forwards to the workspaces), not the login page
     await expect(webviewPage).toHaveURL(/\/(dashboard|workspaces)$/);
-    expect((await webview.cookies()).some((cookie) => cookie.name.startsWith('remember_web_'))).toBe(true);
+    // never remembered (Codex review): the app opens a fresh session with its token once this one expires
+    expect((await webview.cookies()).some((cookie) => cookie.name.startsWith('remember_web_'))).toBe(false);
+    // without its session cookie the webview is signed out (no remember-me brings it back)
+    await webview.clearCookies({ name: /[-_]session$/ });
+    await webviewPage.goto('/profile');
+    await expect(webviewPage).toHaveURL(/\/login$/);
 
     // used once: opening it again in another browser lands on the login page
     const other = await guestContext(browser);
@@ -181,7 +186,8 @@ test('a webview link opened in a plain browser asks first; Continue signs in', a
 
     await other.getByRole('button', { name: 'Continue' }).click();
     await expect(other).toHaveURL(/\/my-work/);
-    expect((await context.cookies()).some((cookie) => cookie.name.startsWith('remember_web_'))).toBe(true);
+    // signed in for this session only, bound to the device (Codex review: no remember-me for app sign-ins)
+    expect((await context.cookies()).some((cookie) => cookie.name.startsWith('remember_web_'))).toBe(false);
     await context.close();
 });
 

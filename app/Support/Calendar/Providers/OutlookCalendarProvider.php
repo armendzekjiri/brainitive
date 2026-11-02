@@ -299,7 +299,7 @@ class OutlookCalendarProvider extends BaseCalendarProvider
             ?? throw new CalendarSyncFailed('Outlook rejected the change. Try again, or reconnect Outlook.');
     }
 
-    public function deleteEvent(CalendarConnection $connection, string $eventId): void
+    public function deleteEvent(CalendarConnection $connection, string $eventId, bool $wholeSeries = false): void
     {
         $this->assertWritable($connection);
         $response = $this->send($connection, 'DELETE', $this->eventUrl($connection, $eventId), write: true);

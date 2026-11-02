@@ -16,7 +16,6 @@ use App\Models\Board;
 use App\Models\Item;
 use App\Models\Project;
 use App\Support\Boards\Issues;
-use App\Support\Entitlements\LimitGate;
 use App\Support\Entitlements\LimitReached;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -55,7 +54,7 @@ class IssueController extends Controller
     public function store(StoreIssueRequest $request): JsonResponse
     {
         $board = $request->board();
-        app(LimitGate::class)->ensureContentRoom($board->project->workspace);
+        // the content limit: Issues::create (a replay answers the stored issue even when the workspace is full now)
         $data = $request->issueData();
 
         [$item, $replayed] = $this->createOnce($request, 'items.store', Item::class, ['board' => $board->id] + $request->safe()->except(['request_id']),

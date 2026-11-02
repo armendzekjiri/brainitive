@@ -135,7 +135,8 @@ final class BookingService
             try {
                 $connection = CalendarConnection::find($booking->calendar_connection_id);
                 if ($connection) {
-                    CalendarProviders::for($connection)->deleteEvent($connection, $booking->external_event_id);
+                    // the event this booking created itself (never a series): no series check needed
+                    CalendarProviders::for($connection)->deleteEvent($connection, $booking->external_event_id, wholeSeries: true);
                 }
             } catch (Throwable $e) {
                 Log::warning('Booking: calendar event not deleted', ['booking_id' => $booking->id, 'error' => get_class($e)]);
