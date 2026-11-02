@@ -764,6 +764,37 @@ Tests: `AppClientAbilitiesTest` (6), `AppWebSessionRevocationTest` (5), `AppSign
 `AuthOAuthHardeningTest` / `MicrosoftLoginTest`; realtime `server.test.js` (+4), `live.test.js` (+1); e2e `app-sign-in` (+2),
 `app-device-sign-in`, `app-api-realtime` (+1, document socket 4410), `app-devices` (+1). Deploy: restart the realtime service.
 
+## Codex security review (`fix/app-api-codex-review`, 2026-11-02)
+Independent review (Codex) of the App API, the 68 local MCP tools and the calendar / Google Tasks tools. Each finding was
+reproduced with a failing PHPUnit test at the branch tip first (or explained); one commit per finding.
+
+| # | Finding | Verified? | Fix | Tests |
+|---|---|---|---|---|
+| 1 | HIGH: a revoked device regains a web session through the webview's remember-me cookie | **yes** — after revoke + lost session, the recaller opened `/profile` (200) | `/app/session` never remembers and expires an old recaller; a native-app webview signed in via the recaller (no `app_device_id`) is logged out of that browser (`logoutCurrentDevice`, token kept). (c) rotating `remember_token` on every revoke skipped: it would sign the user's normal browsers out of remember-me (one token per user) | `AppWebSessionRevocationTest` (+4: no recaller, revoked before / after expiry, normal browser remember-me), `AppSignInTest`; e2e `app-sign-in` |
+| 2 | HIGH: approvals made before "sign out everywhere" still mint tokens | **yes** — exchange and TV poll answered 200 after `SignOutEverywhere`, password reset and change | `users.app_auth_generation` (migration) stamped on consent-page codes and TV approvals, bumped by `SignOutEverywhere` (password change / reset, suspension, takeover), checked in `AppDeviceSignIn` under the user row lock → `invalid_grant` / `access_denied` | `PendingSignInRevocationTest` (5) |
+| 3 | HIGH: template replay discloses a transferred project | **yes** — replay after `ProjectTransfer::move` answered 200 with the project; the same for an issue moved out of reach | template replay re-resolves via `visibleProject`; `CreatesOnce` checks every replayed model (policy `view`, or an explicit check for comments, attachments, tasks, work logs, bookmarks, review comments, snippets, ticket replies). MCP replays answer stored snapshots: not affected | `ReplayVisibilityTest` (4) |
+| 4 | HIGH: editor uploads bypass file-storage limits | **yes** — a third 40 KB upload passed a 100 KB limit; no row lock | new table `editor_uploads` counted by the meter; `LimitGate::reserveFiles` checks + adds the bytes under a row lock (`releaseFiles` on failure); `EditorUploads::store` shared by web and App API | `UploadsTest` (+2), `LimitChecksTest` (+1) |
+| 5 | HIGH: offline sync `issue.create` bypasses the content limit | **yes** — sync created an issue in a full workspace | the check moved into `Issues::create`; sync answers per change `limit_reached` (402, `code` + `limit` as REST), nothing stored; `task` / `capture` creates have no online check either | `SyncClientChangesTest` (+1), OpenAPI |
+| 6 | CRITICAL: a removed workspace member keeps project access | **yes** — the removed member read the issue on the web (200) | no project-only role exists by design (members are picked from the workspace, transfers drop outsiders); `projectRole` / `hasProjectAccess` / `adminProjectIds` need the workspace membership; `removeUser` drops project rows in the same transaction; `memberships:prune-orphans` (dry run, `--force`) | `RemovedWorkspaceMemberTest` (4: web, App API, MCP, CLI, extension; current members unaffected; command) |
+| 7 | HIGH: a thief who rotates twice evades refresh-reuse detection | **yes** — the app's old token was just invalid, device stayed, no email | every used refresh hash in `app_device_refresh_uses` (migration; cascade, deleted on revoke, pruned after 60 days); any of them → revoke + email. A token-format counter was rejected (forgeable device-id sign-out) | `AppAuthTokensTest` (+3: two rotations, long chain, double refresh / stranger token) |
+| 8 | HIGH: web editor uploads skip the storage check without a workspace | **yes** — no workspace, no referrer → 200 | `/upload/*` requires a workspace (422 none, 404 not theirs, 402 full); `EnsureFileRoom` fails closed; `RichLexicalEditorFull` sends `workspace` (`lib/currentWorkspace.ts`); `PageEditor` / `EditorJS` are not imported anywhere (left as is) | `LimitChecksTest` (+1, updated), e2e `app-api-uploads` (+1) |
+| 9 / 12 | MEDIUM: unauthenticated MCP log amplification, no throttle | **yes** — a 20 000-char JSON-RPC method was logged in full | the temporary `LogMcpRequest` (May 2026) and its GET probe removed; `/mcp` `throttle:120,1,mcp` per user after `auth:api` | `McpEndpointHardeningTest` (2) |
+| 10 | MEDIUM: MCP creates tasks / lists / snippets / bookmark items / comments over the content limit | **no, not an MCP bypass** — no surface (web, App API, CLI, extension) checks these five types: the content limit is documented for page and issue creation only (ARCHITECTURE → Enforcement) | none — extending it is a product decision (it would e.g. block comments in a full workspace) | — |
+| 11 | MEDIUM: unbounded snippet bodies / issue descriptions in MCP | **no, not MCP-specific** — the web form rules and the App API have no max either (only sync's `issue.create` has 100 000); updates aren't checked against the content limit anywhere | none (no stricter limits invented) — a shared max is a decision for the owner | — |
+| 13 | MEDIUM (conditional): MCP doesn't require `mcp:use` | **yes, by design for now** — a scope-less Passport token reaches MCP. Inventory: MCP connectors (OAuth, request `mcp:use` themselves), CLI / Copilot token `brainitive-cli` (scope-less, `/api/cli/login` and `mcp:token`, documented for MCP), extension tokens (`capture`, blocked), other OAuth clients (scope-less) | not enforced: it would break the CLI / Copilot token and any connector that authorized without the scope. Plan: give `brainitive-cli` tokens an explicit scope + `Passport::defaultScopes(['mcp:use'])`, then enforce after the 30 / 60-day token rotation | `McpEndpointHardeningTest` pins it |
+| 14 | MEDIUM: Google task id escapes the selected list | **yes** — `../../other-list/tasks/x` was sent raw | `GoogleTasksService::segment` (refuses `/`, `\`, controls, `.`/`..`, > 256; percent-encodes), tool validation. Calendar providers already encode / verify their ids | `GoogleTasksIdsTest` (3) |
+| 15 | MEDIUM: explicit ids write to switched-off connections | **yes** (MCP and App API) — `is_active` is the product's on/off switch (docs, auto-off on expired Google access) | MCP resolver and App API create / show / update / delete require `is_active` | `CalendarProviderToolsTest` (+1), `CalendarWritesTest` (+1) |
+| 16 | MEDIUM: a stripped CalDAV occurrence id deletes the series | **yes** (CalDAV; Google has the same ambiguity, Outlook not) | `deleteEvent(…, $wholeSeries = false)`: CalDAV / Google refuse a series id unless asked; MCP `scope: occurrence\|series`; meetings / bookings opt out for their own single events | `CaldavCalendarProviderTest` (+1), `GoogleCalendarProviderTest` (+1) |
+| 17 | MEDIUM: no bounds on calendar reads / writes | **yes** | `list_calendar_events` ≤ 62 days (the App API's cap; web month ≈ 45), ≤ 500 events + `truncated`; 30 writes / min / user over the calendar + Google Tasks write tools | `CalendarProviderToolsTest` (+2) |
+| low | `list_bookmarks` hides groups the user may see | **yes** (admins didn't see others' private groups; fails closed) | uses `BookmarkPolicy::view` | `ListBookmarksToolTest` |
+| low | Google error handlers log full response bodies | **yes** | allowlisted reason codes only (`GoogleCalendarService::errorSummary`) | `GoogleCalendarProviderTest` (+1) |
+
+Also: CI's e2e `app-api-uploads` 403 on `GET upload.url` — a fresh checkout has no `public/storage` link, so `/storage/*`
+fell through to the private `local` disk's signed route (`serve: true`) → 403; the e2e global setup now runs
+`storage:link` when the link is missing. `item-types-toggle` passes locally (3/3), untouched.
+Follow-ups (not done): attachments / bookmark files still use the stale file check (no reservation); content-limit scope
+(10), shared max lengths (11) and MCP scope enforcement (13) need the owner's decision.
+
 ## Release materials (`docs/release-v1.49.0-materials`)
 In-app changelog entry v1.49.0 (`HelpModal.tsx`), homepage (`Welcome.tsx`: "Brainitive on your desktop" spotlight card +
 `#desktop` section with "Open API for apps", both marked beta / coming soon; `e2e/tests/homepage.spec.ts`), docs site
@@ -776,7 +807,13 @@ the desktop section is the owner's to do.
 ## Deploy checklist v1.49.0
 Before: nothing to build specially; `desktop/` is its own repo and is not part of this deploy.
 1. **Migration:** `php artisan migrate` — additive: one new table `sync_tombstones` (`2026_11_08_100000_create_sync_tombstones_table`)
-   and one nullable column `work_timers.description` (`2026_11_09_100000_add_description_to_work_timers_table`).
+   and one nullable column `work_timers.description` (`2026_11_09_100000_add_description_to_work_timers_table`); Codex review:
+   `users.app_auth_generation` (NOT NULL default 0, no rewrite; `2026_11_10_100000_add_app_auth_generation_to_users_table`),
+   new tables `editor_uploads` (`2026_11_10_110000_create_editor_uploads_table`; earlier editor files are not backfilled —
+   their workspace isn't known; a backfill could scan page / issue / comment HTML for `/storage/uploads/…` URLs per
+   workspace) and `app_device_refresh_uses` (`2026_11_10_120000_create_app_device_refresh_uses_table`).
+1a. **Orphaned project memberships (Codex review 6), the owner runs it:** `php artisan memberships:prune-orphans` (dry run:
+   lists them), then `php artisan memberships:prune-orphans --force`. Access is already cut by the code; this cleans the rows.
 2. **Realtime service:** restart after the deploy (`realtime/` changed): prod `127.0.0.1:6201`, dev `:6202`
    (`sudo systemctl restart brainitive-realtime` of each instance). Until then old servers ignore the device claim (per-user behaviour, nothing breaks);
    since BRAI-377 the restart also makes revoked devices lose their live-doc (collab) sockets.
@@ -787,7 +824,8 @@ Before: nothing to build specially; `desktop/` is its own repo and is not part o
    - `APP_API_MIN_DESKTOP_VERSION` (default `0.1.0`; raise only when an app version must be forced to update) and `APP_API_MIN_MOBILE_VERSION`;
    - the download links `DESKTOP_DOWNLOAD_MACOS_URL`, `DESKTOP_DOWNLOAD_WINDOWS_URL`, `DESKTOP_DOWNLOAD_LINUX_URL` — leave empty until builds exist (phase 10 fills them);
    - prod has no config cache, so no `config:cache` step; otherwise run `php artisan optimize` after editing `.env`.
-5. **Scheduler:** `routes/console.php` already schedules `model:prune --model=SyncTombstone` daily at 04:37 (tombstones older than 30 days). Check the
+5. **Scheduler:** `routes/console.php` already schedules `model:prune --model=SyncTombstone` daily at 04:37 (tombstones older than 30 days;
+   since the Codex review also `AppDeviceRefreshUse`, used refresh hashes older than the 60-day refresh TTL). Check the
    cron `schedule:run` runs on prod and dev, and that `php artisan schedule:list` shows the entry.
 6. **Docs site:** push triggers `docs.brainitive.app` deploy (new pages Desktop app and App API). Docs-only pushes skip app CI.
 7. **Smoke tests after the deploy:**
