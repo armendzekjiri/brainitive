@@ -19,6 +19,22 @@ Or download `brainitive_<os>_<arch>.tar.gz` / `.zip` from the
 [latest release](https://github.com/armendzekjiri/brainitive/releases/latest) and put the binary
 on your `PATH`. `brainitive update` upgrades in place.
 
+### Verify a download
+
+`install.sh`, `install.ps1` and `brainitive update` check the archive against `checksums.txt`.
+That catches a broken download, but `checksums.txt` sits on the same GitHub release as the
+binaries, so whoever could replace one could replace both. Every release file (binaries,
+`checksums.txt`, the installers and the extension zips) therefore also has a Sigstore-signed
+build-provenance attestation from the release workflow. It is stored outside the release and
+names the workflow that built the file. To check a file with the [GitHub CLI](https://cli.github.com):
+
+```sh
+gh attestation verify brainitive_darwin_arm64.tar.gz --repo armendzekjiri/brainitive \
+  --signer-workflow armendzekjiri/brainitive/.github/workflows/release.yml
+```
+
+A file that was swapped on the release has no matching attestation and fails this check.
+
 The installer also adds `bi` as a short command when that name is available, so `bi login` and `brainitive login` do the same thing. It never replaces an existing `bi` command. Use `bi -s "search words"` to search or `bi -c "a quick note"` to capture.
 
 ### Quick shortcuts
@@ -110,4 +126,4 @@ Layout: `cmd/brainitive` (main), `internal/cli` (commands), `internal/mcp` (JSON
 `internal/auth` (OAuth 2.1 + PKCE with dynamic client registration and a loopback redirect),
 `internal/api` (the extension API, for screenshots), `internal/config`, `internal/output`.
 Releases: `.github/workflows/release.yml` builds the six binaries and attaches them to the app's
-GitHub release with `checksums.txt`; `install.sh` / `install.ps1` download from there.
+GitHub release with `checksums.txt` and a build-provenance attestation per file (see "Verify a download"); `install.sh` / `install.ps1` download from there.
