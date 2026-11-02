@@ -4,7 +4,7 @@ namespace App\Support\Offline;
 
 /**
  * The answer to one offline mutation (BRAI-82). Applied (200) and conflict (409) are final and
- * stored for replays; deleted (410) and waiting (424) wrote nothing.
+ * stored for replays; deleted / gone (410) and waiting (424) wrote nothing.
  */
 final class SyncOutcome
 {
@@ -30,7 +30,7 @@ final class SyncOutcome
      * @param  array<string, array{base: mixed, mine: mixed, theirs: mixed}>  $conflicts
      * @param  list<string>  $applied
      */
-    public static function conflict(string $entityType, array $entity, int $entityId, array $conflicts, array $applied): self
+    public static function conflict(string $entityType, array $entity, int $entityId, array $conflicts, array $applied, string $message = 'Someone changed this meanwhile.'): self
     {
         return new self(409, [
             'status' => 'conflict',
@@ -38,7 +38,7 @@ final class SyncOutcome
             'entity' => $entity,
             'conflicts' => $conflicts,
             'applied' => $applied,
-            'message' => 'Someone changed this meanwhile.',
+            'message' => $message,
         ], $entityType, $entityId);
     }
 
@@ -46,6 +46,15 @@ final class SyncOutcome
     public static function deleted(string $entityType, string $message): self
     {
         return new self(410, ['status' => 'deleted', 'entity_type' => $entityType, 'message' => $message]);
+    }
+
+    /**
+     * What the change is about is no longer there and nothing was written (App API sync: a timer stopped or
+     * discarded elsewhere, a notification that is gone). The device drops the change.
+     */
+    public static function gone(string $entityType, string $message): self
+    {
+        return new self(410, ['status' => 'gone', 'entity_type' => $entityType, 'message' => $message]);
     }
 
     /** Refers to something created offline that hasn't reached the server yet: retry later. */

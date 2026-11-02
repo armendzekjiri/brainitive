@@ -775,7 +775,8 @@ the desktop section is the owner's to do.
 
 ## Deploy checklist v1.49.0
 Before: nothing to build specially; `desktop/` is its own repo and is not part of this deploy.
-1. **Migration:** `php artisan migrate` — additive, one new table `sync_tombstones` (`2026_11_08_100000_create_sync_tombstones_table`).
+1. **Migration:** `php artisan migrate` — additive: one new table `sync_tombstones` (`2026_11_08_100000_create_sync_tombstones_table`)
+   and one nullable column `work_timers.description` (`2026_11_09_100000_add_description_to_work_timers_table`).
 2. **Realtime service:** restart after the deploy (`realtime/` changed): prod `127.0.0.1:6201`, dev `:6202`
    (`sudo systemctl restart brainitive-realtime` of each instance). Until then old servers ignore the device claim (per-user behaviour, nothing breaks);
    since BRAI-377 the restart also makes revoked devices lose their live-doc (collab) sockets.
@@ -802,3 +803,6 @@ Before: nothing to build specially; `desktop/` is its own repo and is not part o
 - `N` (not `C`, which is Quick capture) opens the Create modal on the Task tab; guarded like the capture shortcut (`isTypingTarget`, open dialogs/palette, defaultPrevented, composing).
 - AppLayout handles the desktop menu's cancelable `brainitive-desktop:command` event (`new-issue`, `new-doc`, `search`).
 - Create remembers the last project/board/type per workspace in localStorage (`lib/createMemory.ts`); the current project still wins. E2E: `e2e/tests/create-shortcut.spec.ts`.
+
+## feat/app-api-client-gaps
+- App API gaps for the desktop menu-bar panel / New-task window: ETags on `/me/work`, `/notifications` (first page) and `/capture-destinations`; notifications get `summary` (the bell's sentence, plain text) + `url` (absolute, null when not visible); `/me/timer` gets `today_logged_seconds` and `timer.description`; sync types `timer.start|stop|discard`, `notification.read`, `notifications.read_all {before}` (status `gone` for a timer / notification no longer there, `invalid` timer stops carry `activities` + `default_activity_id`); `issue.create` takes `description` (Markdown) + `item_type_id` via `Issues::create`. Additive migration `work_timers.description`. Plan: `docs/ai/tasks/feat-app-api-client-gaps.md`, registry: `docs/ai/API.md`.

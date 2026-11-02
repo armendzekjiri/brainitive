@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class WorkTimer extends Model
 {
-    protected $fillable = ['user_id', 'item_id', 'started_at'];
+    protected $fillable = ['user_id', 'item_id', 'started_at', 'description'];
 
     protected function casts(): array
     {

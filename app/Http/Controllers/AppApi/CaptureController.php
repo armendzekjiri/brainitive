@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\AppApi;
 
+use App\Http\Controllers\AppApi\Concerns\AnswersWithETag;
 use App\Http\Controllers\AppApi\Concerns\CreatesOnce;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AppApi\CapturePreviewRequest;
@@ -42,6 +43,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 #[Group('Captures', weight: 160)]
 class CaptureController extends Controller
 {
+    use AnswersWithETag;
     use CreatesOnce;
 
     /**
@@ -200,10 +202,16 @@ class CaptureController extends Controller
         return (new CaptureConversionResource($result, $current))->response()->setStatusCode(201);
     }
 
-    /** Where the user can organize captures into, per workspace (only what they may write to). */
-    public function destinations(Request $request): AnonymousResourceCollection
+    /**
+     * Where the user can organize captures into, per workspace (only what they may write to).
+     *
+     * Answers an `ETag`: send it back as `If-None-Match` to get 304 while nothing changed.
+     *
+     * @response AnonymousResourceCollection<int, CaptureDestinationResource>
+     */
+    public function destinations(Request $request): JsonResponse|Response
     {
-        return CaptureDestinationResource::collection(CaptureDestinations::for($request->user()));
+        return $this->withETag($request, CaptureDestinationResource::collection(CaptureDestinations::for($request->user()))->response($request));
     }
 
     private function owned(Request $request, string $id): Capture

@@ -61,6 +61,20 @@ final class TimeEntries
     }
 
     /**
+     * Seconds the user logged on their local today (`spent_on`, every workspace): the "today" total next to the
+     * focus timer. Only finished entries; a running timer is not one.
+     */
+    public static function loggedSecondsToday(User $user): int
+    {
+        $minutes = TimeEntry::query()
+            ->where('user_id', $user->id)
+            ->where('spent_on', now($user->localTimezone())->toDateString())
+            ->sum('minutes');
+
+        return (int) $minutes * 60;
+    }
+
+    /**
      * The user's own entries of a workspace between two days, oldest first, with what the timesheet shows.
      *
      * @return Collection<int, TimeEntry>

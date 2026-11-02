@@ -22,6 +22,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -44,8 +45,12 @@ class MyWorkController extends Controller
      * last). `due` = overdue | today | upcoming (or several, comma separated), by the user's local date;
      * `status` = open (default) | done | all. For a cheap refresh pass `updated_since` with
      * `status=all`: entries that were completed since then come back with `done: true`.
+     *
+     * Answers an `ETag` (the page and the user); send it back as `If-None-Match` to get 304 while that page is unchanged.
+     *
+     * @response WorkItemCollection<CursorPaginator<int, mixed>>
      */
-    public function index(ListWorkRequest $request): WorkItemCollection
+    public function index(ListWorkRequest $request): JsonResponse|Response
     {
         $user = $request->user();
         $page = AssignedWork::combined($user, $request->due(), $request->status(), $request->updatedSince(), MyDayPlan::today($user))
@@ -60,7 +65,7 @@ class MyWorkController extends Controller
             ->filter()
             ->values());
 
-        return new WorkItemCollection($page);
+        return $this->withETag($request, (new WorkItemCollection($page))->response($request));
     }
 
     /**

@@ -26,7 +26,7 @@ logic underneath (Support services, policies) is shared.
 | Auth | `Authorization: Bearer bra_…` (access, 15 min). Refresh `brr_…` (60 days, single use). Tokens never in URLs. |
 | Responses | Wrapped: `{data: {...}}` (API Resources' default); lists `{data: [...], next_cursor}`. **DELETE → 204** No Content when it removes a resource; removing a *part* of one (e.g. `DELETE /me/avatar`) answers 200 with the updated parent instead. Only unwrapped exception: the OAuth token responses of `POST /auth/exchange` and `POST /auth/refresh` are unwrapped (`{token_type, access_token, expires_in, refresh_token, refresh_expires_in, device}`). Resources list their fields explicitly, never a model's `toArray()`. |
 | Errors | `{"message": "…", "code": "…", "errors"?: {field: [..]}}` — 400 `bad_request` / `invalid_grant`, 401 `unauthenticated`, 402 `limit_reached` (+ `limit` object, see Invitations), 403 `forbidden`, 403 `client_not_allowed` (this app may not call the endpoint at all: the TV's scope, see "TV: what it may call"), 404 `not_found`, 405 `method_not_allowed`, 409 `conflict`, 410 `gone`, 422 `validation_failed`, 429 `rate_limited`, 500 `server_error`. 404 instead of 403 when the user must not learn that something exists. Documented once for all endpoints (`App\Support\AppApi\OpenApi`); a 402 needs `@throws LimitReached` on the controller method. |
-| Polling | `GET /me/today`, `/me/my-day`, `/me/timer` and `/notifications/unread-count` answer an `ETag` (hash of the answer + the user): send it as `If-None-Match` → 304 without body. Shared `AnswersWithETag` trait; a new polled endpoint uses it. |
+| Polling | `GET /me/today`, `/me/my-day`, `/me/timer`, `/me/work`, `/notifications` (first page, no `cursor`), `/notifications/unread-count` and `/capture-destinations` answer an `ETag` (hash of the answer + the user): send it as `If-None-Match` → 304 without body. Shared `AnswersWithETag` trait; a new polled endpoint uses it. |
 | Dates | ISO-8601 UTC (`2026-11-01T09:16:04Z`). |
 | Lists | Cursor pagination `?cursor=&limit=` (default 50, max 100) → `{data: [...], next_cursor}`; `updated_since` for sync. Server side: `ListRequest` (rules + `limit()` / `cursor()` / `updatedSince()`) and a `CursorCollection` subclass per list. An unknown / stale cursor starts again at the first page. |
 | Writes | Creates take an optional `request_id` (uuid): a retry with the same id and input answers **200** with what the first call created (201 the first time); the same id with other input → 409 `conflict` (`Concerns\CreatesOnce`, stored 7 days like the MCP's writes). Updates carry `revision` / `updated_at` → 409 on conflict where a resource has one. |
@@ -372,7 +372,7 @@ bookmarks, captures, files}, fuzzy, places: [{type, id, title, subtitle, url, wo
 ### Notifications
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
-| `GET /api/v1/notifications?filter=all\|unread\|mentions\|assigned&archived=&cursor=&limit=` | app + verified | Tray inbox / native notifications: the web's inbox (bell), newest first, cursor-paginated (no `updated_since`: start again from the first page) | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
+| `GET /api/v1/notifications?filter=all\|unread\|mentions\|assigned&archived=&cursor=&limit=` | app + verified | Tray inbox / native notifications: the web's inbox (bell), newest first, cursor-paginated (no `updated_since`: start again from the first page). Each row has `summary` (the bell's sentence, plain text) and `url` (absolute, or null). The first page (no `cursor`) answers an `ETag` → 304 while it is unchanged (per user) | Full | BRAI-183 | ready (v1.49.0, BRAI-393; summary / url / ETag: feat/app-api-client-gaps) |
 | `GET /api/v1/notifications/unread-count` | app + verified | Dock / tray badge → `{data: {unread_count}}`. Answers an `ETag`; send it as `If-None-Match` → 304 without body while the count is unchanged (tag is per user; BRAI-440) | Full | BRAI-183, BRAI-440 | ready (v1.49.0, BRAI-393, BRAI-440) |
 | `POST /api/v1/notifications/{id}/read` | app + verified | Mark one read → `{data: {unread_count}}`. Not the user's / unknown → 404 | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
 | `POST /api/v1/notifications/read-all` | app + verified | Mark all inbox rows read → `{data: {unread_count: 0}}` | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
@@ -380,11 +380,26 @@ bookmarks, captures, files}, fuzzy, places: [{type, id, title, subtitle, url, wo
 | `GET /api/v1/me/notification-preferences` | app + verified | Settings → Notifications: `{data: {categories: [{key, label, description, channels: {in_app, push, email}}]}}` (effective: the user's choice or the default) | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
 | `PUT /api/v1/me/notification-preferences` | app + verified | `{preferences: {"<category>": {"in_app"?, "push"?, "email"?: bool}}}` — partial, only sent channels change → same shape as GET; unknown category / channel → 422 | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
 
-Notification: `{id (uuid), type, category, data, read, read_at, archived_at, created_at}` — the rows
+Notification: `{id (uuid), type, category, summary, url, data, read, read_at, archived_at, created_at}` — the rows
 of the web bell (`NotificationInbox`, shared). `type` is e.g. `mentioned`, `item_assigned`,
-`item_commented`; `category` the catalog group (null for an unknown type); `data` the type's payload
-the web renders (`actor_name`, `item_title`, `url` …, different per type — show a generic row with
-`data.url` for types the app doesn't know). Every read / archive is announced on the user's live
+`item_commented`; `category` the catalog group (null for an unknown type); **`summary`** the bell's sentence as
+one line of plain text — show it as text, never as HTML (HTML / Markdown stripped, `@[Name](user:<id>)` → `@Name`,
+≤ 200 characters, English: the app has no translations; an unknown type still gets a sentence, at worst "Someone
+sent you a notification"); **`url`** the page to open — an absolute URL on this server **only while the user can
+open it now** (workspace, project, board, issue, doc, ticket checked like the web), else `null` (no link, a foreign
+host, lost access, a deleted issue, someone else's draft); `data` the type's raw payload the web renders
+(`actor_name`, `item_title` …, different per type). Server side: one formatter per worded type in
+`App\Support\Notifications\Summaries\*` (mirrors `NotificationMessage.tsx`), `ContractSummary` for catalog / unknown
+types, `NotificationText` + `NotificationLinks`.
+
+```json
+{"id": "9b2c…", "type": "item_assigned", "category": "assignments",
+ "summary": "Ada assigned you to WEB-12",
+ "url": "https://www.brainitive.app/workspaces/acme/projects/web/boards/main/items/412",
+ "data": {"type": "item_assigned", "actor_name": "Ada", "item_key": "WEB-12", "item_title": "Fix login", "item_url": "…"},
+ "read": false, "read_at": null, "archived_at": null, "created_at": "2026-11-02T09:16:04Z"}
+```
+ Every read / archive is announced on the user's live
 channel, so the web bell follows at once. `push` in the preferences is browser push today and the
 apps' push once it ships (APNs / FCM via the device's `push_token`).
 
@@ -410,7 +425,7 @@ is signed in there after the app's sign-in), or in the webview via `POST /auth/w
 ### My Work
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
-| `GET /api/v1/me/work?due=overdue\|today\|upcoming&status=open\|done\|all&updated_since=&cursor=&limit=` | app + verified | Tray "My Work", TV wallboard: issues and list tasks assigned to the user in every project they can open, soonest due first (no due date last), cursor-paginated. `due` takes several, comma separated (`overdue,today`); dates are the user's local day | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
+| `GET /api/v1/me/work?due=overdue\|today\|upcoming&status=open\|done\|all&updated_since=&cursor=&limit=` | app + verified | Tray "My Work", TV wallboard: issues and list tasks assigned to the user in every project they can open, soonest due first (no due date last), cursor-paginated. `due` takes several, comma separated (`overdue,today`); dates are the user's local day. Every page answers an `ETag` (hash of that page + the user): `If-None-Match` → 304 while unchanged | Full | BRAI-215 | ready (v1.49.0, BRAI-396; ETag: feat/app-api-client-gaps) |
 | `PATCH /api/v1/me/work/{id}` | app + verified | The circle: `{done: bool}` → `{data: work item}`. Issue → its board's first done column (reopen → first open column), watchers notified; task → status (a repeating task with a due date moves to its next date and stays open). 403 without edit rights, 404 not visible / malformed id, 422 board without a done column | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
 | `GET /api/v1/me/my-day` | app + verified | Tray "My Day", TV "Today" panel: today's plan in the user's order → `{data: {date, items: [work item], carry_over_count}}`. `ETag` / `If-None-Match` → 304 while the plan (and what it shows) is unchanged; per user (BRAI-440) | Full | BRAI-215, BRAI-440 | ready (v1.49.0, BRAI-396, BRAI-440) |
 | `POST /api/v1/me/my-day/items` | app + verified | `{id: "issue:12"}` → plan it for today (at the end; again = no-op) → the updated My Day. Work the user can't open → 422 `id` | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
@@ -532,7 +547,7 @@ position, url, created_at, updated_at}`.
 | `DELETE /api/v1/captures/{id}` | app + verified | Delete for good → 204; only archived captures (422 `capture` otherwise), as the web | Full | BRAI-217 | ready (v1.49.0, BRAI-398) |
 | `GET /api/v1/captures/{id}/preview?type=` | app + verified | The convert dialog: the fields the capture becomes for a type → `{data: {type, fields}}` (issue `{title, description}`, task `{title, notes}`, page `{title, markdown}`, bookmark `{type, title, url, content}`, snippet `{title, content, language, description}`) | Full | BRAI-217 | ready (v1.49.0, BRAI-398) |
 | `POST /api/v1/captures/{id}/convert` | app + verified, 60/min | `{type, destination_id, fields}` → 201 `{data: {replayed: false, location, capture}}`; converted before → 200 `replayed: true` (nothing new). Destination rights → 403; archived / invalid fields → 422; 402 `limit_reached` (issues, docs) | Full | BRAI-217 | ready (v1.49.0, BRAI-398) |
-| `GET /api/v1/capture-destinations` | app + verified | Where the user can save into, per workspace: `{data: [{id, name, slug, projects: [{id, name, key, icon, color, can_create_pages, boards: [{id, name, type, columns: [{id, name}]}], task_lists: [{id, name}]}], bookmarks: [{id, name, icon}], snippet_collections: [{id, name}]}]}` | Full | BRAI-217 | ready (v1.49.0, BRAI-398) |
+| `GET /api/v1/capture-destinations` | app + verified | Where the user can save into, per workspace: `{data: [{id, name, slug, projects: [{id, name, key, icon, color, can_create_pages, boards: [{id, name, type, columns: [{id, name}]}], task_lists: [{id, name}]}], bookmarks: [{id, name, icon}], snippet_collections: [{id, name}]}]}`. `ETag` / `If-None-Match` → 304 while unchanged (per user: what they may write to) | Full | BRAI-217 | ready (v1.49.0, BRAI-398; ETag: feat/app-api-client-gaps) |
 
 Capture: `{id (uuid), text, url, intended_type, source, state: inbox|processed|archived, captured_at, processed_at,
 archived_at, updated_at, target: {type, title, breadcrumb, url, available}|null}`.
@@ -593,8 +608,8 @@ page_description, position, created_at, updated_at}`.
 ### Time tracking
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
-| `GET /api/v1/me/timer` | app + verified | Tray: running time → `{data: {running, timer: {id, started_at, elapsed_seconds, elapsed_minutes, issue: {id, work_id, key, title, url, workspace}\|null}\|null, activities, activity_required, default_activity_id}}`. `ETag` / `If-None-Match` → 304 while nothing changed; per user. `elapsed_seconds` / `elapsed_minutes` tick by themselves and are **not** part of the tag: after a 304 count from `timer.started_at` (BRAI-440) | Full | BRAI-241, BRAI-440 | ready (v1.49.0, BRAI-400, BRAI-440) |
-| `POST /api/v1/me/timer/start` | app + verified | `{id: "issue:<id>"}` → 201 timer state. The web's timer (one per user): another one running → 409 `conflict`; no edit right on the issue → 403; not visible → 404; `task:<id>` → 422 (list tasks have no work log) | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
+| `GET /api/v1/me/timer` | app + verified | Tray: running time → `{data: {running, timer: {id, started_at, elapsed_seconds, elapsed_minutes, description, issue: {id, work_id, key, title, url, workspace}\|null}\|null, activities, activity_required, default_activity_id, today_logged_seconds}}`. `today_logged_seconds`: the user's finished work logs on their local today (`spent_on`, every workspace), **without** the running timer — show "today" as `today_logged_seconds` + the running elapsed time. `ETag` / `If-None-Match` → 304 while nothing changed (a new work log changes it); per user. `elapsed_seconds` / `elapsed_minutes` tick by themselves and are **not** part of the tag: after a 304 count from `timer.started_at` (BRAI-440) | Full | BRAI-241, BRAI-440 | ready (v1.49.0, BRAI-400, BRAI-440) |
+| `POST /api/v1/me/timer/start` | app + verified | `{id: "issue:<id>", description?}` → 201 timer state. `description` (≤ 255, what the user works on) becomes the work log's note when the stop sends none (REST, sync and the web pill). The web's timer (one per user): another one running → 409 `conflict`; no edit right on the issue → 403; not visible → 404; `task:<id>` → 422 (list tasks have no work log) | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
 | `POST /api/v1/me/timer/stop` | app + verified | `{timer_id, time? (default: elapsed), note?, activity_id?, spent_on?}` → `{data: {result: logged\|already_stopped\|no_access, work_log\|null}}`. Logs once (a retry → `already_stopped`); activity missing / unusable where required → 422 `activity_id`, the timer keeps running; that 422 also carries top-level `activities: [{id, name}]` (what can be picked, no rates) and `default_activity_id` (or null), so the app can show a picker and retry with `activity_id` (BRAI-440) | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
 | `POST /api/v1/me/timer/discard` | app + verified | `{timer_id}` → stop without logging → timer state | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
 | `GET /api/v1/work-logs?workspace=&from=&to=` | app + verified | The user's own work logs, newest day first, cursor-paginated, `updated_since`; `workspace` (slug) not theirs → 404 | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
@@ -1012,11 +1027,12 @@ Captures, `my_day` = My Day), `null` for a delete. `task_list` records also carr
 - **Cursors** are opaque. v2 (BRAI-441) still reads v1 cursors (BRAI-425): they go on where they were; their next run
   re-sends the kept lists once (now with `can`). A cursor that can't be read starts a full run (`reset: true`).
 
-Result of a change: `{request_id, type, status, http_status, replayed, entity_type, record_type, entity, conflicts, applied, message, errors}`.
+Result of a change: `{request_id, type, status, http_status, replayed, entity_type, record_type, entity, conflicts, applied, message, errors, activities, default_activity_id}`.
 `entity` (applied, conflict) is the server's current state as the **feed's record** of `record_type` — replace the cached
 record with it: `issue.*` and `work.done` → `work`, `list_task.create|update` → `task`, `list_task.reorder` → `task_list`
 (with `can`), `capture.create` → `capture`, `my_day.add|remove` → `my_day`, `issue.comment` → `comment` (as
-`GET /items/{id}/comments`). Replays render the current state too; something gone or no longer visible → `entity: null`.
+`GET /items/{id}/comments`), `timer.*` → `timer` (as `GET /me/timer`), `notification.read` → `notification`,
+`notifications.read_all` → `unread_count`. `activities` / `default_activity_id`: only on an `invalid` `timer.stop` (else null). Replays render the current state too; something gone or no longer visible → `entity: null`.
 The web's `POST /offline/sync` keeps its own snapshots.
 
 | status | http_status | the device does |
@@ -1024,6 +1040,7 @@ The web's `POST /offline/sync` keeps its own snapshots.
 | `applied` | 200 | done: drop it from the outbox, store `entity` (the server state) |
 | `conflict` | 409 | done: the conflicting fields were **not** written (`conflicts: {field: {base, mine, theirs}}`), the others were (`applied`); show mine / theirs, a new change if the user keeps theirs |
 | `deleted` | 410 | drop it: the thing is gone or no longer visible (same answer for both) |
+| `gone` | 410 | drop it: the timer is no longer running / the notification is gone (`timer.stop|discard`, `notification.read`); nothing was written |
 | `waiting` | 424 | keep it: it refers to an offline create (`target.ref`) that hasn't arrived — send that one first |
 | `forbidden` | 403 | drop it: the user may not do this (e.g. a viewer) |
 | `invalid` | 422 | drop it: `errors` per field (also: a `request_id` reused for a different change → `errors.id`) |
@@ -1034,9 +1051,44 @@ The web's `POST /offline/sync` keeps its own snapshots.
   `list_task.create {task_list_id, title, status?}` · `list_task.update {title?, status?}` + `target` · `list_task.reorder
   {task_list_id, items: [{id}|{ref}]}` · `issue.update {title?, column_id?, priority_id?, assigned_to?, due_date?}` +
   `target` · `issue.comment {body}` (plain text) + `target` · `issue.create {board_id, title, column_id?, priority_id?,
-  assigned_to?, due_date?}` · `capture.create {text, url?, intended_type?, source?}` (source defaults to the app's name) ·
+  assigned_to?, due_date?, description?, item_type_id?}` (as the online create: `Issues::create`; `description` Markdown like REST, `item_type_id` a type of the board's project, else `invalid`) · `capture.create {text, url?, intended_type?, source?}` (source defaults to the app's name) ·
   `my_day.add|remove {work_type: board|list, work_id|work_ref}` · **`work.done {work_type, work_id|work_ref, done}`** (the
   circle: `WorkCompletion::setDone`, as `PATCH /me/work/{id}`).
+- **Timer and inbox changes** (App API only in practice; same services as REST: `WorkTimers`, `NotificationInbox`):
+  - `timer.start {issue_id, description?, started_at}` — `started_at` (the device clock) is clamped to ≥ now − 12 h and
+    ≤ now. Another timer running → `conflict` (409) with the **running** timer as `entity` (`conflicts: []`, `message`).
+    `task_id` → `invalid` (list tasks have no work log); an issue the user can't open → `deleted`; no edit right → `forbidden`.
+  - `timer.stop {timer_id, stopped_at, activity_id?}` — `stopped_at` clamped to ≥ the start and ≤ now; logs
+    `round(minutes)` (≥ 1) once on the user's **local day of the start**, note = the timer's `description`. Activity
+    missing / unusable where required → `invalid` with `errors.activity_id` **plus `activities: [{id, name}]` and
+    `default_activity_id`** (as the REST 422); the timer runs on — send a new change with `activity_id`. Not running
+    any more (stopped / discarded elsewhere, someone else's id) → `gone`. Lost edit right on the issue → `applied`, timer
+    stopped, nothing logged (`message` says so).
+  - `timer.discard {timer_id}` — stop without logging; not running → `gone`.
+  - `notification.read {notification_id}` — someone else's / deleted → `gone`.
+  - `notifications.read_all {before}` — marks only inbox notifications created ≤ `before` (send the moment the user
+    tapped "read all"), so what arrived later stays unread.
+  - `record_type`: `timer` (entity = `GET /me/timer`'s data, the state **now**, incl. `today_logged_seconds`),
+    `notification` (a notification row with `summary` / `url`), `unread_count` (`{unread_count}`).
+
+```json
+POST /api/v1/sync
+{"changes": [
+  {"request_id": "6f1c…", "type": "timer.start", "data": {"issue_id": 412, "description": "Reproduce the bug", "started_at": "2026-11-02T08:58:00Z"}},
+  {"request_id": "a03e…", "type": "timer.stop", "data": {"timer_id": 77, "stopped_at": "2026-11-02T09:40:00Z"}},
+  {"request_id": "c11d…", "type": "notifications.read_all", "data": {"before": "2026-11-02T09:41:12Z"}},
+  {"request_id": "d42b…", "type": "issue.create", "data": {"board_id": 9, "title": "Offline task", "description": "**Steps** for @[Ada](user:3)", "item_type_id": 2}}
+]}
+→ {"data": [
+  {"request_id": "6f1c…", "type": "timer.start", "status": "conflict", "http_status": 409, "replayed": false, "entity_type": "timer",
+   "record_type": "timer", "entity": {"running": true, "timer": {"id": 76, "started_at": "…", "description": null, "issue": {…}, …}, "today_logged_seconds": 5400, …},
+   "conflicts": [], "applied": [], "message": "A timer is already running — stop it first.", "errors": null, "activities": null, "default_activity_id": null},
+  {"request_id": "a03e…", "type": "timer.stop", "status": "invalid", "http_status": 422, "entity": null,
+   "errors": {"activity_id": ["Pick an activity."]}, "activities": [{"id": 4, "name": "Programming"}], "default_activity_id": 4, …},
+  {"request_id": "c11d…", "type": "notifications.read_all", "status": "applied", "record_type": "unread_count", "entity": {"unread_count": 1}, …},
+  {"request_id": "d42b…", "type": "issue.create", "status": "applied", "record_type": "work", "entity": {"id": "issue:913", …}, …}
+]}
+```
 - **Updates carry `base.fields`**: each changed field's value as the device saw it (missing → `invalid`). A field
   someone else changed meanwhile is a conflict, never overwritten; already having the wanted value is a no-op.
 - **`request_id`** (uuid, made once per change on the device) = idempotency for 30 days: a retry answers the stored
@@ -1189,7 +1241,7 @@ Built in: BRAI-392 (desktop) · Mobile scope: Full
 **BRAI-183** (notifications)
 ```
 ## API (ready)
-- GET /api/v1/notifications?filter=all|unread|mentions|assigned&archived= — the inbox, newest first, cursor-paginated
+- GET /api/v1/notifications?filter=all|unread|mentions|assigned&archived= — the inbox, newest first, cursor-paginated; each row has summary (the bell's sentence, plain text) + url (absolute, null when the user can't open it); first page ETag → 304
 - GET /api/v1/notifications/unread-count — badge count (ETag / 304)
 - POST /api/v1/notifications/{id}/read · POST /api/v1/notifications/read-all · POST /api/v1/notifications/{id}/archive — answer the new unread count
 - GET|PUT /api/v1/me/notification-preferences — per category: in_app / push / email (partial update)
@@ -1209,7 +1261,7 @@ Built in: BRAI-394 (desktop) · Mobile scope: View + revoke
 **BRAI-215** (My Work + My Day)
 ```
 ## API (ready)
-- GET /api/v1/me/work?due=overdue|today|upcoming&status=open|done|all&updated_since= — assigned issues + tasks, soonest due first, cursor-paginated
+- GET /api/v1/me/work?due=overdue|today|upcoming&status=open|done|all&updated_since= — assigned issues + tasks, soonest due first, cursor-paginated (ETag → 304)
 - PATCH /api/v1/me/work/{id} — {done: true|false}: complete / reopen (issue:<id> or task:<id>), as the web's circle
 - GET /api/v1/me/my-day — today's plan in the user's order + carry_over_count (ETag → 304)
 - POST /api/v1/me/my-day/items {id} · PATCH /api/v1/me/my-day/items/{id} {done} · DELETE /api/v1/me/my-day/items/{id} · POST /api/v1/me/my-day/carry-over — answer the updated My Day
@@ -1301,7 +1353,7 @@ Built in: BRAI-397 (desktop) · Mobile scope: Full (renaming / deleting lists: w
 - GET|PATCH /api/v1/captures/{uuid} · POST …/archive · POST …/restore · DELETE (archived only) → 204
 - GET /api/v1/captures/{uuid}/preview?type=issue|task|page|bookmark|snippet — the fields to edit before converting
 - POST /api/v1/captures/{uuid}/convert {type, destination_id, fields} — into an issue, task, doc, bookmark or snippet (idempotent; 402 for issues / docs at the storage limit)
-- GET /api/v1/capture-destinations — boards (+ columns), task lists, projects, bookmark groups, snippet collections the user can write to
+- GET /api/v1/capture-destinations — boards (+ columns), task lists, projects, bookmark groups, snippet collections the user can write to (ETag → 304)
 Scope: app · OpenAPI: docs/api/openapi.json#/Captures · Registry: docs/ai/API.md#captures
 Built in: BRAI-398 (desktop) · Mobile scope: Full
 ```
@@ -1332,8 +1384,8 @@ Built in: BRAI-399 (desktop) · Mobile scope: Full (collaborators, image icons, 
 **BRAI-241** (timer, log work, personal timesheets)
 ```
 ## API (ready)
-- GET /api/v1/me/timer — the running timer (issue, elapsed) + the activities for the stop dialog (ETag → 304; elapsed ticks outside the tag)
-- POST /api/v1/me/timer/start {id: "issue:<id>"} (409 when one runs) · POST /api/v1/me/timer/stop {timer_id, time?, activity_id?, note?, spent_on?} (activity missing → 422 with `activities: [{id, name}]` to pick from) · POST /api/v1/me/timer/discard {timer_id}
+- GET /api/v1/me/timer — the running timer (issue, elapsed, description) + the activities for the stop dialog + today_logged_seconds (finished logs on the local today, without the running timer) (ETag → 304; elapsed ticks outside the tag)
+- POST /api/v1/me/timer/start {id: "issue:<id>", description?} (409 when one runs; description = the default work-log note) · POST /api/v1/me/timer/stop {timer_id, time?, activity_id?, note?, spent_on?} (activity missing → 422 with `activities: [{id, name}]` to pick from) · POST /api/v1/me/timer/discard {timer_id}
 - GET /api/v1/work-logs?workspace=&from=&to= — own work logs, newest first, cursor-paginated
 - POST /api/v1/work-logs {project_id, issue_id?, spent_on, time, activity_id?, note?} · GET|PATCH|DELETE /api/v1/work-logs/{id} (billed = locked, read-only)
 - GET /api/v1/me/timesheet?workspace={slug}&week=Y-m-d — the week: entries, minutes per day, loggable projects, activities
@@ -1768,8 +1820,8 @@ Registry: docs/ai/API.md#web-only-no-app-api-in-v1-brai-424 · Decided in: BRAI-
 - GET /api/v1/sync/changes?scopes=work,task_lists,my_day,captures&task_lists=mine&captures=inbox — full run (reset: true) without a cursor, then delta runs with the kept next_cursor: upsert / delete per record (work, task_list, task, capture, my_day) + project_ids (drop other projects) + task_lists (the kept lists)
 - task_lists=mine = the lists the user works in (pinned, open assigned tasks, recently worked in; all workspaces, ≤ 50); other lists later are additive (new ones in full, dropped ones as deletes); task_list records carry can.manage_items (hide "Add task" for viewers)
 - captures=inbox keeps only the inbox (a capture that leaves it comes as a delete); My Day is re-sent after a done change
-- POST /api/v1/sync {changes: [{request_id, type, target?, base?, data}]} — the outbox in batches of ≤ 50, one result per change (applied / conflict / deleted / waiting / forbidden / invalid / rate_limited / error); request_id makes retries safe; entity = the feed's record of record_type (work / task / task_list / capture / my_day / comment): replace the cached copy
-Types: list_task.create|update|reorder, issue.update|comment|create, capture.create, my_day.add|remove, work.done — the web's offline mode (BRAI-82)
+- POST /api/v1/sync {changes: [{request_id, type, target?, base?, data}]} — the outbox in batches of ≤ 50, one result per change (applied / conflict / deleted / gone / waiting / forbidden / invalid / rate_limited / error); request_id makes retries safe; entity = the record of record_type (work / task / task_list / capture / my_day / comment / timer / notification / unread_count): replace the cached copy
+Types: list_task.create|update|reorder, issue.update|comment|create (create: + description Markdown, item_type_id), capture.create, my_day.add|remove, work.done — the web's offline mode (BRAI-82); timer.start {issue_id, description?, started_at} · timer.stop {timer_id, stopped_at, activity_id?} · timer.discard {timer_id} · notification.read {notification_id} · notifications.read_all {before} — device times clamped (start ≥ now−12 h, stop between start and now); a running timer → conflict with it; stop without a required activity → invalid + activities / default_activity_id; timer / notification no longer there → gone
 Scope: app · OpenAPI: docs/api/openapi.json#/Sync · Registry: docs/ai/API.md#sync
 Built in: BRAI-425, BRAI-441 (desktop) · Mobile scope: Full (My Day, My Work, kept task lists = mine, inbox captures)
 ```
@@ -1778,7 +1830,7 @@ Built in: BRAI-425, BRAI-441 (desktop) · Mobile scope: Full (My Day, My Work, k
 ```
 ## API (ready)
 - POST /api/v1/sync — updates carry base.fields (the values the device saw); a field changed by someone else meanwhile → status conflict (409) with conflicts {field: {base, mine, theirs}}, never overwritten; the other fields are applied (applied: [...]); entity = the server's record in the feed's shape (record_type), so "theirs" replaces the cached copy directly
-- Retries: the same request_id answers the stored result (replayed: true), so an interrupted batch is simply sent again; waiting (424) / rate_limited / error → keep and resend, deleted / forbidden / invalid → drop and tell the user
+- Retries: the same request_id answers the stored result (replayed: true), so an interrupted batch is simply sent again; waiting (424) / rate_limited / error → keep and resend, deleted / gone / forbidden / invalid → drop and tell the user
 - GET /api/v1/sync/changes — a full run (reset: true) rebuilds a broken cache; a cursor older than 30 days or one that can't be read starts one by itself (v1 cursors keep working)
 Scope: app · OpenAPI: docs/api/openapi.json#/Sync · Registry: docs/ai/API.md#sync
 Built in: BRAI-425, BRAI-441 (desktop) · Mobile scope: Full (keep mine = a new change with the server value as base; keep theirs = drop it)

@@ -1977,6 +1977,13 @@ Never migrate devdb just to export the spec.
   same PHPUnit process inferred (a cursor list's response description), so the drift check depended on
   test order. `OpenApiSpecTest::setUp()` resets `Context` and the reflector / resource caches; keep that
   when upgrading Scramble (phase 03, v1.49.0).
+- **ETag endpoints need `@response` for their type** (feat/app-api-client-gaps): a method that returns
+  `$this->withETag(...)` (`JsonResponse|Response`) loses its inferred body — Scramble writes `{type: object}`. Name it in
+  the PHPDoc: `@response TimerStateResource`, `@response AnonymousResourceCollection<int, CaptureDestinationResource>`, and for
+  cursor lists `@response WorkItemCollection<CursorPaginator<int, mixed>>` (the paginator generic brings `next_cursor` back).
+  `/me/my-day`, `/me/today` and `/notifications/unread-count` still lack it.
+- **A nested resource with a null model renders as `null`** (Laravel drops it): `TimerStateResource` passes the user as its
+  resource and keeps the timer in a property, so "not running" still renders inside a `POST /sync` result.
 - **Getting real types into the spec:** Scramble types a field from inference, not from `@var`. A
   value that comes out as `string` / `{}` (a `(object)` cast, `array_map`, an interface call, a pivot
   attribute) gets its type from a small private method with a declared return type (`?string`,

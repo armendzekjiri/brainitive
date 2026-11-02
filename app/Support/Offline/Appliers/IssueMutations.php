@@ -9,12 +9,14 @@ use App\Models\ItemPriority;
 use App\Models\User;
 use App\Notifications\ItemStatusChangedNotification;
 use App\Rules\ProjectMember;
+use App\Support\Boards\IssueMarkdown;
+use App\Support\Boards\Issues;
 use App\Support\Boards\ItemComments;
-use App\Support\Boards\ProjectIssues;
 use App\Support\Offline\FieldMerge;
 use App\Support\Offline\MutationContext;
 use App\Support\Offline\SyncAbort;
 use App\Support\Offline\SyncOutcome;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -92,7 +94,15 @@ final class IssueMutations
         ], $comment->id);
     }
 
-    /** Recreate an issue that was deleted while the device was offline (offered by the conflicts panel). */
+    /**
+     * A new issue: recreating one that was deleted while the device was offline (the web's conflicts panel), or
+     * one created offline in an app (App API sync). The same as the online create (`Issues::create`, the issue
+     * dialog and `POST /boards/{id}/items`): the dialog's rules for the fields it takes, the project's default
+     * type / priority, a Scrum board's running sprint, the reporter watching, mentions notified. `description`
+     * is Markdown (mentions as `@[Name](user:<id>)`) like the REST create; `item_type_id` must be a type of the
+     * board's project. data: `{board_id, title, column_id?, priority_id?, assigned_to?, due_date?, description?,
+     * item_type_id?}`.
+     */
     public static function create(MutationContext $ctx): SyncOutcome
     {
         $data = $ctx->validate(['board_id' => 'required|integer']);
@@ -103,24 +113,21 @@ final class IssueMutations
         Gate::forUser($ctx->user)->authorize('createItems', $board);
         $project = $board->project;
 
-        $data = $ctx->validate([
-            'title' => 'required|string|max:255',
+        $rules = Arr::only(Issues::rules($project, $board), ['title', 'priority_id', 'assigned_to', 'due_date', 'item_type_id']);
+        $data = $ctx->validate($rules + [
+            // the board's first column when not given
             'column_id' => ['nullable', 'integer', Rule::exists('board_columns', 'id')->where('board_id', $board->id)],
-            'priority_id' => ['nullable', 'integer', Rule::in(ItemPriority::forProject($project)->pluck('id')->all())],
-            'assigned_to' => ['nullable', 'integer', new ProjectMember($project)],
-            'due_date' => 'nullable|date',
+            'description' => ['nullable', 'string', 'max:100000'],
         ]);
 
-        try {
-            $item = ProjectIssues::create($board, $project, $ctx->user, [[
-                'title' => $data['title'],
-                'due_date' => $data['due_date'] ?? null,
-                'assigned_to' => $data['assigned_to'] ?? null,
-                'priority_id' => $data['priority_id'] ?? null,
-            ]], isset($data['column_id']) ? BoardColumn::find($data['column_id']) : null)->first();
-        } catch (\DomainException $e) {
-            throw ValidationException::withMessages(['board_id' => $e->getMessage()]);
+        $data['column_id'] ??= $board->columns()->value('id');
+        if ($data['column_id'] === null) {
+            throw ValidationException::withMessages(['board_id' => 'This board has no columns yet.']);
         }
+        if (isset($data['description'])) {
+            $data['description'] = IssueMarkdown::toHtml($data['description'], $project);
+        }
+        $item = Issues::create($board, $ctx->user, $data);
 
         return SyncOutcome::applied(self::ENTITY, self::snapshot($item->refresh()), $item->id);
     }

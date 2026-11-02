@@ -15,6 +15,7 @@ use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -29,12 +30,21 @@ class NotificationController extends Controller
 {
     use AnswersWithETag;
 
-    /** The inbox, newest first: `filter` = all | unread | mentions | assigned; `archived=1` for the archive. */
-    public function index(ListNotificationsRequest $request): NotificationCollection
+    /**
+     * The inbox, newest first: `filter` = all | unread | mentions | assigned; `archived=1` for the archive.
+     *
+     * Each row carries `summary` (the bell's sentence as plain text) and `url` (the page to open, or null).
+     * The first page (no `cursor`) answers an `ETag`: send it back as `If-None-Match` to get 304 while it is unchanged.
+     *
+     * @response NotificationCollection<CursorPaginator<int, mixed>>
+     */
+    public function index(ListNotificationsRequest $request): JsonResponse|Response
     {
-        return new NotificationCollection(
+        $response = (new NotificationCollection(
             NotificationInbox::page($request->user(), $request->filter(), $request->archived(), $request->cursor(), $request->limit()),
-        );
+        ))->response($request);
+
+        return $request->cursor() === null ? $this->withETag($request, $response) : $response;
     }
 
     /** The badge count: unread notifications in the inbox. Answers an `ETag`: send it as `If-None-Match` to get 304 while the count is unchanged. */

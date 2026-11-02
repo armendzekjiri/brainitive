@@ -23,7 +23,8 @@ class SyncBatchRequest extends FormRequest
             'changes.*' => ['array'],
             // a uuid per change, made once on the device: a retry with the same id answers the stored result
             'changes.*.request_id' => ['nullable'],
-            // list_task.create|update|reorder, issue.update|comment|create, capture.create, my_day.add|remove, work.done
+            // list_task.create|update|reorder, issue.update|comment|create, capture.create, my_day.add|remove, work.done,
+            // timer.start|stop|discard, notification.read, notifications.read_all
             'changes.*.type' => ['nullable'],
             // {id} (a server id) or {ref} (the request_id of an earlier create in the outbox)
             'changes.*.target' => ['nullable'],

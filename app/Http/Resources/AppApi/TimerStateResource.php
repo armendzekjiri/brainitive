@@ -6,6 +6,7 @@ use App\Models\Item;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkTimer;
+use App\Support\Billing\TimeEntries;
 use App\Support\Billing\TimeLogActivities;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -18,15 +19,17 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class TimerStateResource extends JsonResource
 {
-    public function __construct(?WorkTimer $timer, private readonly User $user)
+    public function __construct(private readonly ?WorkTimer $timer, private readonly User $user)
     {
-        parent::__construct($timer);
+        // never a null resource: "not running" is a state too (nested in a POST /sync result, a resource
+        // without one would render as null)
+        parent::__construct($user);
     }
 
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
-        $timer = $this->resource instanceof WorkTimer ? $this->resource : null;
+        $timer = $this->timer;
         $payload = $timer?->payload($this->user);
         $issue = $payload['item'] ?? null;
         $workspace = is_array($issue) ? Workspace::where('slug', $issue['workspace'])->first() : null;
@@ -41,6 +44,8 @@ class TimerStateResource extends JsonResource
                 'elapsed_seconds' => (int) $timer->started_at->diffInSeconds(now()),
                 // what the stop dialog suggests (at least 1)
                 'elapsed_minutes' => (int) $timer->elapsedMinutes(),
+                /** @var string|null what the user works on (given at the start): the work log's note unless the stop sends one */
+                'description' => is_string($timer->description) ? $timer->description : null,
                 'issue' => is_array($issue) ? [
                     'id' => (int) $issue['id'],
                     'work_id' => 'issue:'.$issue['id'],
@@ -54,6 +59,8 @@ class TimerStateResource extends JsonResource
             'activities' => TimeActivityResource::collection($workspace ? TimeLogActivities::options($workspace) : []),
             'activity_required' => $workspace !== null && TimeLogActivities::required($workspace),
             'default_activity_id' => $this->defaultActivity($workspace, $item),
+            // seconds the user logged on their local today (finished work logs; the running timer not included)
+            'today_logged_seconds' => TimeEntries::loggedSecondsToday($this->user),
         ];
     }
 
