@@ -30,7 +30,7 @@ final class TimeEntries
 
     /** Relations an entry is shown with (project, activity, the issue where it is now). */
     public const WITH = [
-        'project:id,name,key,slug',
+        'project:id,workspace_id,name,key,slug',
         'activity:id,name,color,pricing_type,billable,archived_at',
         'item:id,board_id,key,title',
         'item.board:id,slug,project_id',

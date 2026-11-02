@@ -139,6 +139,16 @@ class TimesheetTest extends TestCase
         $this->assertSame(2, TimeEntry::count());
     }
 
+    public function test_a_new_entry_shows_its_own_project_so_it_can_be_edited(): void
+    {
+        // regression: the eager load lacked workspace_id, so every project looked moved away
+        $this->actingAs($this->editor)->post($this->url('timesheet.entries.store'), $this->payload(['time' => '45m', 'note' => 'Pairing']))
+            ->assertSessionHasNoErrors();
+
+        $this->get($this->url('timesheet.index'))
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('entries.0.project.id', $this->project->id));
+    }
+
     public function test_editing_moving_and_deleting_keep_the_issue_totals_right(): void
     {
         $a = $this->item(['time_spent' => 15]); // 15m from before the ledger
