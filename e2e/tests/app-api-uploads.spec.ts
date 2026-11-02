@@ -41,4 +41,22 @@ test.describe('app api: uploads', () => {
 
         await page.request.post('/api/v1/auth/logout', { headers: auth });
     });
+
+    test('the web editor upload needs a workspace and counts against it (Codex review)', async ({ page }) => {
+        await page.goto(projectPath(SEED.project));
+        const xsrf = (await page.context().cookies()).find((c) => c.name === 'XSRF-TOKEN')?.value ?? '';
+        const headers = { 'X-XSRF-TOKEN': decodeURIComponent(xsrf), Accept: 'application/json' };
+        const image = { name: 'pixel.png', mimeType: 'image/png', buffer: PNG };
+
+        // no workspace field and no workspace page as referrer: refused, nothing stored
+        const none = await page.request.post('/upload/image', { headers: { ...headers, Referer: '' }, multipart: { image } });
+        expect(none.status()).toBe(422);
+        const foreign = await page.request.post('/upload/image', { headers, multipart: { image, workspace: 'no-such-workspace' } });
+        expect(foreign.status()).toBe(404);
+
+        const ok200 = await page.request.post('/upload/image', { headers, multipart: { image, workspace: SEED.workspace } });
+        expect(ok200.status()).toBe(200);
+        const url: string = (await ok200.json()).file.url;
+        expect((await page.request.get(url)).status()).toBe(200);
+    });
 });

@@ -694,8 +694,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/data-exports/{dataExport}/download', [DataExportController::class, 'download'])->whereUuid('dataExport')->middleware('throttle:30,1,profile.data-export.download')->name('profile.data-export.download');
 
     // File uploads
-    Route::post('/upload/image', [FileController::class, 'uploadImage'])->middleware('file.room')->name('upload.image');
-    Route::post('/upload/document', [FileController::class, 'uploadDocument'])->middleware('file.room')->name('upload.document');
+    // a workspace is required and the bytes are reserved in the controller (EditorUploads, Codex review 4 + 8)
+    Route::post('/upload/image', [FileController::class, 'uploadImage'])->name('upload.image');
+    Route::post('/upload/document', [FileController::class, 'uploadDocument'])->name('upload.document');
 
     // Page-level sticky notes (per user, per URL)
     // fetched on every page load: must not write the session (it would race form submits)

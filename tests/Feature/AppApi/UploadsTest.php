@@ -7,8 +7,10 @@ use App\Models\Workspace;
 use App\Models\WorkspaceUsage;
 use App\Support\Entitlements\ConfigEntitlements;
 use App\Support\Entitlements\Entitlements;
+use App\Support\Entitlements\WorkspaceUsageMeter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\Feature\AppApi\Concerns\ActsAsAppClient;
 use Tests\Feature\AppApi\Concerns\ForgetsGuardsBetweenRequests;
@@ -122,5 +124,36 @@ class UploadsTest extends TestCase
         $this->assertSame("Look\n\n![chart]({$url})\n\nx", $doc->json('data.markdown'));
         $this->assertStringContainsString('<img src="'.$url.'" alt="chart"', $doc->json('data.html'));
         $this->assertStringNotContainsString('data:image', $doc->json('data.html'));
+    }
+
+    // Codex review, finding 4: editor uploads count, and the check reserves the bytes atomically
+
+    public function test_repeated_uploads_stop_at_the_limit_and_the_meter_counts_them(): void
+    {
+        $this->fileLimit(100 * 1024, 0);
+        $pdf = fn (string $name) => UploadedFile::fake()->create($name, 40, 'application/pdf');
+
+        $this->upload($pdf('a.pdf'))->assertCreated();
+        $this->upload($pdf('b.pdf'))->assertCreated();
+        // the nightly measure hasn't run: the reservation of the two uploads already counts
+        $this->upload($pdf('c.pdf'))->assertStatus(402)->assertJsonPath('code', 'limit_reached')
+            ->assertJsonPath('limit.kind', 'files')->assertJsonPath('limit.usage', 80 * 1024);
+        $this->assertCount(2, Storage::disk('public')->allFiles());
+
+        $this->assertSame(80 * 1024, app(WorkspaceUsageMeter::class)->fileBytes($this->workspace));
+        $this->assertSame(80 * 1024, app(WorkspaceUsageMeter::class)->measure($this->workspace)->file_bytes);
+        $this->upload($pdf('d.pdf'))->assertStatus(402);
+    }
+
+    public function test_the_check_and_the_reservation_happen_under_a_row_lock(): void
+    {
+        $this->fileLimit(100 * 1024, 0);
+        DB::enableQueryLog();
+        $this->upload(UploadedFile::fake()->create('a.pdf', 40, 'application/pdf'))->assertCreated();
+        $locks = array_filter(DB::getQueryLog(), fn (array $q) => str_contains($q['query'], 'from "workspace_usages"') && str_contains($q['query'], 'for update'));
+        DB::disableQueryLog();
+
+        // two concurrent uploads wait for each other here: the second sees the first one's bytes
+        $this->assertNotEmpty($locks, 'the usage row is locked while checking and reserving');
     }
 }

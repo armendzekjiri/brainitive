@@ -7,14 +7,13 @@ use App\Http\Requests\AppApi\StoreUploadRequest;
 use App\Http\Resources\AppApi\UploadResource;
 use App\Support\Entitlements\LimitReached;
 use App\Support\Files\EditorUploads;
-use App\Support\Files\FileRoom;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * App API v1 — uploads for rich text (BRAI-416): the web editor's image / document upload (EditorUploads, shared
- * with FileController), the plan's file storage (FileRoom → 402). Files that belong to something have their own
+ * with FileController), the plan's file storage (reserved atomically and counted: LimitGate::reserveFiles → 402). Files that belong to something have their own
  * upload: issue attachments (`POST /items/{id}/attachments`), bookmark files (`POST /bookmarks/{id}/items`).
  */
 #[Group('Files', weight: 270)]
@@ -34,11 +33,10 @@ class UploadController extends Controller
     public function store(StoreUploadRequest $request): JsonResponse
     {
         $file = $request->upload();
-        FileRoom::ensure($request->workspace(), $file);
-
         $image = $request->isImage();
         $mime = $file->getMimeType();
-        $stored = $image ? EditorUploads::storeImage($file) : EditorUploads::storeDocument($file);
+        // reserves the bytes under a row lock (402 when full) and records the upload for the usage meter (Codex review)
+        $stored = EditorUploads::store($file, $image, $request->workspace(), $request->user());
 
         return (new UploadResource([
             'url' => $stored['url'],
