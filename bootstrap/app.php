@@ -12,6 +12,7 @@ use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\FrameProtection;
 use App\Http\Middleware\GuardOAuthFlows;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\SecurityHeaders;
 use App\Support\AppApi\AppApiErrors;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -50,6 +51,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             GuardOAuthFlows::class, // the /oauth/authorize check needs the session (StartSession runs in this group)
             FrameProtection::class,
+            SecurityHeaders::class, // HSTS (production, HTTPS) + report-only script CSP with a per-request nonce
             EnsureUserIsNotSuspended::class,
             EndRevokedAppDeviceSessions::class, // a webview's session ends with its app device (BRAI-377)
             HandleInertiaRequests::class,
