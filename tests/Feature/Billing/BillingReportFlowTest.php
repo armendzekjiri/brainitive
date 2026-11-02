@@ -4,6 +4,7 @@ namespace Tests\Feature\Billing;
 
 use App\Models\BillingFixedCharge;
 use App\Models\BillingReport;
+use App\Models\Board;
 use App\Models\Client;
 use App\Models\Project;
 use App\Models\TimeEntry;
@@ -159,6 +160,26 @@ class BillingReportFlowTest extends TestCase
         // a finalized report can't be edited or deleted
         $this->actingAs($this->admin)->delete($this->url('billing.reports.destroy', $report))->assertSessionHasErrors('report');
         $this->assertNotNull($report->fresh());
+    }
+
+    /** Codex web review R: an issue moved to another workspace shows its snapshot in the preview and the frozen document. */
+    public function test_a_moved_issue_shows_only_its_snapshot_in_preview_and_document(): void
+    {
+        $foreign = Workspace::factory()->create();
+        $foreignProject = Project::factory()->create(['workspace_id' => $foreign->id, 'key' => 'FOR']);
+        $foreignBoard = Board::factory()->create(['project_id' => $foreignProject->id]);
+        $this->items['WEB-1']->forceFill(['board_id' => $foreignBoard->id, 'key' => 'FOR-9', 'title' => 'FOREIGN PRIVATE UPDATED TITLE'])->save();
+        $this->items['WEB-2']->update(['title' => 'Pricing page (renamed)']); // still here: live
+
+        $report = $this->draft();
+        $preview = app(ReportBuilder::class)->compute($report->fresh());
+        $this->assertStringNotContainsString('FOREIGN', json_encode($preview));
+        $this->assertStringContainsString('Checkout bug', json_encode($preview));
+        $this->assertStringContainsString('Pricing page (renamed)', json_encode($preview));
+
+        $this->finalize($report)->assertSessionHasNoErrors();
+        $this->assertStringNotContainsString('FOREIGN', json_encode($report->fresh()->snapshot));
+        $this->assertStringNotContainsString('FOR-9', json_encode($report->fresh()->snapshot));
     }
 
     public function test_a_second_report_does_not_see_billed_entries(): void

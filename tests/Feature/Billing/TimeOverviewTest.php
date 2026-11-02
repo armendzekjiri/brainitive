@@ -210,6 +210,35 @@ class TimeOverviewTest extends TestCase
         $this->assertSame([TimeOverview::PROJECT_GONE, TimeOverview::PROJECT_GONE], array_column($this->summary()['groups'], 'label')); // still one group per project
     }
 
+    /**
+     * Codex web review R: an issue moved to another workspace (its time stays here) shows only the snapshot taken
+     * at logging — never its new title or key from there — in the overview and the Excel export.
+     */
+    public function test_an_issue_moved_to_another_workspace_shows_only_its_snapshot(): void
+    {
+        $moved = $this->item(['title' => 'Logged title']);
+        $local = $this->item(['title' => 'Local title']);
+        $this->entry(['item' => $moved, 'minutes' => 60]);
+        $this->entry(['item' => $local, 'minutes' => 30]);
+
+        $foreign = Workspace::factory()->create();
+        $foreignProject = Project::factory()->create(['workspace_id' => $foreign->id, 'key' => 'FOR']);
+        $foreignBoard = Board::factory()->create(['project_id' => $foreignProject->id]);
+        $moved->forceFill(['board_id' => $foreignBoard->id, 'key' => 'FOR-9', 'title' => 'FOREIGN PRIVATE UPDATED TITLE'])->save();
+        $local->update(['title' => 'Local title (renamed)']); // still here: the live title wins
+
+        $summary = $this->summary();
+        $this->assertStringNotContainsString('FOREIGN', json_encode($summary));
+        $this->assertStringNotContainsString('FOR-9', json_encode($summary));
+        $labels = collect($this->group($summary, 'Website')['rows'])->pluck('label')->all();
+        $this->assertContains('Logged title', $labels);
+        $this->assertContains('Local title (renamed)', $labels);
+
+        $rows = $this->readXlsx($this->actingAs($this->admin)->get(route('billing.time.export', $this->workspace->slug))->streamedContent());
+        $this->assertStringNotContainsString('FOREIGN', json_encode($rows));
+        $this->assertContains('Logged title', array_column($rows, 5));
+    }
+
     public function test_group_by_project_and_ticket_with_live_titles_and_snapshots(): void
     {
         $checkout = $this->item(['title' => 'Checkout bug']);

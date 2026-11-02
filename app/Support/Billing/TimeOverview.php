@@ -164,7 +164,10 @@ final class TimeOverview
         return DB::table('time_entries as te')
             ->leftJoin('projects as p', fn ($join) => $join->on('p.id', '=', 'te.project_id')->on('p.workspace_id', '=', 'te.workspace_id')->whereNull('p.deleted_at'))
             ->leftJoin('clients as c', fn ($join) => $join->on('c.id', '=', 'p.client_id')->on('c.workspace_id', '=', 'te.workspace_id'))
-            ->leftJoin('items as i', fn ($join) => $join->on('i.id', '=', 'te.item_id')->whereNull('i.deleted_at'))
+            // the live issue only while it lives in this workspace: one moved elsewhere shows its snapshot (Codex web review R)
+            ->leftJoin('items as i', fn ($join) => $join->on('i.id', '=', 'te.item_id')->whereNull('i.deleted_at')
+                ->whereIn('i.board_id', DB::table('boards as ib')->join('projects as ip', 'ip.id', '=', 'ib.project_id')
+                    ->where('ip.workspace_id', $this->workspace->id)->select('ib.id')))
             ->leftJoin('users as u', 'u.id', '=', 'te.user_id')
             ->leftJoin('billing_activities as a', 'a.id', '=', 'te.billing_activity_id')
             ->leftJoin('billing_reports as r', 'r.id', '=', 'te.billing_report_id')
@@ -191,7 +194,7 @@ final class TimeOverview
     /** Label of entries whose project was deleted or moved to another workspace. */
     public const PROJECT_GONE = 'Deleted or moved project';
 
-    /** "WEB-12" / "Checkout bug": the live item while it (and its project here) exists, else the snapshot. */
+    /** "WEB-12" / "Checkout bug": the live item while it (and its project) is in this workspace, else the snapshot. */
     public static function ticket(object $row): array
     {
         $live = $row->live_project_id !== null;
