@@ -38,6 +38,28 @@ final class LiveToken
     }
 
     /**
+     * The answer of a token request — the web's `live.token` and the App API's `POST /realtime/token`
+     * alike: a token for the channels of `$requested` the user may join (LiveChannels, the policies),
+     * the rest in `denied` (never a 403: one token covers a whole page's channels).
+     *
+     * @param  array<int, mixed>  $requested
+     * @return array{token: string, expires_at: int, url: string, channels: list<string>, denied: list<string>, user: array{id: int, name: string, avatar: string|null}}
+     */
+    public static function grant(User $user, array $requested): array
+    {
+        $requested = array_values(array_unique(array_filter($requested, 'is_string')));
+        $allowed = (new LiveChannels)->authorize($user, $requested);
+        $avatar = $user->avatar_display;
+
+        return self::issue($user, $allowed) + [
+            'url' => LiveConfig::url(),
+            'channels' => $allowed,
+            'denied' => array_values(array_diff($requested, $allowed)),
+            'user' => ['id' => (int) $user->id, 'name' => (string) $user->name, 'avatar' => is_string($avatar) ? $avatar : null],
+        ];
+    }
+
+    /**
      * The payload of a valid, unexpired token; null otherwise (used by tests).
      *
      * @return array{v: int, typ: string, sub: int, name: string, avatar: ?string, ch: list<string>, iat: int, exp: int}|null

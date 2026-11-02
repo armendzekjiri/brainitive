@@ -2118,6 +2118,23 @@ Never migrate devdb just to export the spec.
   skip or repeat the caller's own changes. A test feeds an injection string through it.
 - **Docs are not in the feed** (BRAI-204): offline doc edits use `PATCH /pages/{uuid}` with `revision` (409) or live co-editing.
 
+### App API phase 09: realtime for native clients (v1.49.0, BRAI-426)
+- **There is no Reverb / `routes/channels.php` / Laravel broadcasting.** The card asked for `POST /api/v1/broadcasting/auth`
+  (Pusher-style private channel auth); Brainitive's realtime is its own live channels (BRAI-151): one token listing the allowed
+  channels, sent as the socket's first message, re-checked every minute by the realtime server. So the App API got
+  `POST /realtime/token` (same `LiveToken::grant` as the web) + `GET /realtime` (connection info), and the realtime server needed
+  no change (it has no Origin check; any WebSocket client can connect).
+- **`LIVE_URL` may be a path** (`/collab?live=1`, behind nginx): browsers resolve it, native clients can't →
+  `LiveConfig::absoluteUrl()` (APP_URL, https → wss). The web keeps `LiveConfig::url()`.
+- **Echo suppression works for app writes unchanged:** `BoardLive` reads `X-Live-Client` from any request and the actor from
+  `auth()->id()`, which `auth:app` sets as the default guard (`Authenticate::shouldUse`). Test: `RealtimeTest`.
+- **Revoking a device does not close its socket** (gap, deferred): the realtime server re-checks access per **user**, not per
+  device / token, so a signed-out desktop's open socket keeps its channels until it disconnects (as a signed-out web tab does).
+  Exposure is ids / counts only (payload rule); new tokens are refused at once. Closing sockets per device would need the
+  device id in the live token and a re-check in `realtime/src/live/access.js`.
+- e2e: the API needs `X-E2E-Live: 1` on the token / info calls (`LiveConfig::enabled` opt-in); the spec opens a plain
+  `WebSocket` in the page (Node 20 has none built in).
+
 ### MCP `update-page` writes through `PageWrites` (v1.49.0, `fix/mcp-update-page-safe`)
 - **Before:** a Markdown body on a published page was written straight into `content` (`discardDraft` + `update`): an
   unpublished draft was thrown away, live (Yjs) editors were ignored, no revision check. Now every body write goes through
