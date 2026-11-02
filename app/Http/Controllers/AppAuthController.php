@@ -9,6 +9,7 @@ use App\Support\AppApi\AppWebSessions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -22,7 +23,7 @@ use Symfony\Component\HttpFoundation\Response;
  *    PKCE-bound code to the app's redirect (brainitive://auth/callback), Cancel sends
  *    `error=access_denied`. Invalid parameters never redirect to the app.
  *  - /app/session/{code}: the app's webview turns a one-time code (POST /api/v1/auth/web-session)
- *    into a remembered web session, bound to the device; a confirm page whenever that would replace
+ *    into a web session bound to the device (never remembered: Codex review); a confirm page whenever that would replace
  *    another account or happen in a plain browser (BRAI-377).
  */
 class AppAuthController extends Controller
@@ -103,7 +104,7 @@ class AppAuthController extends Controller
         $current = Auth::guard('web')->user();
         $to = is_string($request->query('to')) ? $request->query('to') : null;
 
-        if (($current && $current->is($user)) || (! $current && $this->fromAppWebview($request))) {
+        if (($current && $current->is($user)) || (! $current && AppWebSessions::fromAppWebview($request))) {
             return $this->signIn($request, $device, $to);
         }
 
@@ -142,7 +143,11 @@ class AppAuthController extends Controller
         return $this->signIn($request, $device, is_string($pending['to'] ?? null) ? $pending['to'] : null);
     }
 
-    /** Sign the device's user into the web guard, remembered, and bind the session to the device. */
+    /**
+     * Sign the device's user into the web guard and bind the session to the device. Not remembered (Codex review,
+     * finding 1): a remember-me cookie would bring back a session without `app_device_id` after the session is
+     * gone, past EndRevokedAppDeviceSessions. A recaller this webview still holds (an older sign-in) is expired.
+     */
     private function signIn(Request $request, AppDevice $device, ?string $to): RedirectResponse
     {
         $user = $device->user;
@@ -154,8 +159,9 @@ class AppAuthController extends Controller
             $request->session()->regenerateToken();
         }
 
-        // remember-me: the webview keeps the session across app restarts (BRAI-357)
-        Auth::guard('web')->login($user, true);
+        // no remember-me: once the session expires the app opens a new one with its token (it lands on /login)
+        Auth::guard('web')->login($user);
+        Cookie::queue(Cookie::forget(Auth::guard('web')->getRecallerName()));
         $request->session()->regenerate();
         // revoking this device ends this web session too (EndRevokedAppDeviceSessions, BRAI-377)
         $request->session()->put(AppWebSessions::SESSION_KEY, $device->id);
@@ -177,18 +183,6 @@ class AppAuthController extends Controller
     private function expiredLink(): RedirectResponse
     {
         return redirect()->route('login')->with('status', 'This sign-in link has expired or was already used. Sign in again from the app.');
-    }
-
-    /**
-     * A native app's webview: its user agent ends in ` BrainitiveDesktop/<version>` (resources/js/lib/desktop.ts)
-     * or ` BrainitiveMobile/<version>`. A web page can't set another browser's user agent, so a link planted in
-     * someone's normal browser never takes this path (KNOWLEDGE → App API security review).
-     */
-    private function fromAppWebview(Request $request): bool
-    {
-        $agent = (string) $request->userAgent();
-
-        return str_contains($agent, ' BrainitiveDesktop/') || str_contains($agent, ' BrainitiveMobile/');
     }
 
     /**
