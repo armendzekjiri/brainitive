@@ -37,7 +37,15 @@ const collab = createCollabServer({ port, address, secret, appUrl, appHost, acce
 
 // Live channels (BRAI-151) on the same port: `?live=1` sockets + Brainitive's publish endpoint.
 // LIVE_PUBLISH_FROM=private (Docker): the app container publishes over the private network.
-attachLive(collab.server, { secret, appUrl, appHost, accessIntervalMs, publishFrom: env.LIVE_PUBLISH_FROM === 'private' ? 'private' : 'loopback' });
+// A revoked app device (POST /internal/live/devices/revoked) loses its document sockets too (BRAI-377).
+attachLive(collab.server, {
+    secret,
+    appUrl,
+    appHost,
+    accessIntervalMs,
+    publishFrom: env.LIVE_PUBLISH_FROM === 'private' ? 'private' : 'loopback',
+    onDevicesRevoked: (ids) => collab.revokeDevices(ids),
+});
 
 await collab.listen();
 console.log(`[realtime] Brainitive live editing + live channels on ${address}:${port} → app API ${appUrl}${appHost ? ` (Host ${appHost})` : ''}`);

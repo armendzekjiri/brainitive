@@ -8,7 +8,6 @@ use App\Models\InstanceAdmin;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Admin\UserDeletion;
-use App\Support\AppApi\AppTokens;
 use App\Support\SignOutEverywhere;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -173,8 +172,7 @@ class UserController extends Controller
         }
 
         $user->forceFill(['suspended_at' => now()])->save();
-        $this->signOutEverywhere($user);
-        AppTokens::revokeAllFor($user, 'suspended');
+        $this->signOutEverywhere($user, 'suspended');
         AdminAuditLog::record('user.suspended', $user);
 
         return back()->with('success', "{$user->name} is suspended and signed out everywhere.");
@@ -225,7 +223,7 @@ class UserController extends Controller
         }
 
         $impact = UserDeletion::impact($user);
-        $this->signOutEverywhere($user);
+        $this->signOutEverywhere($user, 'deleted');
         AdminAuditLog::record('user.deleted', $user, $impact);
         UserDeletion::delete($user);
 
@@ -291,10 +289,10 @@ class UserController extends Controller
     }
 
     /**
-     * End web sessions (database driver) and revoke API / MCP / CLI tokens.
+     * End web sessions (database driver), revoke API / MCP / CLI tokens and sign the apps out.
      */
-    private function signOutEverywhere(User $user): void
+    private function signOutEverywhere(User $user, string $appReason): void
     {
-        SignOutEverywhere::run($user);
+        SignOutEverywhere::run($user, appReason: $appReason);
     }
 }

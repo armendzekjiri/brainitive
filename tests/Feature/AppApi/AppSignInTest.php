@@ -5,6 +5,7 @@ namespace Tests\Feature\AppApi;
 use App\Models\InstanceSettings;
 use App\Models\User;
 use App\Support\AppApi\AppAuthCodes;
+use App\Support\AppApi\AppWebSessions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -242,17 +243,30 @@ class AppSignInTest extends TestCase
         ]);
     }
 
+    private const DESKTOP_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) BrainitiveDesktop/0.4.2';
+
+    private const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15';
+
+    /** The desktop app's webview opens the link. */
+    private function fromWebview(string $uri): TestResponse
+    {
+        return $this->withHeader('User-Agent', self::DESKTOP_UA)->get($uri);
+    }
+
     public function test_a_web_session_code_signs_the_webview_in_and_remembers_it(): void
     {
         $user = User::factory()->create();
+        $device = $this->appDevice($user);
 
-        $response = $this->get('/app/session/'.$this->webSessionCode($user))
+        $response = $this->fromWebview('/app/session/'.$this->webSessionCode($user, $device->id))
             ->assertRedirect(route('dashboard', absolute: false));
 
         $this->assertAuthenticatedAs($user, 'web');
         $remember = collect($response->headers->getCookies())->first(fn ($c) => str_starts_with($c->getName(), 'remember_web_'));
         $this->assertNotNull($remember, 'remember-me cookie, so the webview stays signed in across app restarts');
         $this->assertGreaterThan(now()->addYear()->getTimestamp(), $remember->getExpiresTime());
+        // bound to the device: revoking it ends this session (EndRevokedAppDeviceSessions)
+        $response->assertSessionHas(AppWebSessions::SESSION_KEY, $device->id);
     }
 
     public function test_a_web_session_code_works_once(): void
@@ -260,13 +274,13 @@ class AppSignInTest extends TestCase
         $user = User::factory()->create();
         $code = $this->webSessionCode($user);
 
-        $this->get('/app/session/'.$code)->assertRedirect(route('dashboard', absolute: false));
+        $this->fromWebview('/app/session/'.$code)->assertRedirect(route('dashboard', absolute: false));
         Auth::logout();
         $this->flushSession();
 
-        $this->get('/app/session/'.$code)->assertRedirect(route('login'))->assertSessionHas('status');
+        $this->fromWebview('/app/session/'.$code)->assertRedirect(route('login'))->assertSessionHas('status');
         $this->assertGuest();
-        $this->get('/app/session/nope')->assertRedirect(route('login'));
+        $this->fromWebview('/app/session/nope')->assertRedirect(route('login'));
     }
 
     public function test_a_web_session_needs_an_active_device_and_an_active_user(): void
@@ -275,26 +289,131 @@ class AppSignInTest extends TestCase
         $device = $this->appDevice($user);
         $device->forceFill(['revoked_at' => now(), 'revoked_reason' => 'user'])->save();
 
-        $this->get('/app/session/'.$this->webSessionCode($user, $device->id))->assertRedirect(route('login'));
+        $this->fromWebview('/app/session/'.$this->webSessionCode($user, $device->id))->assertRedirect(route('login'));
         $this->assertGuest();
 
         // another user's device id in the payload
         $other = User::factory()->create();
-        $this->get('/app/session/'.$this->webSessionCode($user, $this->appDevice($other)->id))->assertRedirect(route('login'));
+        $this->fromWebview('/app/session/'.$this->webSessionCode($user, $this->appDevice($other)->id))->assertRedirect(route('login'));
         $this->assertGuest();
 
         $suspended = User::factory()->create(['suspended_at' => now()]);
-        $this->get('/app/session/'.$this->webSessionCode($suspended))->assertRedirect(route('login'));
+        $this->fromWebview('/app/session/'.$this->webSessionCode($suspended))->assertRedirect(route('login'));
         $this->assertGuest();
     }
 
-    public function test_a_web_session_replaces_another_signed_in_user(): void
+    // ── login CSRF / account swap (BRAI-377) ──────────────────────────────────────────────────
+
+    public function test_another_signed_in_user_is_never_swapped_silently(): void
+    {
+        $someoneElse = User::factory()->create(['email' => 'a@example.com']);
+        $user = User::factory()->create(['email' => 'b@example.com']);
+        $code = $this->webSessionCode($user);
+
+        // even in the desktop webview: a confirm page, and A stays signed in
+        $this->actingAs($someoneElse)->withHeader('User-Agent', self::DESKTOP_UA)->get('/app/session/'.$code)->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('AppAuth/Session')
+                ->where('user.email', 'b@example.com')
+                ->where('current.email', 'a@example.com'));
+        $this->assertAuthenticatedAs($someoneElse, 'web');
+
+        // the code is spent on the first open: a copy of the link is dead
+        $this->get('/app/session/'.$code)->assertRedirect(route('login'));
+
+        // Continue (POST + CSRF) switches the account
+        $this->post('/app/session', ['decision' => 'continue'])->assertRedirect(route('dashboard', absolute: false));
+        $this->assertAuthenticatedAs($user, 'web');
+
+        // and the confirmation is gone after use
+        $this->post('/app/session', ['decision' => 'continue'])->assertRedirect(route('login'));
+    }
+
+    public function test_cancel_keeps_the_signed_in_user(): void
     {
         $someoneElse = User::factory()->create();
         $user = User::factory()->create();
 
-        $this->actingAs($someoneElse)->get('/app/session/'.$this->webSessionCode($user))->assertRedirect();
+        $this->actingAs($someoneElse)->get('/app/session/'.$this->webSessionCode($user))->assertOk();
+        $this->post('/app/session', ['decision' => 'cancel'])->assertRedirect(route('dashboard'));
+        $this->assertAuthenticatedAs($someoneElse, 'web');
+        $this->post('/app/session', ['decision' => 'continue'])->assertRedirect(route('login'));
+        $this->assertAuthenticatedAs($someoneElse, 'web');
+    }
 
+    public function test_the_same_user_simply_continues(): void
+    {
+        $user = User::factory()->create();
+        $device = $this->appDevice($user);
+
+        $this->actingAs($user)->withHeader('User-Agent', self::BROWSER_UA)->get('/app/session/'.$this->webSessionCode($user, $device->id).'?to=/my-work')
+            ->assertRedirect('/my-work')
+            ->assertSessionHas(AppWebSessions::SESSION_KEY, $device->id);
+        $this->assertAuthenticatedAs($user, 'web');
+    }
+
+    public function test_a_browser_without_a_session_gets_the_confirm_page(): void
+    {
+        $user = User::factory()->create(['email' => 'b@example.com']);
+        $device = $this->appDevice($user);
+
+        // a plain browser (a planted link), or a webview without the desktop marker
+        foreach ([self::BROWSER_UA, ''] as $agent) {
+            $this->withHeader('User-Agent', $agent)->get('/app/session/'.$this->webSessionCode($user, $device->id).'?to=/my-work')->assertOk()
+                ->assertInertia(fn (Assert $page) => $page->component('AppAuth/Session')
+                    ->where('user.email', 'b@example.com')
+                    ->where('current', null));
+            $this->assertGuest('web');
+        }
+
+        // Continue: signed in, remembered, bound to the device, `to` kept from the link
+        $response = $this->post('/app/session', ['decision' => 'continue'])->assertRedirect('/my-work');
+        $this->assertAuthenticatedAs($user, 'web');
+        $response->assertSessionHas(AppWebSessions::SESSION_KEY, $device->id);
+        $this->assertNotNull(collect($response->headers->getCookies())->first(fn ($c) => str_starts_with($c->getName(), 'remember_web_')));
+    }
+
+    public function test_cancel_in_a_browser_without_a_session_signs_nobody_in(): void
+    {
+        $user = User::factory()->create();
+
+        $this->withHeader('User-Agent', self::BROWSER_UA)->get('/app/session/'.$this->webSessionCode($user))->assertOk();
+        $this->post('/app/session', ['decision' => 'cancel'])->assertRedirect(route('login'));
+        $this->assertGuest('web');
+    }
+
+    public function test_the_confirmation_expires_and_rechecks_the_device(): void
+    {
+        $user = User::factory()->create();
+        $device = $this->appDevice($user);
+
+        $this->get('/app/session/'.$this->webSessionCode($user, $device->id))->assertOk();
+        $this->travel(6)->minutes();
+        $this->post('/app/session', ['decision' => 'continue'])->assertRedirect(route('login'))->assertSessionHas('status');
+        $this->assertGuest('web');
+        $this->travelBack();
+
+        // revoked between the page and the click
+        $this->get('/app/session/'.$this->webSessionCode($user, $device->id))->assertOk();
+        $device->forceFill(['revoked_at' => now(), 'revoked_reason' => 'user'])->save();
+        $this->post('/app/session', ['decision' => 'continue'])->assertRedirect(route('login'));
+        $this->assertGuest('web');
+
+        // no pending sign-in at all, or a bad decision
+        $this->post('/app/session', ['decision' => 'continue'])->assertRedirect(route('login'));
+        $this->post('/app/session', ['decision' => 'maybe'])->assertSessionHasErrors('decision');
+        $this->assertGuest('web');
+    }
+
+    public function test_the_confirm_post_needs_the_csrf_token(): void
+    {
+        $user = User::factory()->create();
+        $this->get('/app/session/'.$this->webSessionCode($user))->assertOk();
+
+        // the test environment skips CSRF; run it as a normal environment would
+        $this->app['env'] = 'local';
+        $this->post('/app/session', ['decision' => 'continue'])->assertStatus(302)->assertRedirect(route('login'));
+        $this->assertGuest('web');
+        $this->post('/app/session', ['decision' => 'continue', '_token' => session()->token()])->assertRedirect(route('dashboard', absolute: false));
         $this->assertAuthenticatedAs($user, 'web');
     }
 
@@ -303,11 +422,17 @@ class AppSignInTest extends TestCase
         $user = User::factory()->create();
         $dashboard = route('dashboard', absolute: false);
 
-        $this->get('/app/session/'.$this->webSessionCode($user).'?to='.urlencode('/my-work?tab=today'))
+        $this->fromWebview('/app/session/'.$this->webSessionCode($user).'?to='.urlencode('/my-work?tab=today'))
             ->assertRedirect('/my-work?tab=today');
 
         foreach (['//evil.example', 'https://evil.example/', '/\\evil.example', 'my-work', "/x\r\nLocation: //evil"] as $to) {
-            $this->get('/app/session/'.$this->webSessionCode($user).'?to='.urlencode($to))->assertRedirect($dashboard);
+            $this->fromWebview('/app/session/'.$this->webSessionCode($user).'?to='.urlencode($to))->assertRedirect($dashboard);
         }
+
+        // the same rules after the confirm page
+        Auth::logout();
+        $this->flushSession();
+        $this->withHeader('User-Agent', self::BROWSER_UA)->get('/app/session/'.$this->webSessionCode($user).'?to='.urlencode('//evil.example'))->assertOk();
+        $this->post('/app/session', ['decision' => 'continue'])->assertRedirect($dashboard);
     }
 }

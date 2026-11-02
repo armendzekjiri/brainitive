@@ -5,6 +5,8 @@ namespace Tests\Feature\AppApi;
 use App\Models\Page;
 use App\Models\PageCollabState;
 use App\Models\User;
+use App\Support\AppApi\AppTokens;
+use App\Support\Collab\CollabConfig;
 use App\Support\Collab\CollabToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
@@ -131,5 +133,58 @@ class PageCollabTest extends TestCase
             ->assertForbidden();
         $this->putJson("/api/v1/pages/{$page->uuid}/collab/draft", ['epoch' => 1, 'html' => '<p>x</p>', 'name' => 'n', 'vector' => ['1' => 1]], $this->headers($this->outsider))
             ->assertNotFound();
+    }
+
+    // ── revoked devices (BRAI-377) ────────────────────────────────────────────────────────────
+
+    public function test_the_token_carries_the_device_and_the_server_learns_when_it_is_revoked(): void
+    {
+        $page = $this->published();
+        $device = $this->appDevice($this->editor);
+        $phone = $this->appDevice($this->editor, ['client' => 'mobile', 'platform' => 'ios']);
+        $foreign = $this->appDevice($this->viewer);
+
+        $token = $this->postJson("/api/v1/pages/{$page->uuid}/collab-token", [], $this->appHeaders($this->appToken($this->editor, $device)))
+            ->assertOk()->json('data.token');
+        $this->assertSame($device->id, CollabToken::verify($token)['dev'], 'App API tokens are bound to the device');
+        // the web's tokens have none
+        $this->assertArrayNotHasKey('dev', CollabToken::verify(CollabToken::issue($this->editor, "page.{$page->uuid}.0", true)['token']));
+
+        $document = "page.{$page->uuid}.0";
+        $access = fn (array $devices) => $this->postJson(route('internal.collab.access'), [
+            'document' => $document,
+            'user_ids' => [$this->editor->id],
+            'devices' => $devices,
+        ], ['Authorization' => 'Bearer '.CollabConfig::internalKey()]);
+
+        $access([['id' => $device->id, 'user_id' => $this->editor->id], ['id' => $phone->id, 'user_id' => $this->editor->id]])
+            ->assertOk()->assertJsonPath('revoked_devices', [])->assertJsonPath("users.{$this->editor->id}", 'edit');
+
+        AppTokens::revoke($device, 'user');
+        $phone->delete();
+        $access([
+            ['id' => $device->id, 'user_id' => $this->editor->id], // revoked
+            ['id' => $phone->id, 'user_id' => $this->editor->id], // deleted
+            ['id' => $foreign->id, 'user_id' => $this->editor->id], // another user's
+            ['id' => 999_999, 'user_id' => $this->editor->id], // never existed
+        ])->assertOk()->assertJsonPath('revoked_devices', [$device->id, $phone->id, $foreign->id, 999_999]);
+
+        // without `devices` (an older realtime server): same answer as before, nothing revoked
+        $this->postJson(route('internal.collab.access'), ['document' => $document, 'user_ids' => [$this->editor->id]], ['Authorization' => 'Bearer '.CollabConfig::internalKey()])
+            ->assertOk()->assertJsonPath('revoked_devices', []);
+        $access([['id' => 'x', 'user_id' => $this->editor->id]])->assertUnprocessable();
+    }
+
+    public function test_issue_descriptions_answer_revoked_devices_too(): void
+    {
+        $item = $this->item();
+        $device = $this->appDevice($this->editor);
+        AppTokens::revoke($device, 'user');
+
+        $this->postJson(route('internal.collab.access'), [
+            'document' => "item.{$item->id}.0",
+            'user_ids' => [$this->editor->id],
+            'devices' => [['id' => $device->id, 'user_id' => $this->editor->id]],
+        ], ['Authorization' => 'Bearer '.CollabConfig::internalKey()])->assertOk()->assertJsonPath('revoked_devices', [$device->id]);
     }
 }

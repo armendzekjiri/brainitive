@@ -51,10 +51,13 @@ rate limits. Conventions (full text in `docs/ai/API.md` of the repository):
 
 - **Auth:** `Authorization: Bearer bra_...` - a 15-minute access token from the native sign-in
   (`/app/authorize` in the system browser -> `POST /auth/exchange`). Refresh with
-  `POST /auth/refresh` (`brr_...`, 60 days, single use; replaying an old one revokes the device).
-  Tokens of the MCP / CLI / extension clients get 401 here.
+  `POST /auth/refresh` (`brr_...`, 60 days, single use; replaying an old one signs the user out
+  everywhere). Tokens of the MCP / CLI / extension clients get 401 here. The TV app (device-code
+  sign-in, `POST /auth/device`) may only call a read-mostly list of endpoints (`docs/ai/API.md`);
+  anything else answers 403 `client_not_allowed`.
 - **Errors:** always `{"message": "...", "code": "...", "errors"?: {"field": ["..."]}}` - 401
-  `unauthenticated`, 403 `forbidden`, 404 `not_found`, 409 `conflict`, 422 `validation_failed`,
+  `unauthenticated`, 403 `forbidden` (or `client_not_allowed`: not for this app), 404 `not_found`,
+  409 `conflict`, 422 `validation_failed`,
   429 `rate_limited`. A 404 can also mean "exists, but not for you".
 - **Dates:** ISO-8601 UTC.
 - **Lists:** cursor pagination `?cursor=&limit=` (default 50, max 100) -> `{data, next_cursor}`;

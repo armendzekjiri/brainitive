@@ -1,14 +1,17 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { Page } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
+import { cacheBuildAssets } from '../assets';
 import { expect, test } from '../fixtures';
-import { PASSWORD, USERS } from '../env';
-import { guestContext } from '../helpers/auth-account';
+import { PASSWORD, REMOTE, USERS } from '../env';
+import { seedAppToken } from '../helpers/app-api';
+import { GUEST, guestContext } from '../helpers/auth-account';
 
 /*
  * Native sign-in for the desktop app (v1.49.0, BRAI-355 / BRAI-383), server side: the system
  * browser's consent page, the code exchange (PKCE), the webview session link.
  * The browser can't follow brainitive:// here, so the decision's answer is intercepted
  * (Inertia::location → 409 + X-Inertia-Location) and the app's part runs through `request`.
+ * The webview link asks before it signs a plain browser in or replaces another account (BRAI-377).
  */
 
 const base64url = (buffer: Buffer) => buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -16,6 +19,23 @@ const base64url = (buffer: Buffer) => buffer.toString('base64').replace(/\+/g, '
 function pkce() {
     const verifier = base64url(randomBytes(48));
     return { verifier, challenge: base64url(createHash('sha256').update(verifier).digest()) };
+}
+
+/** A browser context whose user agent says it is the desktop app's webview (no session). */
+async function desktopWebview(browser: Browser): Promise<BrowserContext> {
+    const context = await browser.newContext({ storageState: GUEST, userAgent: `${DEFAULT_UA} BrainitiveDesktop/0.4.2` });
+    await cacheBuildAssets(context);
+    return context;
+}
+
+const DEFAULT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+
+/** A device + its one-time webview link (`POST /api/v1/auth/web-session`), for the signed-in user of `page`. */
+async function webSessionLink(page: Page, to = ''): Promise<{ link: string; token: string }> {
+    const token = await seedAppToken(page);
+    const res = await page.request.post('/api/v1/auth/web-session', { headers: { Authorization: `Bearer ${token}` } });
+    expect(res.status()).toBe(200);
+    return { link: `${(await res.json()).data.url}${to}`, token };
 }
 
 function authorizePath(challenge: string, state: string): string {
@@ -89,7 +109,8 @@ test('Continue hands the app a code it exchanges for tokens, and the webview lin
     const link: string = (await webSession.json()).data.url;
     expect(link).toMatch(/\/app\/session\/[A-Za-z0-9]{64}$/);
 
-    const webview = await guestContext(browser);
+    // the desktop app's webview (its user agent ends in ` BrainitiveDesktop/<version>`) with no session: one step
+    const webview = await desktopWebview(browser);
     const webviewPage = await webview.newPage();
     await webviewPage.goto(link);
     // signed in: the dashboard (which forwards to the workspaces), not the login page
@@ -145,4 +166,42 @@ test('a guest signs in first and comes back to the consent page; a broken link n
     await expect(page.getByRole('button', { name: 'Continue' })).toHaveCount(0);
 
     await context.close();
+});
+
+test('a webview link opened in a plain browser asks first; Continue signs in', async ({ page, browser }) => {
+    test.skip(REMOTE, 'the device seed is an e2e-only route');
+    const { link } = await webSessionLink(page, '?to=/my-work');
+
+    const context = await guestContext(browser);
+    const other = await context.newPage();
+    await other.goto(link);
+    await expect(other.getByRole('heading', { name: `Sign in as ${USERS.owner.email} on this browser?` })).toBeVisible();
+    // nothing happened yet
+    expect((await context.cookies()).some((cookie) => cookie.name.startsWith('remember_web_'))).toBe(false);
+
+    await other.getByRole('button', { name: 'Continue' }).click();
+    await expect(other).toHaveURL(/\/my-work/);
+    expect((await context.cookies()).some((cookie) => cookie.name.startsWith('remember_web_'))).toBe(true);
+    await context.close();
+});
+
+test('a webview link never swaps the signed-in account silently', async ({ page, memberPage }) => {
+    test.skip(REMOTE, 'the device seed is an e2e-only route');
+    // the owner's link, opened where the member is signed in
+    const { link } = await webSessionLink(page);
+
+    await memberPage.goto(link);
+    await expect(memberPage.getByTestId('current-account')).toContainText(`You’re signed in as ${USERS.member.email}.`);
+    await expect(memberPage.getByRole('heading', { name: `Continue as ${USERS.owner.email}?` })).toBeVisible();
+
+    // Cancel: still the member
+    await memberPage.getByRole('button', { name: 'Cancel' }).click();
+    await expect(memberPage).toHaveURL(/\/(dashboard|workspaces)/);
+    await memberPage.goto('/profile');
+    await expect(memberPage.getByLabel('Email', { exact: true })).toHaveValue(USERS.member.email);
+
+    // the link was spent on the first open (expired → the login page, which sends a signed-in user on)
+    await memberPage.goto(link);
+    await expect(memberPage).toHaveURL(/\/(dashboard|workspaces|login)/);
+    await expect(memberPage.getByRole('heading', { name: `Continue as ${USERS.owner.email}?` })).toHaveCount(0);
 });

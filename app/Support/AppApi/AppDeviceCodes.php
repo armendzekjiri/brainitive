@@ -46,12 +46,13 @@ final class AppDeviceCodes
     private const GRACE = 600;
 
     /**
-     * Start a sign-in for a device.
+     * Start a sign-in for a device. `$ip`: where the request came from — the confirm page shows its coarse
+     * prefix and the age of the request, so a user can spot a code that isn't from their own TV (BRAI-377).
      *
      * @param  array{name: string, platform: string, app_version: string, os_version?: string|null}  $device
      * @return array{device_code: string, user_code: string, expires_in: int, interval: int}
      */
-    public static function start(string $client, array $device): array
+    public static function start(string $client, array $device, ?string $ip = null): array
     {
         $ttl = (int) config('app-api.device_code_ttl');
         $interval = (int) config('app-api.device_code_interval');
@@ -79,6 +80,8 @@ final class AppDeviceCodes
                 'os_version' => $device['os_version'] ?? null,
             ],
             'user_code' => $userCode,
+            'ip' => $ip,
+            'created_at' => now()->getTimestamp(),
             'user_id' => null,
             'interval' => $interval,
             'expires_at' => now()->getTimestamp() + $ttl,
@@ -179,6 +182,28 @@ final class AppDeviceCodes
 
         // another poll of the same code holds the lock right now: that is polling too fast
         return $result ?? [self::POLL_SLOW_DOWN];
+    }
+
+    /**
+     * The coarse origin of a request for the confirm page: an IPv4 address without its last part
+     * (`203.0.113.x`), an IPv6 address as its first three groups (`2001:db8:85a3:x`, the /48). Never the
+     * full address; null when unknown.
+     */
+    public static function coarseIp(?string $ip): ?string
+    {
+        if (is_string($ip) && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return implode('.', array_slice(explode('.', $ip), 0, 3)).'.x';
+        }
+        if (is_string($ip) && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            $packed = inet_pton($ip);
+            if ($packed !== false) {
+                $groups = array_map(fn (string $hex) => ltrim($hex, '0') ?: '0', str_split(bin2hex(substr($packed, 0, 6)), 4));
+
+                return implode(':', $groups).':x';
+            }
+        }
+
+        return null;
     }
 
     /** "BCDFGHJK" → "BCDF-GHJK" (how the TV and the confirm page show it). */

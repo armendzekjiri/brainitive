@@ -53,6 +53,11 @@ class AppDeviceApprovalController extends Controller
                 'name' => $payload['device']['name'],
                 'platform' => self::PLATFORM_LABELS[$payload['device']['platform']] ?? $payload['device']['platform'],
             ],
+            // where and when the TV asked (BRAI-377): a code from a stranger's device stands out
+            'origin' => [
+                'ip' => AppDeviceCodes::coarseIp(is_string($payload['ip'] ?? null) ? $payload['ip'] : null),
+                'minutes_ago' => is_int($payload['created_at'] ?? null) ? max(0, intdiv(now()->getTimestamp() - $payload['created_at'], 60)) : null,
+            ],
         ]);
     }
 

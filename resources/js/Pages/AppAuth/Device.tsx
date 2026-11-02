@@ -15,8 +15,15 @@ type Props = {
     typed?: string;
     client?: { name: string };
     device?: { name: string; platform: string | null };
+    /** confirm: where and when the device asked — the coarse IP (`203.0.113.x`) and the request's age */
+    origin?: { ip: string | null; minutes_ago: number | null };
     error?: string;
 };
+
+function startedAgo(minutes: number): string {
+    if (minutes < 1) return 'Started less than a minute ago';
+    return `Started ${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+}
 
 function Icon({ tone, children }: { tone: 'primary' | 'destructive' | 'success'; children: React.ReactNode }) {
     const bg = tone === 'destructive' ? 'bg-destructive/10' : tone === 'success' ? 'bg-brand-green/10' : 'bg-primary/10 dark:bg-primary/20';
@@ -31,7 +38,7 @@ function Icon({ tone, children }: { tone: 'primary' | 'destructive' | 'success';
  * Device-code sign-in (BRAI-438): confirm the code a TV shows. Opened from the TV's QR the code is
  * filled in, but nothing happens until Approve is clicked — the same consent look as AppAuth/Authorize.
  */
-export default function Device({ stage, email, code, typed, client, device, error }: Props) {
+export default function Device({ stage, email, code, typed, client, device, origin, error }: Props) {
     const [value, setValue] = useState(typed ?? '');
     const [busy, setBusy] = useState(false);
 
@@ -85,8 +92,8 @@ export default function Device({ stage, email, code, typed, client, device, erro
                             Sign in to {client.name} as {email}?
                         </h1>
                         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                            {client.name} will be able to use your Brainitive account on this device, with the same access you have in the
-                            browser.
+                            {client.name} will be able to show your day, your work, your calendar and your notifications on this device, and mark
+                            work as done. It can't change your account or settings.
                         </p>
                     </div>
 
@@ -97,14 +104,24 @@ export default function Device({ stage, email, code, typed, client, device, erro
                         </p>
                     </div>
 
-                    <div className="rounded-lg border border-border px-4 py-3">
-                        <p className="text-xs text-muted-foreground">Device</p>
-                        <p className="text-sm font-semibold break-words text-foreground">{device.name}</p>
-                        {device.platform && <p className="text-xs text-muted-foreground">{device.platform}</p>}
+                    <div className="space-y-3 rounded-lg border border-border px-4 py-3">
+                        <div>
+                            <p className="text-xs text-muted-foreground">Name reported by the device</p>
+                            <p className="text-sm font-semibold break-words text-foreground">{device.name}</p>
+                            {device.platform && <p className="text-xs text-muted-foreground">{device.platform}</p>}
+                        </div>
+                        {origin && (origin.ip || origin.minutes_ago !== null) && (
+                            <div data-testid="device-origin">
+                                <p className="text-xs text-muted-foreground">Request</p>
+                                {origin.ip && <p className="text-sm text-foreground">From network {origin.ip}</p>}
+                                {origin.minutes_ago !== null && <p className="text-xs text-muted-foreground">{startedAgo(origin.minutes_ago)}</p>}
+                            </div>
+                        )}
                     </div>
 
                     <p className="text-center text-xs text-muted-foreground">
-                        Only approve if this is the code on your own TV right now. Nobody from Brainitive will ever ask you for it.
+                        Only approve if this is the code on your own TV right now, and you started it just now. Nobody from Brainitive will
+                        ever ask you for it.
                     </p>
 
                     <div className="flex gap-3">

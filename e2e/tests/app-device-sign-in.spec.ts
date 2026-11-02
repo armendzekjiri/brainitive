@@ -33,6 +33,10 @@ test('the QR link shows the code and Approve signs the TV in', async ({ page, re
     await expect(page.getByTestId('device-code')).toHaveText(flow.user_code);
     await expect(page.getByText(TV.name)).toBeVisible();
     await expect(page.getByText('Android TV')).toBeVisible();
+    // where and when it started, the name as the device reported it (BRAI-377)
+    await expect(page.getByText('Name reported by the device')).toBeVisible();
+    await expect(page.getByTestId('device-origin')).toContainText('From network ');
+    await expect(page.getByTestId('device-origin')).toContainText(/Started (less than a minute|\d+ minutes?) ago/);
 
     // opening the link alone approved nothing
     await page.waitForTimeout(flow.interval * 1000);
@@ -51,6 +55,13 @@ test('the QR link shows the code and Approve signs the TV in', async ({ page, re
     const me = await request.get('/api/v1/me', { headers: { Authorization: `Bearer ${tokens.access_token}` } });
     expect(me.status()).toBe(200);
     expect((await me.json()).data.device.client).toBe('tv');
+    // the TV's narrow scope: no web session, no device list (BRAI-377)
+    const webSession = await request.post('/api/v1/auth/web-session', { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+    expect(webSession.status()).toBe(403);
+    expect((await webSession.json()).code).toBe('client_not_allowed');
+    const devices = await request.get('/api/v1/devices', { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+    expect((await devices.json()).code).toBe('client_not_allowed');
+    expect((await request.get('/api/v1/me/today', { headers: { Authorization: `Bearer ${tokens.access_token}` } })).status()).toBe(200);
 
     // the TV shows up with the other apps on the profile page
     await page.goto('/profile#app-devices');

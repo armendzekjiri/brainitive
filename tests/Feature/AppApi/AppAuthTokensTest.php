@@ -9,6 +9,7 @@ use App\Support\AppApi\AppAuthCodes;
 use App\Support\AppApi\AppTokens;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
@@ -113,7 +114,8 @@ class AppAuthTokensTest extends TestCase
             ->json('data.url');
         $this->assertMatchesRegularExpression('#^https?://[^/]+/app/session/[A-Za-z0-9]{64}$#', $url);
 
-        $this->get($url)->assertRedirect(route('dashboard', absolute: false));
+        // (the desktop webview's user agent: one step; a plain browser gets a confirm page — AppSignInTest)
+        $this->withHeader('User-Agent', 'Mozilla/5.0 BrainitiveDesktop/0.4.2')->get($url)->assertRedirect(route('dashboard', absolute: false));
         $this->assertAuthenticatedAs($user, 'web');
     }
 
@@ -241,6 +243,35 @@ class AppAuthTokensTest extends TestCase
         // the whole device is out: the newest pair too
         $this->postJson('/api/v1/auth/web-session', [], $this->appHeaders($second['access_token']))->assertStatus(401);
         $this->assertInvalidGrant($this->refresh($second['refresh_token']), 401);
+        Notification::assertSentToTimes($user, AppRefreshReuseNotification::class, 1);
+    }
+
+    public function test_refresh_reuse_signs_the_user_out_everywhere(): void
+    {
+        Notification::fake();
+        config(['session.driver' => 'database']);
+        $user = User::factory()->create(['remember_token' => 'old-remember-token']);
+        $stranger = User::factory()->create();
+        foreach ([[$user, 'browser-a'], [$user, 'browser-b'], [$stranger, 'stranger']] as [$owner, $id]) {
+            DB::table('sessions')->insert(['id' => $id, 'user_id' => $owner->id, 'payload' => '', 'last_activity' => now()->getTimestamp()]);
+        }
+        $phone = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios']);
+        $passport = $this->passportToken($user);
+        $strangerDevice = $this->appDevice($stranger);
+        $first = $this->exchange($this->code($user))->json();
+        $this->refresh($first['refresh_token'])->assertOk();
+
+        $this->assertInvalidGrant($this->refresh($first['refresh_token']), 401);
+
+        // a theft signal: every browser session, the remember-me token, CLI / MCP tokens and the other apps
+        $this->assertSame(['stranger'], DB::table('sessions')->pluck('id')->all());
+        $this->assertNotSame('old-remember-token', $user->fresh()->remember_token);
+        $this->assertSame('refresh_reuse', AppDevice::findOrFail($first['device']['id'])->revoked_reason);
+        $this->assertSame('refresh_reuse', $phone->fresh()->revoked_reason);
+        $this->assertTrue($user->tokens()->firstOrFail()->revoked, 'Passport tokens (MCP / CLI) too');
+        $this->assertNotEmpty($passport);
+        $this->assertNull($strangerDevice->fresh()->revoked_at);
+        // the email still goes out, once
         Notification::assertSentToTimes($user, AppRefreshReuseNotification::class, 1);
     }
 

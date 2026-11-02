@@ -26,10 +26,30 @@ return [
     //  - `authorization_code`: /app/authorize (PKCE) sends the one-time code to `redirect`;
     //  - `device_code`: RFC 8628 (/api/v1/auth/device), for devices without a usable browser — the
     //    user confirms the code shown on the screen at /app/device on a phone or computer.
+    //
+    // `abilities`: the signed-in routes (`auth:app`) a client may call, as route names without `app.v1.`
+    // (`Str::is` patterns; `*` = all). Anything else answers 403 `client_not_allowed`
+    // (EnsureAppClientAbility). The TV gets a read-mostly list: a phished device-code approval must
+    // not hand out the whole account (BRAI-377). `instance` and `auth.refresh` are public anyway.
     'clients' => [
-        'desktop' => ['name' => 'Brainitive Desktop', 'grant' => 'authorization_code', 'redirect' => 'brainitive://auth/callback', 'platforms' => ['macos', 'windows', 'linux']],
-        'mobile' => ['name' => 'Brainitive Mobile', 'grant' => 'authorization_code', 'redirect' => 'brainitive://auth/callback', 'platforms' => ['ios', 'android']],
-        'tv' => ['name' => 'Brainitive TV', 'grant' => 'device_code', 'redirect' => null, 'platforms' => ['android_tv']],
+        'desktop' => ['name' => 'Brainitive Desktop', 'grant' => 'authorization_code', 'redirect' => 'brainitive://auth/callback', 'platforms' => ['macos', 'windows', 'linux'], 'abilities' => ['*']],
+        'mobile' => ['name' => 'Brainitive Mobile', 'grant' => 'authorization_code', 'redirect' => 'brainitive://auth/callback', 'platforms' => ['ios', 'android'], 'abilities' => ['*']],
+        'tv' => [
+            'name' => 'Brainitive TV',
+            'grant' => 'device_code',
+            'redirect' => null,
+            'platforms' => ['android_tv'],
+            'abilities' => [
+                'instance', 'auth.refresh', 'auth.logout',
+                'me.show',
+                'today',
+                'work.index', 'work.update', // PATCH = done / undone only (WorkDoneRequest)
+                'my-day.show', 'my-day.items.update', // PATCH = done / undone only
+                'calendar.events', 'calendar.events.show', 'calendar.connections', // read only
+                'notifications.index', 'notifications.unread-count', 'notifications.read',
+                'realtime.show', 'realtime.token',
+            ],
+        ],
     ],
 
     // Oldest app versions this server works with; /api/v1/instance tells the apps.

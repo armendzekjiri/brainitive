@@ -59,12 +59,12 @@ Raise them only when an upgrade note asks you to. All variables: [Configuration]
 ## Upgrading to v1.49.0
 
 1. Run the database migration: `php artisan migrate`. It adds one table, `sync_tombstones`, which remembers deleted or reassigned items for 30 days so offline apps can drop them. Nothing existing changes.
-2. Restart the realtime service (`sudo systemctl restart brainitive-realtime`, or the `realtime` container with Docker). App sign-out then also closes that device's live connection. See [Realtime server](./realtime).
+2. Restart the realtime service (`sudo systemctl restart brainitive-realtime`, or the `realtime` container with Docker). App sign-out then also closes that device's live connections (live updates and live document editing). See [Realtime server](./realtime).
 3. Make sure the scheduler runs (`php artisan schedule:run` every minute). It prunes old tombstones daily. See [Queue and scheduler](./queue-and-scheduler).
 
 ## Signed-in devices
 
-Every app sign-in is a device (desktop, mobile or TV). People see theirs under **Profile → Notifications → Desktop & mobile apps** and can sign one out there. Suspending a user or changing their password signs out all their apps.
+Every app sign-in is a device (desktop, mobile or TV). People see theirs under **Profile → Notifications → Desktop & mobile apps** and can sign one out there. Suspending a user or changing their password signs out all their apps. Signing an app out also ends the web session its window opened. TV apps only get a read-only view of the day, work, calendar and notifications (plus marking work done); nothing to configure.
 
 ## API reference
 

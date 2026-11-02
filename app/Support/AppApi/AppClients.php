@@ -2,9 +2,12 @@
 
 namespace App\Support\AppApi;
 
+use Illuminate\Support\Str;
+
 /**
  * The first-party app clients of `config/app-api.php` (`clients`): which way each one signs in
- * (`authorization_code` = /app/authorize + PKCE, `device_code` = RFC 8628) and the platforms it runs on.
+ * (`authorization_code` = /app/authorize + PKCE, `device_code` = RFC 8628), the platforms it runs on and
+ * the signed-in App API routes it may call (`abilities`, BRAI-377).
  */
 final class AppClients
 {
@@ -39,5 +42,20 @@ final class AppClients
     public static function runsOn(string $client, string $platform): bool
     {
         return in_array($platform, (array) config('app-api.clients.'.$client.'.platforms', []), true);
+    }
+
+    /**
+     * Whether the client may call the App API route (its name without `app.v1.`). `abilities` are
+     * `Str::is` patterns, `*` = everything; an unknown client or one without abilities may call nothing.
+     */
+    public static function allows(string $client, ?string $route): bool
+    {
+        if ($route === null || $route === '') {
+            return false;
+        }
+
+        $abilities = config('app-api.clients.'.$client.'.abilities', []);
+
+        return is_array($abilities) && Str::is(array_values(array_filter($abilities, 'is_string')), $route);
     }
 }

@@ -570,13 +570,46 @@ the allowlist renaming only.
   `Inertia::location()` (409 + `X-Inertia-Location`), so the browser itself navigates to
   `brainitive://…` — a 302 to a custom scheme inside an XHR goes nowhere. Password, Google, GitHub and
   Microsoft logins all return through `redirect()->intended()` (tests in `AppSignInTest`).
-- **Revocation:** suspension (`suspended`), password change and reset (`password_changed`) call
-  `AppTokens::revokeAllFor()` next to `SignOutEverywhere` (which handles sessions + Passport only).
+- **Revocation:** `SignOutEverywhere::run($user, $keepSessionId, $appReason)` ends browser sessions, the
+  remember token, Passport tokens **and** every app device (`AppTokens::revokeAllFor`, since BRAI-377 — before,
+  the social-login takeover paths left the squatter's apps signed in). Reasons: `suspended`, `deleted`,
+  `password_changed`, `account_takeover`, `refresh_reuse`, default `signed_out_everywhere`. Refresh reuse runs it
+  too (a theft signal), so one misbehaving client that refreshes twice in parallel signs the user out everywhere.
 - **Webview session:** `/app/session/{code}` logs into `web` with remember-me (cookies survive app
-  restarts) and only follows a relative `?to=` (`/…`, not `//` or `/\`).
+  restarts) and only follows a relative `?to=` (`/…`, not `//` or `/\`). Confirm page + device binding: see
+  "App API security review" below.
 - **Tests:** after an `auth:app` request the test client keeps the guard's user and the default
   guard is `app` — call `Auth::forgetGuards()` before re-using a revoked token, and
   `assertGuest('web')` / `assertAuthenticatedAs($u, 'web')`.
+
+### App API security review (v1.49.0, BRAI-377)
+- **TV scope = route-name allow-list.** `config/app-api.php` → `clients.*.abilities` (`Str::is` patterns on the
+  route name without `app.v1.`), checked by `EnsureAppClientAbility` on the `auth:app` group → 403
+  `client_not_allowed`. It is in the middleware priority list **before `SubstituteBindings`**, so a refused call
+  never says through a 404 whether a record exists. A guard that already knew the user (one app instance, several
+  test requests) has no device on the request: the middleware then looks the bearer up itself, else it would
+  refuse desktop calls in tests. `AppClientAbilitiesTest` pins the TV's exact list — a new route is closed to it
+  until added. The device code's origin (IP, created_at) lives in the cache payload: no migration.
+- **`/app/session/{code}`: why the desktop webview may skip the confirm page.** The attack is login CSRF / a silent
+  account swap: someone sends the victim a link to *their own* web-session code. A web page can't set the user
+  agent of the victim's browser (it's not a header `fetch` / a link may set), so a planted link in a normal browser
+  never carries ` BrainitiveDesktop/` and gets the confirm page; and a signed-in user is never swapped without a
+  click, even in the webview. The code is consumed on the **GET** and the pending sign-in bound to that session
+  (5 min): a copy of the URL is dead from the first open, and the POST carries no code, only the session's CSRF
+  token. Link unfurlers spend the code — fine, it's never meant to be shared.
+- **A webview session ends with its device.** `/app/session` stores `app_device_id`; `EndRevokedAppDeviceSessions`
+  (web group) asks `AppWebSessions::deviceActiveFor` — one indexed query cached 60 s **per device**, and
+  `AppTokens::revoke` forgets that cache (now and after commit), so the next request already sees it. Logout
+  there cycles the remember token: the user's remember-me cookies in other browsers stop working too (their
+  sessions stay). Sessions without the key (normal logins) are never checked.
+- **Collab (live doc editing) sockets close on revoke too.** `CollabToken` carries `dev` for App API callers
+  (`PageCollab::session(…, $device)`); `internal/collab/access` takes optional `devices: [{id, user_id}]` and answers
+  `revoked_devices` (`AppTokens::revokedAmong`, shared with the live endpoint). The collab server asks on connect
+  (refuses with 4410 / reason `device-revoked`, not 4401) and in its minute re-check, and closes the **whole socket**
+  (`connection.webSocket.close(4410)`, not just the document's CLOSE message, which arrives as code 1000). The live
+  push `POST /internal/live/devices/revoked` reaches it through `attachLive({onDevicesRevoked})` in
+  `realtime/src/index.js`. Old realtime ↔ new Laravel stay compatible (`devices` optional); restart the realtime
+  service after the deploy.
 
 ### Lead form logic lives twice
 Which steps / questions a visitor sees is evaluated in the browser (`lib/leadForms.ts`) *and*

@@ -57,7 +57,7 @@ class GitHubAuthController extends Controller
                 // proves the email, so the never-verified account is reset before linking
                 if ($user->email_verified_at === null && InstanceSettings::requiresEmailVerification()) {
                     $user->forceFill(['password' => bcrypt(str()->random(64))])->save();
-                    SignOutEverywhere::run($user);
+                    SignOutEverywhere::run($user, appReason: 'account_takeover');
                 }
                 $user->update([
                     'github_id' => $githubUser->getId(),

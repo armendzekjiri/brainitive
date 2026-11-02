@@ -56,9 +56,14 @@ export function createLaravelClient({ appUrl, appHost = '', internalKey, fetchIm
         async storeState(documentName, update) {
             await call('PUT', documentPath(documentName), { state: Buffer.from(update).toString('base64') });
         },
-        /** {current: bool, users: {id: 'edit' | 'view' | null}} */
-        async access(documentName, userIds) {
-            return call('POST', '/access', { document: documentName, user_ids: userIds });
+        /**
+         * {current: bool, users: {id: 'edit' | 'view' | null}, revoked_devices?: number[]}. `devices`: the app devices
+         * of the connections ({id, user_id}, tokens with `dev`); the answer names those revoked / gone (BRAI-377).
+         */
+        async access(documentName, userIds, devices = []) {
+            return call('POST', '/access', devices.length > 0
+                ? { document: documentName, user_ids: userIds, devices }
+                : { document: documentName, user_ids: userIds });
         },
     };
 }

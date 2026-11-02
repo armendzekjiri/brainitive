@@ -6,6 +6,7 @@ use App\Models\AppDevice;
 use App\Models\User;
 use App\Support\Live\Live;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -101,8 +102,9 @@ final class AppTokens
     }
 
     /**
-     * Sign the device out: both tokens stop working immediately, and the realtime server closes the
-     * device's live sockets (pushed now, else at its next minute re-check).
+     * Sign the device out: both tokens stop working immediately, the realtime server closes the device's
+     * live and collab sockets (pushed now, else at its next minute re-check), and the web session its
+     * webview opened is logged out on its next request.
      */
     public static function revoke(AppDevice $device, string $reason): void
     {
@@ -116,6 +118,10 @@ final class AppTokens
         ])->save();
 
         Live::deviceRevoked((int) $device->id);
+        // the web session its webview opened ends on its next request (EndRevokedAppDeviceSessions); again
+        // after commit, so a request racing the transaction can't cache the device as still active
+        AppWebSessions::forget((int) $device->id);
+        DB::afterCommit(fn () => AppWebSessions::forget((int) $device->id));
     }
 
     /**
@@ -142,6 +148,27 @@ final class AppTokens
         $devices->each(fn (AppDevice $device) => self::revoke($device, $reason));
 
         return $devices->count();
+    }
+
+    /**
+     * Of the asked devices (device id → the user whose socket holds it), those that may no longer be
+     * connected: revoked, deleted, or not that user's. The realtime server's minute re-checks ask this
+     * (live channels and live co-editing) and close their sockets with 4410.
+     *
+     * @param  array<int, int>  $deviceUsers
+     * @return list<int>
+     */
+    public static function revokedAmong(array $deviceUsers): array
+    {
+        if ($deviceUsers === []) {
+            return [];
+        }
+        $active = AppDevice::query()->active()->whereIn('id', array_keys($deviceUsers))->pluck('user_id', 'id');
+
+        return array_values(array_filter(
+            array_keys($deviceUsers),
+            fn (int $device) => (int) ($active[$device] ?? 0) !== $deviceUsers[$device],
+        ));
     }
 
     public static function hash(string $token): string

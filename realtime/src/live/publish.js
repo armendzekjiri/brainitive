@@ -3,7 +3,8 @@
 // proxy headers is refused anyway, the peer must be loopback (or a private network with
 // LIVE_PUBLISH_FROM=private — Docker), and the bearer is a key derived from the shared secret.
 // Same guards for POST /internal/live/devices/revoked {devices: [ids]}: Brainitive signed these app devices
-// out, their sockets are closed at once (the minute re-check catches what this misses).
+// out, their sockets are closed at once — live channels and live co-editing documents (BRAI-377); the minute
+// re-checks catch what this misses.
 import { timingSafeEqual } from 'node:crypto';
 import { CHANNEL } from './token.js';
 

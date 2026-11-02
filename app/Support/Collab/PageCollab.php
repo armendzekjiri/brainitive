@@ -77,14 +77,15 @@ final class PageCollab
      * Everything a browser needs to connect: server URL, document name, a fresh token.
      *
      * @param  'edit'|'view'  $access
+     * @param  int|null  $device  the App API client's device (token claim `dev`: its sockets close once it is revoked)
      * @return array<string, mixed>
      */
-    public static function session(Page $page, User $user, string $access): array
+    public static function session(Page $page, User $user, string $access, ?int $device = null): array
     {
         self::ensureState($page);
         $state = PageCollabState::where('page_id', $page->id)->firstOrFail(['id', 'epoch', 'html_vector']);
         $document = CollabDocument::name($page->uuid, $state->epoch);
-        $token = CollabToken::issue($user, $document, $access === 'edit');
+        $token = CollabToken::issue($user, $document, $access === 'edit', device: $device);
 
         return [
             'url' => CollabConfig::url(),

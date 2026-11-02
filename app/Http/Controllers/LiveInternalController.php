@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\AppDevice;
 use App\Models\User;
+use App\Support\AppApi\AppTokens;
 use App\Support\Live\LiveChannels;
 use App\Support\Live\LiveConfig;
 use Illuminate\Http\JsonResponse;
@@ -59,14 +59,7 @@ class LiveInternalController extends Controller
                 $asked[(int) $device] = (int) $entry['id'];
             }
         }
-        if ($asked === []) {
-            return [];
-        }
-        $active = AppDevice::query()->active()->whereIn('id', array_keys($asked))->pluck('user_id', 'id');
 
-        return array_values(array_filter(
-            array_keys($asked),
-            fn (int $device) => (int) ($active[$device] ?? 0) !== $asked[$device],
-        ));
+        return AppTokens::revokedAmong($asked);
     }
 }
