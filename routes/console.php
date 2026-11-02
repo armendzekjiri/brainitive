@@ -15,6 +15,7 @@ use App\Models\PendingNotificationEmail;
 use App\Models\PortalLoginToken;
 use App\Models\ProjectExport;
 use App\Models\PushSubscription;
+use App\Models\SyncTombstone;
 use App\Models\WebhookDelivery;
 use App\Support\GithubStars;
 use Illuminate\Foundation\Inspiring;
@@ -111,6 +112,8 @@ Schedule::call(fn () => GithubStars::refresh())->hourly()->name('github-stars')-
 
 // Offline sync (BRAI-82): forget the outcome of a device's change after 30 days.
 Schedule::command('model:prune', ['--model' => [OfflineMutation::class]])->dailyAt('04:35');
+// App API sync (BRAI-425): deletions / reassignments the change feed reports, for 30 days.
+Schedule::command('model:prune', ['--model' => [SyncTombstone::class]])->dailyAt('04:37');
 // Web push (BRAI-154): forget subscriptions the push service reported as expired 30 days ago.
 Schedule::command('model:prune', ['--model' => [PushSubscription::class]])->dailyAt('04:40');
 // Notification email digest (BRAI-429): lines no digest could send within 7 days.

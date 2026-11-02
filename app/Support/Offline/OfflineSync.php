@@ -8,6 +8,7 @@ use App\Support\Offline\Appliers\CaptureMutations;
 use App\Support\Offline\Appliers\IssueMutations;
 use App\Support\Offline\Appliers\ListTaskMutations;
 use App\Support\Offline\Appliers\MyDayMutations;
+use App\Support\Offline\Appliers\WorkMutations;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -35,6 +36,8 @@ final class OfflineSync
         'capture.create' => [CaptureMutations::class, 'create'],
         'my_day.add' => [MyDayMutations::class, 'add'],
         'my_day.remove' => [MyDayMutations::class, 'remove'],
+        // the circle of My Work / My Day (App API sync, BRAI-425)
+        'work.done' => [WorkMutations::class, 'done'],
     ];
 
     /**

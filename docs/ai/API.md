@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270, Bookings 280, Helpdesk 290, Leads 300, Portals 310, Insights 320. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270, Bookings 280, Helpdesk 290, Leads 300, Portals 310, Insights 320, Sync 330. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -159,6 +159,7 @@ rules in each module's section below; the typed spec is `docs/api/openapi.json`.
 | Leads | Leads | `GET /projects/{id}/lead-forms`, `GET /lead-forms/{id}/leads`, `GET /lead-forms/{id}/analytics`, `GET\|PATCH /leads/{id}` |
 | Portals | Portals | `GET /projects/{id}/feedback-portal`, `GET /feedback-portals/{id}/posts`, `PATCH /feedback-posts/{id}`, `POST /feedback-posts/{id}/moderate`, `GET /projects/{id}/client-portal`, `GET /client-portals/{id}/deliverables`, `GET /client-deliverables/{id}` |
 | Insights | Insights | `GET /workspaces/{slug}/insights/{tab}`, `GET /projects/{id}/health`, `GET /projects/{id}/workload` |
+| Sync | Sync | `GET /sync/changes`, `POST /sync` |
 | Web only | — | see "Web only (no App API in v1)" |
 
 Columns of the module tables: **Mobile** = scope in the mobile app (Full / Read + light edit / Read-only / web only);
@@ -931,6 +932,60 @@ utm: {utm_source, …}|null, referrer, consent_at, consent_text, assignee: {id, 
   clients, rates) and every CSV / Excel export stay on the web (money never goes to the apps, BRAI-242 / 244 / 245).
 - Web only: writing status updates (and the AI draft), planning workload (capacity, overrides, allocations), exports.
 
+### Sync
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/sync/changes?cursor=&limit=&scopes=work,task_lists,my_day,captures&task_lists=1,2` | app + verified, 120/min | Offline copy: what changed since the cursor → `{data: [change], next_cursor, has_more, reset, project_ids}`. No cursor = a full run (`reset: true`) | Full | BRAI-263, BRAI-264 | ready (v1.49.0, BRAI-425) |
+| `POST /api/v1/sync` | app + verified, 60/min | The outbox after being offline: `{changes: [{request_id, type, target?, base?, data}]}` (≤ 50, in order) → 200 `{data: [result]}`, one per change, same order | Full | BRAI-263, BRAI-264 | ready (v1.49.0, BRAI-425) |
+
+Change: `{type: work|task_list|task|capture|my_day, id, op: upsert|delete, project_id, updated_at, data}`. `data` is the
+record exactly as its own endpoint returns it (`work` = a My Work item, `task_list` / `task` = Task lists, `capture` =
+Captures, `my_day` = My Day), `null` for a delete. `id`: `issue:12` / `task:5` (work), the id as text (task_list, task),
+the uuid (capture), the date (my_day).
+- **Runs.** Start without a cursor (optionally `scopes` — default all four — and `task_lists`: the ids of the lists kept
+  offline, ≤ 50): a **full run**, `reset: true`. Page with `next_cursor` while `has_more`; when `has_more` is false, drop
+  every cached record of the scope the run didn't send and **keep that `next_cursor`**. Call again with it later: a
+  **delta run** (`reset: false`) — upserts (add / replace) and deletes (drop). `next_cursor` is never null. New
+  `scopes` / `task_lists`, a cursor of another account, an unknown one or one older than 30 days → a full run again.
+  The same record may come twice (runs overlap by 10 s): apply by `updated_at`.
+- **Scopes.** `work` = the work assigned to the user in every project they can open (as `GET /me/work`; a full run sends
+  the open work, delta runs also completed work with `done: true`), `task_lists` = the kept lists + all their tasks,
+  `my_day` = today's plan as one record (sent when it changed; a new local day changes it), `captures` = the private inbox
+  (all states).
+- **Deletes** come for issues / tasks / lists that were deleted (also: their board / list deleted), work reassigned to
+  someone else, and captures deleted for good. **Lost access** is not a delete: drop every cached record whose
+  `project_id` is not in `project_ids` (the projects the user can open now). Nothing of other users or other projects
+  is ever in the feed (every query is the user's own or limited to `project_ids`).
+
+Result of a change: `{request_id, type, status, http_status, replayed, entity_type, entity, conflicts, applied, message, errors}`.
+
+| status | http_status | the device does |
+|---|---|---|
+| `applied` | 200 | done: drop it from the outbox, store `entity` (the server state) |
+| `conflict` | 409 | done: the conflicting fields were **not** written (`conflicts: {field: {base, mine, theirs}}`), the others were (`applied`); show mine / theirs, a new change if the user keeps theirs |
+| `deleted` | 410 | drop it: the thing is gone or no longer visible (same answer for both) |
+| `waiting` | 424 | keep it: it refers to an offline create (`target.ref`) that hasn't arrived — send that one first |
+| `forbidden` | 403 | drop it: the user may not do this (e.g. a viewer) |
+| `invalid` | 422 | drop it: `errors` per field (also: a `request_id` reused for a different change → `errors.id`) |
+| `rate_limited` | 429 | keep it, send again in a minute (240 changes / min / user over all batches) |
+| `error` | 500 | keep it, send again later |
+
+- **The web's offline engine** (`App\Support\Offline\OfflineSync`, BRAI-82, the same as `POST /offline/sync`): types
+  `list_task.create {task_list_id, title, status?}` · `list_task.update {title?, status?}` + `target` · `list_task.reorder
+  {task_list_id, items: [{id}|{ref}]}` · `issue.update {title?, column_id?, priority_id?, assigned_to?, due_date?}` +
+  `target` · `issue.comment {body}` (plain text) + `target` · `issue.create {board_id, title, column_id?, priority_id?,
+  assigned_to?, due_date?}` · `capture.create {text, url?, intended_type?, source?}` (source defaults to the app's name) ·
+  `my_day.add|remove {work_type: board|list, work_id|work_ref}` · **`work.done {work_type, work_id|work_ref, done}`** (the
+  circle: `WorkCompletion::setDone`, as `PATCH /me/work/{id}`).
+- **Updates carry `base.fields`**: each changed field's value as the device saw it (missing → `invalid`). A field
+  someone else changed meanwhile is a conflict, never overwritten; already having the wanted value is a no-op.
+- **`request_id`** (uuid, made once per change on the device) = idempotency for 30 days: a retry answers the stored
+  result with `replayed: true`. `target: {id}` (server id) or `{ref}` (the request_id of an earlier create, in this
+  batch or before); `data.work_ref` likewise.
+- Changes are applied in order, each in its own transaction: a bad one never stops or rolls back the others. Same
+  policies as the web (`ItemPolicy::update`, `BoardPolicy::createItems`, `TaskListPolicy::manageItems`).
+- Docs are not part of offline sync: drafts go through the live editor / `PATCH /pages/{uuid}` with `revision` (409).
+
 ### Web only (no App API in v1, BRAI-424)
 These mobile cards get **no native API in v1**: the apps show a short note and open the web page in the browser (desktop: the
 webview). Their `## API: web only — open in browser` texts are under "Mobile card texts".
@@ -1576,4 +1631,33 @@ Registry: docs/ai/API.md#web-only-no-app-api-in-v1-brai-424 · Decided in: BRAI-
 Imports (mapping, preview, progress, errors) and project exports / restores are long-running admin jobs on the web.
 The apps offer the user's own data export (POST|GET /api/v1/me/data-export, BRAI-262).
 Registry: docs/ai/API.md#web-only-no-app-api-in-v1-brai-424 · Decided in: BRAI-424
+```
+
+**BRAI-263** (offline-first cache, local edits and sync queue)
+```
+## API (ready)
+- GET /api/v1/sync/changes?scopes=work,task_lists,my_day,captures&task_lists=1,2 — full run (reset: true) without a cursor, then delta runs with the kept next_cursor: upsert / delete per record (work, task_list, task, capture, my_day) + project_ids (drop other projects)
+- POST /api/v1/sync {changes: [{request_id, type, target?, base?, data}]} — the outbox in batches of ≤ 50, one result per change (applied / conflict / deleted / waiting / forbidden / invalid / rate_limited / error); request_id makes retries safe
+Types: list_task.create|update|reorder, issue.update|comment|create, capture.create, my_day.add|remove, work.done — the web's offline mode (BRAI-82)
+Scope: app · OpenAPI: docs/api/openapi.json#/Sync · Registry: docs/ai/API.md#sync
+Built in: BRAI-425 (desktop) · Mobile scope: Full (My Day, My Work, kept task lists, captures)
+```
+
+**BRAI-264** (sync conflict resolution and recovery after interrupted updates)
+```
+## API (ready)
+- POST /api/v1/sync — updates carry base.fields (the values the device saw); a field changed by someone else meanwhile → status conflict (409) with conflicts {field: {base, mine, theirs}}, never overwritten; the other fields are applied (applied: [...])
+- Retries: the same request_id answers the stored result (replayed: true), so an interrupted batch is simply sent again; waiting (424) / rate_limited / error → keep and resend, deleted / forbidden / invalid → drop and tell the user
+- GET /api/v1/sync/changes — a full run (reset: true) rebuilds a broken cache; a cursor older than 30 days starts one by itself
+Scope: app · OpenAPI: docs/api/openapi.json#/Sync · Registry: docs/ai/API.md#sync
+Built in: BRAI-425 (desktop) · Mobile scope: Full (keep mine = a new change with the server value as base; keep theirs = drop it)
+```
+
+**BRAI-204** (offline document drafts and conflict resolution)
+```
+## API (ready) — via the docs endpoints, not the sync feed
+- Docs are not in /api/v1/sync: keep a draft locally and save it with PATCH /api/v1/pages/{uuid} {markdown, revision}; a stale revision → 409 conflict (reload, show mine / theirs, save again with the new revision)
+- Live co-editing (Yjs) merges offline edits by itself: POST /api/v1/pages/{uuid}/collab-token (BRAI-200)
+Scope: app · OpenAPI: docs/api/openapi.json#/Docs · Registry: docs/ai/API.md#sync
+Built in: BRAI-411, BRAI-412, BRAI-425 (desktop) · Mobile scope: Light edit offline (Markdown draft + revision check)
 ```

@@ -113,6 +113,9 @@
         },
         {
             "name": "Insights"
+        },
+        {
+            "name": "Sync"
         }
     ],
     "security": [
@@ -12643,6 +12646,169 @@
                     }
                 }
             }
+        },
+        "/sync/changes": {
+            "get": {
+                "operationId": "app.v1.sync.changes",
+                "description": "Start without a cursor (optionally `scopes` = work,task_lists,my_day,captures and `task_lists` = ids to\nkeep): a **full run** (`reset: true`) \u2014 page with `next_cursor` while `has_more`, then drop every cached\nrecord of the scope the run didn't send. Keep the last `next_cursor` (when `has_more` is false) and call\nagain with it later: a **delta run** with what changed since \u2014 `upsert` (add / replace with `data`) and\n`delete` (drop: deleted, reassigned away, a deleted board / list). Always drop cached records of projects\nthat are not in `project_ids` (lost access, deleted project). A cursor older than 30 days, of another\naccount or unknown, or new `scopes` / `task_lists` start a full run again. The same change may come\ntwice (apply it by `updated_at`).",
+                "summary": "What changed in the client's offline copy",
+                "tags": [
+                    "Sync"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "scopes",
+                        "in": "query",
+                        "description": "work | task_lists | my_day | captures, comma separated (default: all four)",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^(work|task_lists|my_day|captures)(,(work|task_lists|my_day|captures))*$",
+                            "maxLength": 60
+                        }
+                    },
+                    {
+                        "name": "task_lists",
+                        "in": "query",
+                        "description": "ids of the task lists to keep offline, comma separated (at most 50; lists the user can't open are skipped)",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "pattern": "^([1-9][0-9]{0,17}(,[1-9][0-9]{0,17}){0,49})?$",
+                            "maxLength": 1000
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SyncChangeResource"
+                                            }
+                                        },
+                                        "next_cursor": {
+                                            "type": "string",
+                                            "description": "the next page while has_more; else keep it for the next sync (never null)"
+                                        },
+                                        "has_more": {
+                                            "type": "boolean",
+                                            "description": "true: call again with next_cursor now (this run isn't finished)"
+                                        },
+                                        "reset": {
+                                            "type": "boolean",
+                                            "description": "true: a full run \u2014 once has_more is false, drop what this run did not send"
+                                        },
+                                        "project_ids": {
+                                            "type": "array",
+                                            "description": "projects the user can open now: drop cached records of any other project",
+                                            "items": {
+                                                "type": "integer"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor",
+                                        "has_more",
+                                        "reset",
+                                        "project_ids"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/sync": {
+            "post": {
+                "operationId": "app.v1.sync.store",
+                "description": "`{changes: [{request_id, type, target?, base?, data}]}` (\u2264 50), applied in order, each on its own: one\nresult per change in the same order, and one bad change never stops the others. Types and their data\nare the web's offline mutations (`list_task.create|update|reorder`, `issue.update|comment|create`,\n`capture.create`, `my_day.add|remove`) plus `work.done`. Updates carry `base.fields` (each changed\nfield as the device saw it): a field someone else changed meanwhile is a `conflict` (409) and is not\nwritten \u2014 never overwritten. `request_id` makes a change idempotent (30 days): a retry answers the\nstored result (`replayed: true`); the same id with another change \u2192 `invalid`. `target.ref` /\n`data.work_ref` = the request_id of an earlier create (in this batch or before). Budget: 240 changes a\nminute per user (`rate_limited`: send it again later).",
+                "summary": "Apply a batch of queued offline changes",
+                "tags": [
+                    "Sync"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SyncBatchRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SyncResultResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -23173,6 +23339,219 @@
                     "name"
                 ],
                 "title": "StoreWorkspaceRequest"
+            },
+            "SyncBatchRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/sync`: a batch of queued offline changes. Only the envelope is checked here; each change\nis validated on its own (a bad one comes back as `invalid` in its result, the others still apply).",
+                "properties": {
+                    "changes": {
+                        "type": "array",
+                        "description": "the device's outbox in order: [{request_id, type, target?, base?, data}]",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "request_id": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "a uuid per change, made once on the device: a retry with the same id answers the stored result"
+                                },
+                                "type": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "list_task.create|update|reorder, issue.update|comment|create, capture.create, my_day.add|remove, work.done"
+                                },
+                                "target": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "{id} (a server id) or {ref} (the request_id of an earlier create in the outbox)"
+                                },
+                                "base": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "{fields: {field: value as the device saw it}} for every field an update changes"
+                                },
+                                "data": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "the change itself (per type)"
+                                }
+                            }
+                        },
+                        "minItems": 1,
+                        "maxItems": 50
+                    }
+                },
+                "required": [
+                    "changes"
+                ],
+                "title": "SyncBatchRequest"
+            },
+            "SyncChangeResource": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "description": "work | task_list | task | capture | my_day"
+                    },
+                    "id": {
+                        "type": "string",
+                        "description": "the record's id in its own endpoint: \"issue:12\" / \"task:5\" (work), a number as text (task_list,\ntask), the uuid (capture), the date Y-m-d (my_day)"
+                    },
+                    "op": {
+                        "type": "string",
+                        "description": "upsert = add or replace your copy with `data`; delete = drop it (deleted, or no longer yours)"
+                    },
+                    "project_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "the project it belongs to (null: captures, My Day, deletions)"
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "data": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "the record (see the type), null for a delete",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "type",
+                    "id",
+                    "op",
+                    "project_id",
+                    "updated_at",
+                    "data"
+                ],
+                "title": "SyncChangeResource"
+            },
+            "SyncResultResource": {
+                "type": "object",
+                "properties": {
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the change's request_id (null when it had none: invalid)"
+                    },
+                    "type": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the change's type"
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "applied | conflict | deleted | waiting | forbidden | invalid | rate_limited | error"
+                    },
+                    "http_status": {
+                        "type": "integer",
+                        "description": "the HTTP status this result stands for: 200 | 409 | 410 | 424 | 403 | 422 | 429 | 500"
+                    },
+                    "replayed": {
+                        "type": "boolean",
+                        "description": "true: this request_id was applied before; this is the stored result, nothing was written again"
+                    },
+                    "entity_type": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "issue | list_task | comment | capture | my_day | task_list | board \u2026"
+                    },
+                    "entity": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "the server's state after the change (applied, conflict)",
+                        "additionalProperties": {}
+                    },
+                    "conflicts": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "conflicting fields: none of them was written",
+                        "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                                "base": {},
+                                "mine": {},
+                                "theirs": {}
+                            },
+                            "required": [
+                                "base",
+                                "mine",
+                                "theirs"
+                            ]
+                        }
+                    },
+                    "applied": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "description": "fields of a conflicting change that did not conflict and were written",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "message": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "what to tell the user (deleted, waiting, forbidden, invalid, conflict)"
+                    },
+                    "errors": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "validation errors of an `invalid` change",
+                        "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "required": [
+                    "request_id",
+                    "type",
+                    "status",
+                    "http_status",
+                    "replayed",
+                    "entity_type",
+                    "entity",
+                    "conflicts",
+                    "applied",
+                    "message",
+                    "errors"
+                ],
+                "title": "SyncResultResource"
             },
             "TaskCollection": {
                 "type": "array",

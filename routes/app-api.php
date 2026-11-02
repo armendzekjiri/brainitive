@@ -37,6 +37,7 @@ use App\Http\Controllers\AppApi\ReleaseController;
 use App\Http\Controllers\AppApi\SearchController;
 use App\Http\Controllers\AppApi\SnippetController;
 use App\Http\Controllers\AppApi\SprintController;
+use App\Http\Controllers\AppApi\SyncController;
 use App\Http\Controllers\AppApi\TaskListController;
 use App\Http\Controllers\AppApi\TimerController;
 use App\Http\Controllers\AppApi\TodayController;
@@ -357,6 +358,10 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::delete('me/connected-apps/{id}', [ConnectedAppController::class, 'destroy'])->name('connected-apps.destroy');
         Route::get('me/data-export', [ConnectedAppController::class, 'export'])->name('data-export.show');
         Route::post('me/data-export', [ConnectedAppController::class, 'requestExport'])->middleware('throttle:5,1,app.data-export')->name('data-export.store');
+
+        // ── Offline sync (ChangeFeed + the web's OfflineSync engine: same types, appliers, idempotency) ──
+        Route::get('sync/changes', [SyncController::class, 'changes'])->middleware('throttle:120,1,app.sync.changes')->name('sync.changes');
+        Route::post('sync', [SyncController::class, 'store'])->middleware('throttle:60,1,app.sync.store')->name('sync.store');
 
     });
 

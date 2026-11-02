@@ -2094,6 +2094,30 @@ Never migrate devdb just to export the spec.
 - **Billing stays web only:** team time in the apps is the Insights `team` tab (hours); the billing time overview (amounts) is not
   exposed.
 
+### App API phase 09: offline sync for native clients (v1.49.0, BRAI-425)
+- **One offline engine.** `POST /api/v1/sync` runs the web's `OfflineSync::handle` per change (same types, appliers, idempotency
+  in `offline_mutations`, field-level conflicts); the card's "one mutation per call" became a batch of ≤ 50 with **per-change
+  results** (`status` + `http_status`), because native outboxes are long after a flight. Each change has its own transaction;
+  exceptions (validation, policy, the capture throttle) are caught per change and become `invalid` / `forbidden` /
+  `rate_limited` — never a failed batch. `request_id` = the web's mutation `id`; the same uuid with other content → `invalid`
+  with `errors.id`.
+- **The feed is not `updated_since` on each list.** A list endpoint can't report deletions or rows that left the user's scope.
+  `ChangeFeed` walks phases (upserts, then deletions) with a keyset per phase inside one opaque cursor; a run's `since` is the
+  previous run's **start** minus 10 s (a change committed during the run is sent again next time, never missed). Clients
+  apply by `updated_at` and tolerate duplicates.
+- **Deletions:** issues, tasks, lists, boards are soft-deleted (`deleted_at` — also a trashed board / list means all its work is
+  gone). Captures are hard-deleted and reassignment leaves no trace → `sync_tombstones` (additive migration), written in the
+  same transaction as the delete / update (a rollback leaves none). A tombstone of work that is assigned to the user again is
+  skipped (the upsert wins). Tombstones live 30 days, so a cursor whose `since` is older starts a full run.
+- **Lost access is not a tombstone:** membership changes have many paths (workspace / project removal, role changes, trashed
+  projects). The feed answers `project_ids` (= `accessibleProjectIds()` now) on every page; clients drop rows of other projects.
+- **My Day is one record** (`type: my_day`), sent when a hash of (date, entries, order, work `updated_at` + done, carry-over
+  count) changed — the hash travels in the cursor, so no server state per device.
+- **The cursor is not signed**, on purpose: it is bound to the user id, every query is the token user's own or limited to the
+  projects they can open, and the keyset values are validated (timestamp regex, ints) before use — a forged cursor can only
+  skip or repeat the caller's own changes. A test feeds an injection string through it.
+- **Docs are not in the feed** (BRAI-204): offline doc edits use `PATCH /pages/{uuid}` with `revision` (409) or live co-editing.
+
 ### MCP `update-page` writes through `PageWrites` (v1.49.0, `fix/mcp-update-page-safe`)
 - **Before:** a Markdown body on a published page was written straight into `content` (`discardDraft` + `update`): an
   unpublished draft was thrown away, live (Yjs) editors were ignored, no revision check. Now every body write goes through

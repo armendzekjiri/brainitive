@@ -20,11 +20,13 @@ final class FieldMerge
 
     public const DATE = 'date';
 
+    public const BOOL = 'bool';
+
     /**
      * @param  array<string, mixed>  $current  server values
      * @param  array<string, mixed>  $base  what the device saw, per changed field
      * @param  array<string, mixed>  $mine  the device's new values
-     * @param  array<string, string>  $kinds  field => INT | STRING | DATE
+     * @param  array<string, string>  $kinds  field => INT | STRING | DATE | BOOL
      * @return array{apply: array<string, mixed>, conflicts: array<string, array{base: mixed, mine: mixed, theirs: mixed}>}
      */
     public static function merge(array $current, array $base, array $mine, array $kinds): array
@@ -61,6 +63,7 @@ final class FieldMerge
         return match ($kind) {
             self::INT => is_numeric($value) ? (int) $value : null,
             self::DATE => self::date($value),
+            self::BOOL => filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE),
             default => is_scalar($value) ? (string) $value : null,
         };
     }
