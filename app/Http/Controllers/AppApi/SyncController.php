@@ -8,8 +8,10 @@ use App\Http\Requests\AppApi\SyncChangesRequest;
 use App\Http\Resources\AppApi\SyncChangeResource;
 use App\Http\Resources\AppApi\SyncResultResource;
 use App\Models\User;
+use App\Support\AppApi\AppApiErrors;
 use App\Support\AppApi\AppTokens;
 use App\Support\AppApi\ValidationWithExtras;
+use App\Support\Entitlements\LimitReached;
 use App\Support\Offline\OfflineSync;
 use App\Support\Sync\ChangeFeed;
 use App\Support\Sync\SyncChange;
@@ -83,6 +85,8 @@ class SyncController extends Controller
      * stored result (`replayed: true`); the same id with another change → `invalid`. `entity` is the server's
      * current state as the feed's record of `record_type` (work, task, task_list, capture, my_day, comment, timer,
      * notification, unread_count). `gone`: the timer / notification is no longer there, nothing was written.
+     * `limit_reached` (402, with `code` and `limit` as the REST 402): a plan limit stops the change (`issue.create` once
+     * the workspace's content storage is used up); nothing was stored — send it again once there is room.
      * `target.ref` / `data.work_ref` = the request_id of an earlier create (in this batch or before). Budget:
      * 240 changes a minute per user (`rate_limited`: send it again later).
      */
@@ -152,6 +156,10 @@ class SyncController extends Controller
             return $result('invalid', 422, ['message' => $e->getMessage()] + $extras, $e->errors());
         } catch (AuthorizationException) {
             return $result('forbidden', 403, ['message' => 'You are not allowed to make this change.']);
+        } catch (LimitReached $e) {
+            // a plan limit (issue.create: content storage, Codex review): the REST 402's fields; nothing was stored, so
+            // the same change applies once there is room again
+            return $result('limit_reached', 402, AppApiErrors::limitReached($e->payload($user))->getData(true));
         } catch (ThrottleRequestsException $e) {
             return $result('rate_limited', 429, ['message' => $e->getMessage()]);
         } catch (Throwable $e) {

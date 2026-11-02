@@ -28,9 +28,9 @@ class SyncResultResource extends JsonResource
             'request_id' => $result['request_id'],
             /** @var string|null the change's type */
             'type' => $result['type'],
-            // applied | conflict | deleted | gone | waiting | forbidden | invalid | rate_limited | error
+            // applied | conflict | deleted | gone | waiting | forbidden | invalid | limit_reached | rate_limited | error
             'status' => $result['status'],
-            // the HTTP status this result stands for: 200 | 409 | 410 | 424 | 403 | 422 | 429 | 500 (gone: 410)
+            // the HTTP status this result stands for: 200 | 409 | 410 | 424 | 403 | 422 | 402 | 429 | 500 (gone: 410)
             'http_status' => (int) $result['http_status'],
             // true: this request_id was applied before; this is the stored result, nothing was written again
             'replayed' => (bool) ($body['replayed'] ?? false),
@@ -52,6 +52,10 @@ class SyncResultResource extends JsonResource
             'activities' => $body['activities'] ?? null,
             /** @var int|null an `invalid` timer.stop for its activity: the activity to preselect (or null) */
             'default_activity_id' => $body['default_activity_id'] ?? null,
+            /** @var string|null `limit_reached` with status limit_reached (as the REST 402), else null */
+            'code' => $body['code'] ?? null,
+            /** @var array{kind: string, limit: int, usage: int, plan: string, workspace: string|null, billing_url: string|null}|null the limit that stopped the change (status limit_reached) */
+            'limit' => $body['limit'] ?? null,
         ];
     }
 }

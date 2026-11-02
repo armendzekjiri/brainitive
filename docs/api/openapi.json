@@ -163,7 +163,7 @@
         "/auth/exchange": {
             "post": {
                 "operationId": "app.v1.auth.exchange",
-                "description": "Creates the device (signing out the least recently used one beyond the per-user limit).\nA wrong, used or expired code, or a verifier that doesn't match its challenge \u2192 400 `invalid_grant`.",
+                "description": "Creates the device (signing out the least recently used one beyond the per-user limit).\nA wrong, used or expired code, a verifier that doesn't match its challenge, or a code approved before\nthe user signed out everywhere (password change / reset \u2026) \u2192 400 `invalid_grant`.",
                 "summary": "Exchange the one-time code from the consent page for the first token pair",
                 "tags": [
                     "Auth"
@@ -335,7 +335,7 @@
         "/auth/device/token": {
             "post": {
                 "operationId": "app.v1.auth.device.token",
-                "description": "Once the user approved: the same token response as `/auth/exchange` (unwrapped, with `device`),\nonce. Until then a 400 with an RFC 8628 `code`: `authorization_pending` (ask again after\n`interval`), `slow_down` (asked too soon: wait 5 s longer from now on), `access_denied` (the user\nsaid no: stop), `expired_token` (start again), `invalid_grant` (unknown or already used code).",
+                "description": "Once the user approved: the same token response as `/auth/exchange` (unwrapped, with `device`),\nonce. Until then a 400 with an RFC 8628 `code`: `authorization_pending` (ask again after\n`interval`), `slow_down` (asked too soon: wait 5 s longer from now on), `access_denied` (the user\nsaid no, or signed out everywhere after approving: stop), `expired_token` (start again), `invalid_grant` (unknown or already used code).",
                 "summary": "Poll for the tokens of a device-code sign-in",
                 "tags": [
                     "Auth"
@@ -1259,7 +1259,7 @@
             },
             "post": {
                 "operationId": "app.v1.projects.store",
-                "description": "A blank project gets a \"Main Board\" and the user as project admin. A template run is\nidempotent with `request_id` (UUID): a retry answers 200 with the project it created.",
+                "description": "A blank project gets a \"Main Board\" and the user as project admin. A template run is\nidempotent with `request_id` (UUID): a retry answers 200 with the project it created \u2014 or 404\nonce the caller can no longer open it (moved to another workspace).",
                 "summary": "Create a project, blank or from a template (`template` + `start_date`)",
                 "tags": [
                     "Projects"
@@ -12759,7 +12759,7 @@
         "/sync": {
             "post": {
                 "operationId": "app.v1.sync.store",
-                "description": "`{changes: [{request_id, type, target?, base?, data}]}` (\u2264 50), applied in order, each on its own: one\nresult per change in the same order, and one bad change never stops the others. Types and their data\nare the web's offline mutations (`list_task.create|update|reorder`, `issue.update|comment|create`,\n`capture.create`, `my_day.add|remove`) plus `work.done`, `timer.start|stop|discard`, `notification.read`\nand `notifications.read_all`. Updates carry `base.fields` (each changed\nfield as the device saw it): a field someone else changed meanwhile is a `conflict` (409) and is not\nwritten \u2014 never overwritten. `request_id` makes a change idempotent (30 days): a retry answers the\nstored result (`replayed: true`); the same id with another change \u2192 `invalid`. `entity` is the server's\ncurrent state as the feed's record of `record_type` (work, task, task_list, capture, my_day, comment, timer,\nnotification, unread_count). `gone`: the timer / notification is no longer there, nothing was written.\n`target.ref` / `data.work_ref` = the request_id of an earlier create (in this batch or before). Budget:\n240 changes a minute per user (`rate_limited`: send it again later).",
+                "description": "`{changes: [{request_id, type, target?, base?, data}]}` (\u2264 50), applied in order, each on its own: one\nresult per change in the same order, and one bad change never stops the others. Types and their data\nare the web's offline mutations (`list_task.create|update|reorder`, `issue.update|comment|create`,\n`capture.create`, `my_day.add|remove`) plus `work.done`, `timer.start|stop|discard`, `notification.read`\nand `notifications.read_all`. Updates carry `base.fields` (each changed\nfield as the device saw it): a field someone else changed meanwhile is a `conflict` (409) and is not\nwritten \u2014 never overwritten. `request_id` makes a change idempotent (30 days): a retry answers the\nstored result (`replayed: true`); the same id with another change \u2192 `invalid`. `entity` is the server's\ncurrent state as the feed's record of `record_type` (work, task, task_list, capture, my_day, comment, timer,\nnotification, unread_count). `gone`: the timer / notification is no longer there, nothing was written.\n`limit_reached` (402, with `code` and `limit` as the REST 402): a plan limit stops the change (`issue.create` once\nthe workspace's content storage is used up); nothing was stored \u2014 send it again once there is room.\n`target.ref` / `data.work_ref` = the request_id of an earlier create (in this batch or before). Budget:\n240 changes a minute per user (`rate_limited`: send it again later).",
                 "summary": "Apply a batch of queued offline changes",
                 "tags": [
                     "Sync"
@@ -23725,11 +23725,11 @@
                     },
                     "status": {
                         "type": "string",
-                        "description": "applied | conflict | deleted | gone | waiting | forbidden | invalid | rate_limited | error"
+                        "description": "applied | conflict | deleted | gone | waiting | forbidden | invalid | limit_reached | rate_limited | error"
                     },
                     "http_status": {
                         "type": "integer",
-                        "description": "the HTTP status this result stands for: 200 | 409 | 410 | 424 | 403 | 422 | 429 | 500 (gone: 410)"
+                        "description": "the HTTP status this result stands for: 200 | 409 | 410 | 424 | 403 | 422 | 402 | 429 | 500 (gone: 410)"
                     },
                     "replayed": {
                         "type": "boolean",
@@ -23835,6 +23835,54 @@
                             "null"
                         ],
                         "description": "an `invalid` timer.stop for its activity: the activity to preselect (or null)"
+                    },
+                    "code": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "`limit_reached` with status limit_reached (as the REST 402), else null"
+                    },
+                    "limit": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "the limit that stopped the change (status limit_reached)",
+                        "properties": {
+                            "kind": {
+                                "type": "string"
+                            },
+                            "limit": {
+                                "type": "integer"
+                            },
+                            "usage": {
+                                "type": "integer"
+                            },
+                            "plan": {
+                                "type": "string"
+                            },
+                            "workspace": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "billing_url": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "kind",
+                            "limit",
+                            "usage",
+                            "plan",
+                            "workspace",
+                            "billing_url"
+                        ]
                     }
                 },
                 "required": [
@@ -23851,7 +23899,9 @@
                     "message",
                     "errors",
                     "activities",
-                    "default_activity_id"
+                    "default_activity_id",
+                    "code",
+                    "limit"
                 ],
                 "title": "SyncResultResource"
             },

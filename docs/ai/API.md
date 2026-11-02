@@ -1047,6 +1047,7 @@ The web's `POST /offline/sync` keeps its own snapshots.
 | `waiting` | 424 | keep it: it refers to an offline create (`target.ref`) that hasn't arrived — send that one first |
 | `forbidden` | 403 | drop it: the user may not do this (e.g. a viewer) |
 | `invalid` | 422 | drop it: `errors` per field (also: a `request_id` reused for a different change → `errors.id`) |
+| `limit_reached` | 402 | keep it and tell the user: a plan limit stops it (`issue.create` once the workspace's content storage is used up — the same check as the REST create, in `Issues::create`; Codex review). `code: "limit_reached"` and `limit` {kind, limit, usage, plan, workspace, billing_url} as the REST 402; nothing was stored, so the same change applies once there is room |
 | `rate_limited` | 429 | keep it, send again in a minute (240 changes / min / user over all batches) |
 | `error` | 500 | keep it, send again later |
 
@@ -1823,7 +1824,7 @@ Registry: docs/ai/API.md#web-only-no-app-api-in-v1-brai-424 · Decided in: BRAI-
 - GET /api/v1/sync/changes?scopes=work,task_lists,my_day,captures&task_lists=mine&captures=inbox — full run (reset: true) without a cursor, then delta runs with the kept next_cursor: upsert / delete per record (work, task_list, task, capture, my_day) + project_ids (drop other projects) + task_lists (the kept lists)
 - task_lists=mine = the lists the user works in (pinned, open assigned tasks, recently worked in; all workspaces, ≤ 50); other lists later are additive (new ones in full, dropped ones as deletes); task_list records carry can.manage_items (hide "Add task" for viewers)
 - captures=inbox keeps only the inbox (a capture that leaves it comes as a delete); My Day is re-sent after a done change
-- POST /api/v1/sync {changes: [{request_id, type, target?, base?, data}]} — the outbox in batches of ≤ 50, one result per change (applied / conflict / deleted / gone / waiting / forbidden / invalid / rate_limited / error); request_id makes retries safe; entity = the record of record_type (work / task / task_list / capture / my_day / comment / timer / notification / unread_count): replace the cached copy
+- POST /api/v1/sync {changes: [{request_id, type, target?, base?, data}]} — the outbox in batches of ≤ 50, one result per change (applied / conflict / deleted / gone / waiting / forbidden / invalid / limit_reached / rate_limited / error); request_id makes retries safe; entity = the record of record_type (work / task / task_list / capture / my_day / comment / timer / notification / unread_count): replace the cached copy
 Types: list_task.create|update|reorder, issue.update|comment|create (create: + description Markdown, item_type_id), capture.create, my_day.add|remove, work.done — the web's offline mode (BRAI-82); timer.start {issue_id, description?, started_at} · timer.stop {timer_id, stopped_at, activity_id?} · timer.discard {timer_id} · notification.read {notification_id} · notifications.read_all {before} — device times clamped (start ≥ now−12 h, stop between start and now); a running timer → conflict with it; stop without a required activity → invalid + activities / default_activity_id; timer / notification no longer there → gone
 Scope: app · OpenAPI: docs/api/openapi.json#/Sync · Registry: docs/ai/API.md#sync
 Built in: BRAI-425, BRAI-441 (desktop) · Mobile scope: Full (My Day, My Work, kept task lists = mine, inbox captures)
@@ -1833,7 +1834,7 @@ Built in: BRAI-425, BRAI-441 (desktop) · Mobile scope: Full (My Day, My Work, k
 ```
 ## API (ready)
 - POST /api/v1/sync — updates carry base.fields (the values the device saw); a field changed by someone else meanwhile → status conflict (409) with conflicts {field: {base, mine, theirs}}, never overwritten; the other fields are applied (applied: [...]); entity = the server's record in the feed's shape (record_type), so "theirs" replaces the cached copy directly
-- Retries: the same request_id answers the stored result (replayed: true), so an interrupted batch is simply sent again; waiting (424) / rate_limited / error → keep and resend, deleted / gone / forbidden / invalid → drop and tell the user
+- Retries: the same request_id answers the stored result (replayed: true), so an interrupted batch is simply sent again; waiting (424) / limit_reached (402) / rate_limited / error → keep and resend, deleted / gone / forbidden / invalid → drop and tell the user
 - GET /api/v1/sync/changes — a full run (reset: true) rebuilds a broken cache; a cursor older than 30 days or one that can't be read starts one by itself (v1 cursors keep working)
 Scope: app · OpenAPI: docs/api/openapi.json#/Sync · Registry: docs/ai/API.md#sync
 Built in: BRAI-425, BRAI-441 (desktop) · Mobile scope: Full (keep mine = a new change with the server value as base; keep theirs = drop it)
