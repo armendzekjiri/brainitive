@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\AppApi\RealtimeTokenRequest;
 use App\Http\Resources\AppApi\RealtimeInfoResource;
 use App\Http\Resources\AppApi\RealtimeTokenResource;
+use App\Support\AppApi\AppTokens;
 use App\Support\Live\LiveConfig;
 use App\Support\Live\LiveToken;
 use Dedoc\Scramble\Attributes\Group;
@@ -40,12 +41,13 @@ class RealtimeController extends Controller
      * web: the board / issue / plan / ticket / doc must be one they can open, `user.<id>` only their own); the
      * others come back in `denied`, never as an error. Valid for `token_ttl` seconds to join; ask for a new one
      * on every reconnect or for new channels. The realtime server re-checks access every minute and sends
-     * `revoked` for a channel the user lost.
+     * `revoked` for a channel the user lost; it closes the socket with 4410 once this device is signed out.
      *
      * @throws NotFoundHttpException live updates are off on this server (404)
      */
     public function token(RealtimeTokenRequest $request): RealtimeTokenResource
     {
-        return new RealtimeTokenResource(LiveToken::grant($request->user(), $request->validated('channels')));
+        // bound to this device: once it is signed out, the realtime server closes its sockets (4410)
+        return new RealtimeTokenResource(LiveToken::grant($request->user(), $request->validated('channels'), AppTokens::currentDevice($request)?->id));
     }
 }

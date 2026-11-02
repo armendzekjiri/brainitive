@@ -656,3 +656,36 @@ Merged into `release/v1.49.0`: `feat/app-api-sync` (BRAI-425), `feat/app-api-rea
 - Deferred: closing an open socket when its device is revoked (the realtime server re-checks per user, KNOWLEDGE → phase 09
   realtime); docs in the offline feed (BRAI-204 uses the docs endpoints); the web's outbox doesn't use `work.done` yet;
   `.env.example` still shows `DB_CONNECTION=sqlite`.
+
+## Fix: revoked devices keep their live socket (`fix/live-revoked-devices`)
+Found in phase 09 (BRAI-426): a revoked app device (`AppTokens::revoke`: sign-out, remote sign-out, refresh reuse,
+password change, suspension, device limit) gets no new live token, but a socket it already opened kept its channels,
+because the realtime server re-checks access per user, not per device.
+- **Token:** `LiveToken::issue/grant` take an optional device id → claim `dev` (int) in tokens of `POST /api/v1/realtime/token`
+  (`AppTokens::currentDevice`). The web's `live.token` stays without `dev`. `realtime/src/live/token.js` accepts an optional
+  positive integer `dev`.
+- **Hub:** a socket remembers its device (`client.device`, fixed for the socket's life like the user; a re-`auth` with another
+  device / without one closes 4401). A revoked device is closed with **4410 "Device signed out"** and remembered for an hour,
+  so a still-valid live token of that device can't reconnect.
+- **Re-check (the guarantee, ≤ 60 s):** the minute re-check also sends each user's connected device ids
+  (`users.*.devices`, also for users with no subscriptions) and `LiveInternalController` answers `revoked_devices` (ids that
+  are gone, revoked or not that user's). Old realtime ↔ new Laravel and vice versa stay compatible (optional fields).
+- **Push (seconds, best effort):** `AppTokens::revoke` → `Live::deviceRevoked($id)` → after commit, deferred, one loopback
+  `POST /internal/live/devices/revoked {devices: [ids]}` with the publish key and the publish endpoint's guards. When it fails
+  the re-check still closes the socket.
+- Docs: API.md → Realtime (close code 4410 = signed out on this device: drop tokens, show sign-in), ARCHITECTURE /
+  KNOWLEDGE (live channels). No migration, no API shape change (OpenAPI unchanged).
+- Tests: `tests/Feature/AppApi/RealtimeTest.php` (dev claim; web token without), `tests/Feature/Live/LiveChannelsTest.php` or
+  a new internal-access test (revoked_devices), `LivePublishTest` (push), `realtime/test/live.test.js` (revoked device
+  closed by push and by re-check; web socket + the same user's other device untouched; reconnect refused).
+
+### Fix: revoked devices — result
+Built as planned: `dev` claim in App API live tokens, close code **4410 "Device signed out"**, push on revoke
+(`POST /internal/live/devices/revoked`) + the minute re-check (`users.*.devices` → `revoked_devices`) as the guarantee. No
+migration; API shapes unchanged (OpenAPI: only the token endpoint's description). Tests: `RealtimeTest` (dev claim, push on
+remote sign-out / sign-out everywhere, re-check answer), `LiveChannelsTest` (web tokens without `dev`, validation),
+`LivePublishTest` (push after commit), `realtime/test/live.test.js` (push + re-check close 4410, web socket and the user's other
+devices untouched, reconnect refused, device fixed per socket), e2e `app-api-realtime` (logout closes the socket with 4410).
+- **Deploy:** restart the realtime service on prod (`127.0.0.1:6201`) and dev (`:6202`) after this deploys — `realtime/` changed
+  (KNOWLEDGE: restart after every deploy that touches it). Until then the old server ignores `dev` and answers 404 to the push
+  (reported, events keep flowing — a 404 there doesn't pause publishing), i.e. today's per-user behaviour; nothing breaks.

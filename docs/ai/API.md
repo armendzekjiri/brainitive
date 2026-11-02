@@ -1009,7 +1009,12 @@ tabs get (`LiveToken::grant`, shared with the web's `POST /live/token`). Access 
 - **Server → client:** `{type: "event", channel, event, payload}` · `{type: "presence", channel, members: [{id, name, avatar}]}`
   (with `presence: true`) · `{type: "signal", channel, name, data, from: {id, name}}` · `{type: "revoked", channel}` ·
   `{type: "error", code: forbidden|too_many_subscriptions|not_subscribed|invalid_signal|rate_limited, channel?}`. Close codes:
-  4400 bad request, 4401 bad / expired token, 4403 access check failed, 4429 too many messages / sockets, 1001 server restart.
+  4400 bad request, 4401 bad / expired token (or a token of another device on the same socket), 4403 access check failed,
+  **4410 device signed out**, 4429 too many messages / sockets, 1001 server restart.
+- **4410 = this device was signed out** (sign-out, "revoke device" in Profile / another device, refresh-token reuse, password
+  change, suspension): live tokens of the App API carry the device, and the realtime server closes its sockets within seconds
+  (at most the minute re-check). Don't reconnect: drop the stored tokens and show sign-in, as when `POST /auth/refresh` answers
+  401 `invalid_grant`. Its remaining live tokens are refused with 4410 as well. The user's other devices and web tabs stay connected.
 - **Client → server signals:** `{type: "signal", channel, name, data}` (subscribed channels, ≤ 1 KB, ~4/s): today only `typing`
   on `item.{id}` — `{}` while typing (≤ every 2 s), `{stop: true}` on send / cancel; receivers expire it after 4.5 s.
 - **Limits:** 50 subscriptions per socket, 20 sockets per user, 8 messages/s (burst 40).

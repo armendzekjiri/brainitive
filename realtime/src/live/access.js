@@ -9,8 +9,10 @@ export function createAccessClient({ appUrl, appHost = '', internalKey, fetchImp
     const send = createAppFetch({ host: appHost, fetchImpl });
 
     /**
-     * @param {{id: number, channels: string[]}[]} users
-     * @returns {Promise<Record<string, string[]>>} allowed channels per user id
+     * @param {{id: number, channels: string[], devices?: number[]}[]} users `devices`: the app devices of the
+     *   user's sockets (tokens with `dev`)
+     * @returns {Promise<{users: Record<string, string[]>, revokedDevices: number[]}>} allowed channels per user id;
+     *   the asked devices that are revoked / gone (an older Brainitive answers none)
      */
     return async function access(users) {
         let response;
@@ -26,6 +28,9 @@ export function createAccessClient({ appUrl, appHost = '', internalKey, fetchImp
         }
         if (!response.ok) throw new Error(`${target} answered ${response.status}`);
         const data = await response.json();
-        return data?.users && typeof data.users === 'object' ? data.users : {};
+        return {
+            users: data?.users && typeof data.users === 'object' ? data.users : {},
+            revokedDevices: Array.isArray(data?.revoked_devices) ? data.revoked_devices.filter((id) => Number.isInteger(id) && id > 0) : [],
+        };
     };
 }

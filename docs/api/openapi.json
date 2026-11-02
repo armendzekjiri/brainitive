@@ -12817,7 +12817,7 @@
         "/realtime/token": {
             "post": {
                 "operationId": "app.v1.realtime.token",
-                "description": "`{channels: [\"user.12\", \"board.4\", \"item.88\"]}` (\u2264 50) \u2192 a token for the ones the user may join (as on the\nweb: the board / issue / plan / ticket / doc must be one they can open, `user.<id>` only their own); the\nothers come back in `denied`, never as an error. Valid for `token_ttl` seconds to join; ask for a new one\non every reconnect or for new channels. The realtime server re-checks access every minute and sends\n`revoked` for a channel the user lost.",
+                "description": "`{channels: [\"user.12\", \"board.4\", \"item.88\"]}` (\u2264 50) \u2192 a token for the ones the user may join (as on the\nweb: the board / issue / plan / ticket / doc must be one they can open, `user.<id>` only their own); the\nothers come back in `denied`, never as an error. Valid for `token_ttl` seconds to join; ask for a new one\non every reconnect or for new channels. The realtime server re-checks access every minute and sends\n`revoked` for a channel the user lost; it closes the socket with 4410 once this device is signed out.",
                 "summary": "A token to join live channels",
                 "tags": [
                     "Realtime"

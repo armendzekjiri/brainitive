@@ -78,6 +78,7 @@ class LiveChannelsTest extends TestCase
         $this->assertSame($this->viewer->id, $payload['sub']);
         $this->assertSame($channels, $payload['ch']);
         $this->assertSame($this->viewer->name, $payload['name']);
+        $this->assertArrayNotHasKey('dev', $payload, 'web tokens belong to no app device');
         $this->assertSame($payload['exp'], $response->json('expires_at'));
         $this->assertEqualsWithDelta(time() + 120, $payload['exp'], 5);
     }
@@ -282,6 +283,8 @@ class LiveChannelsTest extends TestCase
         $url = route('internal.collab.live.access');
         $this->postJson($url, ['users' => [['id' => 'x', 'channels' => []]]], $this->internal())->assertUnprocessable();
         $this->postJson($url, ['users' => [['id' => 1, 'channels' => array_fill(0, 101, 'user.1')]]], $this->internal())->assertUnprocessable();
-        $this->postJson($url, ['users' => []], $this->internal())->assertOk()->assertExactJson(['users' => []]);
+        $this->postJson($url, ['users' => []], $this->internal())->assertOk()->assertExactJson(['users' => [], 'revoked_devices' => []]);
+        $this->postJson($url, ['users' => [['id' => 1, 'channels' => [], 'devices' => ['x']]]], $this->internal())->assertUnprocessable();
+        $this->postJson($url, ['users' => [['id' => 1, 'channels' => [], 'devices' => range(1, 21)]]], $this->internal())->assertUnprocessable();
     }
 }

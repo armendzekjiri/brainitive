@@ -20,8 +20,9 @@ export const MAX_TOKEN_CHANNELS = 50;
 const base64url = (buffer) => Buffer.from(buffer).toString('base64url');
 
 /**
- * The payload of a valid, unexpired live token, else null.
- * @returns {{v: 1, typ: 'live', sub: number, name: string, avatar: string | null, ch: string[], iat: number, exp: number} | null}
+ * The payload of a valid, unexpired live token, else null. `dev`: the app device (App API tokens only;
+ * the web's tokens have none) — a revoked device's sockets are closed.
+ * @returns {{v: 1, typ: 'live', sub: number, dev?: number, name: string, avatar: string | null, ch: string[], iat: number, exp: number} | null}
  */
 export function verifyLiveToken(token, key, now = Math.floor(Date.now() / 1000)) {
     if (typeof token !== 'string' || token.length > 8192) return null;
@@ -40,6 +41,7 @@ export function verifyLiveToken(token, key, now = Math.floor(Date.now() / 1000))
         return null;
     }
     if (!data || data.v !== 1 || data.typ !== 'live' || !Number.isInteger(data.sub) || data.sub < 1
+        || (data.dev !== undefined && (!Number.isInteger(data.dev) || data.dev < 1))
         || typeof data.name !== 'string' || !(data.avatar === null || typeof data.avatar === 'string')
         || !Array.isArray(data.ch) || data.ch.length > MAX_TOKEN_CHANNELS
         || !data.ch.every((channel) => typeof channel === 'string' && CHANNEL.test(channel))
