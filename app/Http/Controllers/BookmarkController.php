@@ -343,14 +343,19 @@ class BookmarkController extends Controller
 
         $bookmark->load(['items' => fn ($q) => $q->orderBy('position'), 'creator:id,name']);
 
-        foreach ($bookmark->items->where('type', 'file') as $item) {
-            if ($item->file_path) {
-                $item->file_url = asset('storage/'.$item->file_path);
-            }
-        }
+        // An explicit whitelist (Codex web review A): no ids of people, settings or internal metadata
+        $items = $bookmark->items->map(fn (BookmarkItem $item) => [
+            ...$item->only(['id', 'type', 'title', 'url', 'content', 'is_completed', 'position']),
+            'metadata' => array_intersect_key((array) $item->metadata, array_flip(['title', 'description', 'favicon_url', 'image'])),
+            'file_url' => $item->type === 'file' && $item->file_path ? asset('storage/'.$item->file_path) : null,
+        ])->values();
 
         return Inertia::render('Bookmarks/ShowPublic', [
-            'bookmark' => $bookmark,
+            'bookmark' => [
+                ...$bookmark->only(['uuid', 'name', 'description', 'icon', 'icon_display', 'visibility']),
+                'creator' => $bookmark->creator ? ['name' => $bookmark->creator->name] : null,
+                'items' => $items,
+            ],
         ]);
     }
 }

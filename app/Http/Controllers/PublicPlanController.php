@@ -17,11 +17,7 @@ class PublicPlanController extends Controller
     {
         $plan = Plan::where('share_token', $token)->with('project:id,name,color,workspace_id', 'project.workspace')->firstOrFail();
         $settings = PlanDocument::normalizeSettings($plan->settings);
-        $data = $plan->data ?? Plan::emptyData();
-
-        // Columns hidden in the plan (notes, who …) are not in the shared page at all — not just unshown
-        $hidden = array_keys(array_filter(['who' => ! $settings['columns']['who'], 'notes' => ! $settings['columns']['notes']]));
-        $data['rows'] = array_map(fn (array $row) => array_diff_key($row, array_flip($hidden)), $data['rows'] ?? []);
+        $data = PlanDocument::publicData($plan->data ?? Plan::emptyData(), $settings);
 
         return Inertia::render('Plans/Public', [
             'plan' => [
