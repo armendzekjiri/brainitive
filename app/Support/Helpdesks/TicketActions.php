@@ -13,6 +13,8 @@ use App\Notifications\TicketStatusChangedNotification;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Helpdesks\Mail\TicketMailer;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Notifications\Notification;
 
 /**
  * An agent's changes to a ticket (helpdesk, the web's TicketController) shared with the App API (BRAI-420):
@@ -38,7 +40,7 @@ final class TicketActions
         }
 
         // Notify other agents watching the ticket
-        foreach ($ticket->watchers()->where('user_id', '!=', $agent->id)->get() as $watcher) {
+        foreach (self::watchersWhoCanView($ticket, $agent) as $watcher) {
             $watcher->notify(new TicketReplyNotification($ticket, $reply, $agent));
         }
 
@@ -60,7 +62,7 @@ final class TicketActions
 
         // BRAI-103: watchers (except whoever moved it) hear about a status change
         if ($oldColumn?->id !== $column->id) {
-            foreach ($ticket->watchers()->where('users.id', '!=', $agent->id)->get() as $watcher) {
+            foreach (self::watchersWhoCanView($ticket, $agent) as $watcher) {
                 $watcher->notify(new TicketStatusChangedNotification($ticket, $agent, $oldColumn?->name, $column->name));
             }
         }
@@ -96,7 +98,27 @@ final class TicketActions
 
         $newAssigneeId = $ticket->assigned_to;
         if ($newAssigneeId && $newAssigneeId !== $oldAssigneeId && $newAssigneeId !== $agent->id) {
-            User::find($newAssigneeId)?->notify(new TicketAssignedNotification($ticket, $agent));
+            self::notifyIfVisible(User::find($newAssigneeId), $ticket, new TicketAssignedNotification($ticket, $agent));
+        }
+    }
+
+    /**
+     * Watchers who can still open the ticket (Codex web review I): someone who lost access to the project hears
+     * nothing more about it — its subject and key stay inside.
+     *
+     * @return Collection<int, User>
+     */
+    public static function watchersWhoCanView(Ticket $ticket, ?User $except = null): Collection
+    {
+        return $ticket->watchers()->when($except, fn ($q) => $q->where('users.id', '!=', $except->id))->get()
+            ->filter(fn (User $watcher) => $watcher->can('view', $ticket))->values();
+    }
+
+    /** Notify one person about a ticket only when they can open it (Codex web review I). */
+    public static function notifyIfVisible(?User $user, Ticket $ticket, Notification $notification): void
+    {
+        if ($user && $user->can('view', $ticket)) {
+            $user->notify($notification);
         }
     }
 }

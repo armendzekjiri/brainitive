@@ -53,8 +53,8 @@ class TicketController extends Controller
             'contact_name' => [$nameRequired ? 'required' : 'nullable', 'string', 'max:255'],
             'column_id' => ['required', Rule::exists('helpdesk_columns', 'id')->where('helpdesk_id', $helpdesk->id)],
             'priority_id' => 'nullable|exists:item_priorities,id',
-            // Only people in this workspace — any user id would email a stranger the ticket.
-            'assigned_to' => ['nullable', Rule::exists('workspace_user', 'user_id')->where('workspace_id', $workspace->id)],
+            // Only people who can open the ticket (Codex web review I) — anyone else would get its subject and key.
+            'assigned_to' => ['nullable', 'integer', new ProjectMember($project)],
             'notify_contact' => 'nullable|boolean',
         ];
         $attributes = [];
@@ -109,7 +109,7 @@ class TicketController extends Controller
         });
 
         if ($ticket->assigned_to && $ticket->assigned_to !== $request->user()->id) {
-            User::find($ticket->assigned_to)?->notify(new TicketAssignedNotification($ticket, $request->user()));
+            TicketActions::notifyIfVisible(User::find($ticket->assigned_to), $ticket, new TicketAssignedNotification($ticket, $request->user()));
         }
 
         DomainEvents::emit($workspace, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'agent'], subject: $ticket); // webhooks (BRAI-104) + automation rules (BRAI-63)
@@ -250,7 +250,7 @@ class TicketController extends Controller
             'subject' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
             'priority_id' => 'nullable|exists:item_priorities,id',
-            'assigned_to' => ['nullable', Rule::exists('workspace_user', 'user_id')->where('workspace_id', $workspace->id)],
+            'assigned_to' => ['nullable', 'integer', new ProjectMember($project)], // Codex web review I
         ]);
 
         TicketActions::update($ticket, $request->user(), $validated);
@@ -347,8 +347,7 @@ class TicketController extends Controller
         }
 
         // Notify agents watching the ticket
-        $watchers = $ticket->watchers()->get();
-        foreach ($watchers as $watcher) {
+        foreach (TicketActions::watchersWhoCanView($ticket) as $watcher) {
             $watcher->notify(new TicketReplyNotification($ticket, $reply, $contact));
         }
 

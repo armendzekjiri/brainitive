@@ -16,6 +16,7 @@ use App\Support\Entitlements\LimitReached;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Helpdesks\Mail\TicketMailer;
+use App\Support\Helpdesks\TicketActions;
 use App\Support\Uploads;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
@@ -246,7 +247,7 @@ final class InboundMail
         $stored = [];
 
         self::afterCommit(function () use ($ticket, $reply) {
-            foreach ($ticket->watchers()->get() as $watcher) {
+            foreach (TicketActions::watchersWhoCanView($ticket) as $watcher) {
                 $watcher->notify(new TicketReplyNotification($ticket, $reply, $reply->contact));
             }
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\AppApi;
 
+use App\Rules\ProjectMember;
 use Illuminate\Validation\Rule;
 
 /**
@@ -28,8 +29,8 @@ class UpdateTicketRequest extends TicketRequest
             'resolution_message' => ['sometimes', 'nullable', 'string', 'max:20000'],
             // into a done column: email the customer that it's resolved
             'notify_contact' => ['sometimes', 'boolean'],
-            // a workspace member, or null
-            'assignee_id' => ['sometimes', 'nullable', 'integer', Rule::exists('workspace_user', 'user_id')->where('workspace_id', $workspaceId)],
+            // someone who can open the ticket's project (a member or a workspace admin), or null
+            'assignee_id' => ['sometimes', 'nullable', 'integer', ...($ticket ? [new ProjectMember($ticket->helpdesk->project)] : [])],
             // a priority of the project (GET /helpdesks/{id} → priorities), or null
             'priority_id' => ['sometimes', 'nullable', 'integer', Rule::exists('item_priorities', 'id')->where(fn ($q) => $q->whereNull('project_id')->orWhere('project_id', $projectId))],
             // the time of the ticket the app last read (updated_at): 409 when it changed since
