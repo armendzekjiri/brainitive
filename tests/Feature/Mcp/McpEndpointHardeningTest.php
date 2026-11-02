@@ -54,17 +54,19 @@ class McpEndpointHardeningTest extends TestCase
     }
 
     /**
-     * Codex review, finding 13 (verified, not enforced): a Passport token without scopes reaches MCP. That is the CLI /
-     * Copilot token (`brainitive-cli`, issued scope-less by /api/cli/login and `mcp:token`, documented for MCP), so
-     * requiring `mcp:use` would break it. Browser-extension tokens (`capture`) stay out (RejectCaptureTokens).
+     * Codex review, finding 13 (enforced since v1.49.0, McpScopeTest has the details): a scope-less token from
+     * Passport::actingAs isn't the CLI's legacy token, so it no longer reaches MCP; `mcp:use` does, `capture` doesn't.
      */
-    public function test_scope_less_cli_tokens_reach_mcp_and_capture_tokens_do_not(): void
+    public function test_mcp_needs_the_mcp_scope_and_capture_tokens_stay_out(): void
     {
         $this->usePassportKeys();
         $user = User::factory()->create();
         $list = ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'];
 
         Passport::actingAs($user);
+        $this->postJson('/mcp', $list)->assertForbidden();
+
+        Passport::actingAs($user, ['mcp:use']);
         $this->postJson('/mcp', $list)->assertOk();
 
         Passport::actingAs($user, ['capture']);

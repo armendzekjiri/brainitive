@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureMcpScope;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\RejectCaptureTokens;
 use App\Mcp\Servers\BrainitiveServer;
@@ -30,4 +31,4 @@ Mcp::oauthRoutes();
 // an egress IP (ChatGPT, Claude) don't share one budget. No request logging before auth (Codex review 9 / 12: the
 // temporary [MCP-DEBUG] logger wrote caller-controlled JSON to the log for unauthenticated requests).
 Mcp::web('/mcp', BrainitiveServer::class)
-    ->middleware(['auth:api', 'throttle:120,1,mcp', EnsureUserIsNotSuspended::class, RejectCaptureTokens::class]);
+    ->middleware(['auth:api', 'throttle:120,1,mcp', EnsureUserIsNotSuspended::class, RejectCaptureTokens::class, EnsureMcpScope::class]);
