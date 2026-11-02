@@ -145,7 +145,7 @@ jobs:
     needs: frontend
     if: ${{ !cancelled() && needs.frontend.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45 # the journey count grew past 30 min (v1.49 security journeys)
     services:
       # CI-only throwaway database (credentials exist only inside the runner)
       postgres:
