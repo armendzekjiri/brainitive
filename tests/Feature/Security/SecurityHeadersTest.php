@@ -38,6 +38,20 @@ class SecurityHeadersTest extends TestCase
         $this->assertNotSame($policy, $again);
     }
 
+    public function test_the_preload_link_header_carries_no_nonce(): void
+    {
+        // the real Vite manifest (public/build): ~140 preloads on a board page, a nonce on each grew
+        // the Link header by ~7 KB (Node's 16 KB header limit, nginx fastcgi buffers)
+        $this->withVite();
+        $response = $this->get(route('login'))->assertOk();
+
+        $link = (string) $response->headers->get('Link');
+        $this->assertStringContainsString('rel="modulepreload"', $link);
+        $this->assertStringNotContainsString('nonce', $link);
+        // the tags in the page keep it
+        $this->assertMatchesRegularExpression('/<link rel="modulepreload"[^>]* nonce="[A-Za-z0-9]{40}"/', $response->getContent());
+    }
+
     public function test_json_responses_get_no_csp_and_the_mode_can_be_switched_off(): void
     {
         // an Inertia visit answers JSON: no page, no policy
