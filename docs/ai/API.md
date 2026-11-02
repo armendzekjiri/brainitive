@@ -26,6 +26,7 @@ logic underneath (Support services, policies) is shared.
 | Auth | `Authorization: Bearer bra_…` (access, 15 min). Refresh `brr_…` (60 days, single use). Tokens never in URLs. |
 | Responses | Wrapped: `{data: {...}}` (API Resources' default); lists `{data: [...], next_cursor}`. **DELETE → 204** No Content when it removes a resource; removing a *part* of one (e.g. `DELETE /me/avatar`) answers 200 with the updated parent instead. Only unwrapped exception: the OAuth token responses of `POST /auth/exchange` and `POST /auth/refresh` are unwrapped (`{token_type, access_token, expires_in, refresh_token, refresh_expires_in, device}`). Resources list their fields explicitly, never a model's `toArray()`. |
 | Errors | `{"message": "…", "code": "…", "errors"?: {field: [..]}}` — 400 `bad_request` / `invalid_grant`, 401 `unauthenticated`, 402 `limit_reached` (+ `limit` object, see Invitations), 403 `forbidden`, 404 `not_found`, 405 `method_not_allowed`, 409 `conflict`, 410 `gone`, 422 `validation_failed`, 429 `rate_limited`, 500 `server_error`. 404 instead of 403 when the user must not learn that something exists. Documented once for all endpoints (`App\Support\AppApi\OpenApi`); a 402 needs `@throws LimitReached` on the controller method. |
+| Polling | `GET /me/today`, `/me/my-day`, `/me/timer` and `/notifications/unread-count` answer an `ETag` (hash of the answer + the user): send it as `If-None-Match` → 304 without body. Shared `AnswersWithETag` trait; a new polled endpoint uses it. |
 | Dates | ISO-8601 UTC (`2026-11-01T09:16:04Z`). |
 | Lists | Cursor pagination `?cursor=&limit=` (default 50, max 100) → `{data: [...], next_cursor}`; `updated_since` for sync. Server side: `ListRequest` (rules + `limit()` / `cursor()` / `updatedSince()`) and a `CursorCollection` subclass per list. An unknown / stale cursor starts again at the first page. |
 | Writes | Creates take an optional `request_id` (uuid): a retry with the same id and input answers **200** with what the first call created (201 the first time); the same id with other input → 409 `conflict` (`Concerns\CreatesOnce`, stored 7 days like the MCP's writes). Updates carry `revision` / `updated_at` → 409 on conflict where a resource has one. |
@@ -313,7 +314,7 @@ name, url}]}], recent: [{type, id, title, subtitle, url}]}}`.
 ### Search
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
-| `GET /api/v1/search?q=&type=&workspace=&project[]=&status=&assignee=&updated=&limit=&cursor=` | app + verified | Global hotkey quick switcher: everything the user can open, ranked, typo tolerant — the same `SearchService` (ranking + visibility) as the web search page, the command palette, the MCP `search` tool and `ext/v1/search`. `workspace` not the user's → 404 | Full | BRAI-184, BRAI-219 | ready (v1.49.0, BRAI-392) |
+| `GET /api/v1/search?q=&type=&workspace=&project[]=&status=&assignee=&updated=&limit=&cursor=` | app + verified | Global hotkey quick switcher: everything the user can open, ranked, typo tolerant — the same `SearchService` (ranking + visibility) as the web search page, the command palette, the MCP `search` tool and `ext/v1/search`. `workspace` not the user's → 404. **No `q` (missing / empty) = "recent" mode (BRAI-440):** the newest issues, docs, tickets, plans, tasks, snippets and bookmarks the user can open (same visibility as a search: `SearchViewer`, other people's drafts and captures stay hidden), newest `updated_at` first, ≤ 12 (`limit` can lower it), same result shape (no `snippet`; `counts` zero, `places` empty, `next_cursor` null); `type` / `workspace` / `project` / `status` / `assignee` / `updated` filters still apply. Not "opened" tracking: the apps keep their own opened list and resolve it with `/me/navigation` | Full | BRAI-184, BRAI-219, BRAI-440 | ready (v1.49.0, BRAI-392, BRAI-440) |
 
 → `{data: [{id: "type:id", type, group, label, source_id, container_id, key, title, snippet,
 snippet_html, url, external_url, context, project: {id, name}, workspace, status, is_draft,
@@ -335,7 +336,7 @@ bookmarks, captures, files}, fuzzy, places: [{type, id, title, subtitle, url, wo
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
 | `GET /api/v1/notifications?filter=all\|unread\|mentions\|assigned&archived=&cursor=&limit=` | app + verified | Tray inbox / native notifications: the web's inbox (bell), newest first, cursor-paginated (no `updated_since`: start again from the first page) | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
-| `GET /api/v1/notifications/unread-count` | app + verified | Dock / tray badge → `{data: {unread_count}}` | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
+| `GET /api/v1/notifications/unread-count` | app + verified | Dock / tray badge → `{data: {unread_count}}`. Answers an `ETag`; send it as `If-None-Match` → 304 without body while the count is unchanged (tag is per user; BRAI-440) | Full | BRAI-183, BRAI-440 | ready (v1.49.0, BRAI-393, BRAI-440) |
 | `POST /api/v1/notifications/{id}/read` | app + verified | Mark one read → `{data: {unread_count}}`. Not the user's / unknown → 404 | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
 | `POST /api/v1/notifications/read-all` | app + verified | Mark all inbox rows read → `{data: {unread_count: 0}}` | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
 | `POST /api/v1/notifications/{id}/archive` | app + verified | Archive one (leaves the inbox, counts as read) → `{data: {unread_count}}`. Not the user's → 404 | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
@@ -374,7 +375,7 @@ is signed in there after the app's sign-in), or in the webview via `POST /auth/w
 |---|---|---|---|---|---|
 | `GET /api/v1/me/work?due=overdue\|today\|upcoming&status=open\|done\|all&updated_since=&cursor=&limit=` | app + verified | Tray "My Work", TV wallboard: issues and list tasks assigned to the user in every project they can open, soonest due first (no due date last), cursor-paginated. `due` takes several, comma separated (`overdue,today`); dates are the user's local day | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
 | `PATCH /api/v1/me/work/{id}` | app + verified | The circle: `{done: bool}` → `{data: work item}`. Issue → its board's first done column (reopen → first open column), watchers notified; task → status (a repeating task with a due date moves to its next date and stays open). 403 without edit rights, 404 not visible / malformed id, 422 board without a done column | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
-| `GET /api/v1/me/my-day` | app + verified | Tray "My Day", TV "Today" panel: today's plan in the user's order → `{data: {date, items: [work item], carry_over_count}}` | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
+| `GET /api/v1/me/my-day` | app + verified | Tray "My Day", TV "Today" panel: today's plan in the user's order → `{data: {date, items: [work item], carry_over_count}}`. `ETag` / `If-None-Match` → 304 while the plan (and what it shows) is unchanged; per user (BRAI-440) | Full | BRAI-215, BRAI-440 | ready (v1.49.0, BRAI-396, BRAI-440) |
 | `POST /api/v1/me/my-day/items` | app + verified | `{id: "issue:12"}` → plan it for today (at the end; again = no-op) → the updated My Day. Work the user can't open → 422 `id` | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
 | `PATCH /api/v1/me/my-day/items/{id}` | app + verified | `{done: bool}`, as `PATCH /me/work/{id}` → the updated My Day | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
 | `DELETE /api/v1/me/my-day/items/{id}` | app + verified | Take it off today's plan (the work is untouched) → 200 the updated My Day (a part of the plan, not a resource) | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
@@ -555,9 +556,9 @@ page_description, position, created_at, updated_at}`.
 ### Time tracking
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
-| `GET /api/v1/me/timer` | app + verified | Tray: running time → `{data: {running, timer: {id, started_at, elapsed_seconds, elapsed_minutes, issue: {id, work_id, key, title, url, workspace}\|null}\|null, activities, activity_required, default_activity_id}}` | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
+| `GET /api/v1/me/timer` | app + verified | Tray: running time → `{data: {running, timer: {id, started_at, elapsed_seconds, elapsed_minutes, issue: {id, work_id, key, title, url, workspace}\|null}\|null, activities, activity_required, default_activity_id}}`. `ETag` / `If-None-Match` → 304 while nothing changed; per user. `elapsed_seconds` / `elapsed_minutes` tick by themselves and are **not** part of the tag: after a 304 count from `timer.started_at` (BRAI-440) | Full | BRAI-241, BRAI-440 | ready (v1.49.0, BRAI-400, BRAI-440) |
 | `POST /api/v1/me/timer/start` | app + verified | `{id: "issue:<id>"}` → 201 timer state. The web's timer (one per user): another one running → 409 `conflict`; no edit right on the issue → 403; not visible → 404; `task:<id>` → 422 (list tasks have no work log) | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
-| `POST /api/v1/me/timer/stop` | app + verified | `{timer_id, time? (default: elapsed), note?, activity_id?, spent_on?}` → `{data: {result: logged\|already_stopped\|no_access, work_log\|null}}`. Logs once (a retry → `already_stopped`); activity missing where required → 422, the timer keeps running | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
+| `POST /api/v1/me/timer/stop` | app + verified | `{timer_id, time? (default: elapsed), note?, activity_id?, spent_on?}` → `{data: {result: logged\|already_stopped\|no_access, work_log\|null}}`. Logs once (a retry → `already_stopped`); activity missing / unusable where required → 422 `activity_id`, the timer keeps running; that 422 also carries top-level `activities: [{id, name}]` (what can be picked, no rates) and `default_activity_id` (or null), so the app can show a picker and retry with `activity_id` (BRAI-440) | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
 | `POST /api/v1/me/timer/discard` | app + verified | `{timer_id}` → stop without logging → timer state | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
 | `GET /api/v1/work-logs?workspace=&from=&to=` | app + verified | The user's own work logs, newest day first, cursor-paginated, `updated_since`; `workspace` (slug) not theirs → 404 | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
 | `POST /api/v1/work-logs` | app + verified, 120/min | `{project_id, issue_id?, spent_on (Y-m-d), time ("1h 30m", "45m", "90"), activity_id?, note?, billable? (workspace admins), request_id?}` → 201 `{data: work log}` — the web timesheet's rules (422 `project_id` / `issue_id` / `activity_id` / `spent_on`) | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
@@ -1115,7 +1116,7 @@ Built in: BRAI-391 (desktop) · Mobile scope: Full (recent list kept on the devi
 **BRAI-184** (search) — also **BRAI-219**
 ```
 ## API (ready)
-- GET /api/v1/search?q=&type=&workspace=&project[]=&status=&assignee=&updated=&limit=&cursor= — global search (the web's ranking + visibility), page cursor, counts per group, places by name
+- GET /api/v1/search?q=&type=&workspace=&project[]=&status=&assignee=&updated=&limit=&cursor= — global search (the web's ranking + visibility), page cursor, counts per group, places by name; without `q`: the user's recent content (≤ 12)
 Scope: app · OpenAPI: docs/api/openapi.json#/Search · Registry: docs/ai/API.md#search
 Built in: BRAI-392 (desktop) · Mobile scope: Full
 ```
@@ -1124,7 +1125,7 @@ Built in: BRAI-392 (desktop) · Mobile scope: Full
 ```
 ## API (ready)
 - GET /api/v1/notifications?filter=all|unread|mentions|assigned&archived= — the inbox, newest first, cursor-paginated
-- GET /api/v1/notifications/unread-count — badge count
+- GET /api/v1/notifications/unread-count — badge count (ETag / 304)
 - POST /api/v1/notifications/{id}/read · POST /api/v1/notifications/read-all · POST /api/v1/notifications/{id}/archive — answer the new unread count
 - GET|PUT /api/v1/me/notification-preferences — per category: in_app / push / email (partial update)
 Scope: app · OpenAPI: docs/api/openapi.json#/Notifications · Registry: docs/ai/API.md#notifications
@@ -1145,7 +1146,7 @@ Built in: BRAI-394 (desktop) · Mobile scope: View + revoke
 ## API (ready)
 - GET /api/v1/me/work?due=overdue|today|upcoming&status=open|done|all&updated_since= — assigned issues + tasks, soonest due first, cursor-paginated
 - PATCH /api/v1/me/work/{id} — {done: true|false}: complete / reopen (issue:<id> or task:<id>), as the web's circle
-- GET /api/v1/me/my-day — today's plan in the user's order + carry_over_count
+- GET /api/v1/me/my-day — today's plan in the user's order + carry_over_count (ETag → 304)
 - POST /api/v1/me/my-day/items {id} · PATCH /api/v1/me/my-day/items/{id} {done} · DELETE /api/v1/me/my-day/items/{id} · POST /api/v1/me/my-day/carry-over — answer the updated My Day
 - GET /api/v1/me/today — work due today / overdue + My Day + today's events in one call (ETag → 304), for a "Today" screen / widget
 Scope: app · OpenAPI: docs/api/openapi.json#/My Work · Registry: docs/ai/API.md#my-work
@@ -1266,8 +1267,8 @@ Built in: BRAI-399 (desktop) · Mobile scope: Full (collaborators, image icons, 
 **BRAI-241** (timer, log work, personal timesheets)
 ```
 ## API (ready)
-- GET /api/v1/me/timer — the running timer (issue, elapsed) + the activities for the stop dialog
-- POST /api/v1/me/timer/start {id: "issue:<id>"} (409 when one runs) · POST /api/v1/me/timer/stop {timer_id, time?, activity_id?, note?, spent_on?} · POST /api/v1/me/timer/discard {timer_id}
+- GET /api/v1/me/timer — the running timer (issue, elapsed) + the activities for the stop dialog (ETag → 304; elapsed ticks outside the tag)
+- POST /api/v1/me/timer/start {id: "issue:<id>"} (409 when one runs) · POST /api/v1/me/timer/stop {timer_id, time?, activity_id?, note?, spent_on?} (activity missing → 422 with `activities: [{id, name}]` to pick from) · POST /api/v1/me/timer/discard {timer_id}
 - GET /api/v1/work-logs?workspace=&from=&to= — own work logs, newest first, cursor-paginated
 - POST /api/v1/work-logs {project_id, issue_id?, spent_on, time, activity_id?, note?} · GET|PATCH|DELETE /api/v1/work-logs/{id} (billed = locked, read-only)
 - GET /api/v1/me/timesheet?workspace={slug}&week=Y-m-d — the week: entries, minutes per day, loggable projects, activities

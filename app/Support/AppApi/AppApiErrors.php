@@ -46,7 +46,11 @@ final class AppApiErrors
         }
 
         if ($e instanceof ValidationException) {
-            return self::json(422, $e->getMessage(), $e->errors());
+            $response = self::json(422, $e->getMessage(), $e->errors());
+
+            return $e instanceof ValidationWithExtras && $e->extras !== []
+                ? response()->json([...$response->getData(true), ...$e->extras], 422)
+                : $response;
         }
 
         if ($e instanceof AuthenticationException) {

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\AppApi;
 
+use App\Http\Controllers\AppApi\Concerns\AnswersWithETag;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AppApi\TodayResource;
 use App\Support\Calendar\AgendaEvent;
@@ -22,6 +23,8 @@ use Illuminate\Http\Response;
 #[Group('My Work', weight: 130)]
 class TodayController extends Controller
 {
+    use AnswersWithETag;
+
     /** At most this many work items (the wallboard can't show more). */
     public const WORK_LIMIT = 100;
 
@@ -50,14 +53,6 @@ class TodayController extends Controller
             'errors' => $agenda['errors'],
         ]))->response($request);
 
-        $etag = '"'.sha1((string) $response->getContent()).'"';
-        $response->headers->set('ETag', $etag);
-        $response->headers->set('Cache-Control', 'private, no-cache');
-
-        if (in_array($etag, $request->getETags(), true)) {
-            return response()->noContent(304)->setEtag(trim($etag, '"'))->header('Cache-Control', 'private, no-cache');
-        }
-
-        return $response;
+        return $this->withETag($request, $response);
     }
 }
