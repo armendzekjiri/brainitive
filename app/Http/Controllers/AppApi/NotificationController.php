@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\AppApi;
 
+use App\Http\Controllers\AppApi\Concerns\AnswersWithETag;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AppApi\ListNotificationsRequest;
 use App\Http\Requests\AppApi\UpdateNotificationPreferencesRequest;
@@ -11,7 +12,9 @@ use App\Http\Resources\AppApi\UnreadCountResource;
 use App\Notifications\NotificationCatalog;
 use App\Support\Notifications\NotificationInbox;
 use Dedoc\Scramble\Attributes\Group;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -24,6 +27,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 #[Group('Notifications', weight: 110)]
 class NotificationController extends Controller
 {
+    use AnswersWithETag;
+
     /** The inbox, newest first: `filter` = all | unread | mentions | assigned; `archived=1` for the archive. */
     public function index(ListNotificationsRequest $request): NotificationCollection
     {
@@ -32,10 +37,10 @@ class NotificationController extends Controller
         );
     }
 
-    /** The badge count: unread notifications in the inbox. */
-    public function unreadCount(Request $request): UnreadCountResource
+    /** The badge count: unread notifications in the inbox. Answers an `ETag`: send it as `If-None-Match` to get 304 while the count is unchanged. */
+    public function unreadCount(Request $request): JsonResponse|Response
     {
-        return new UnreadCountResource(NotificationInbox::unread($request->user()));
+        return $this->withETag($request, (new UnreadCountResource(NotificationInbox::unread($request->user())))->response($request));
     }
 
     /**

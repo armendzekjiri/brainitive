@@ -107,7 +107,7 @@ class SearchTest extends SearchTestCase
 
     public function test_validation_and_access(): void
     {
-        $this->find('')->assertStatus(422)->assertJsonPath('code', 'validation_failed')->assertJsonValidationErrors('q');
+        $this->find('q='.str_repeat('a', 301))->assertStatus(422)->assertJsonPath('code', 'validation_failed')->assertJsonValidationErrors('q');
         $this->find('q=x&type=widgets&limit=51&cursor=abc&status=maybe')->assertStatus(422)
             ->assertJsonValidationErrors(['type', 'limit', 'cursor', 'status']);
         // a workspace the user isn't in
@@ -119,5 +119,59 @@ class SearchTest extends SearchTestCase
         $this->getJson('/api/v1/search?q=rocket', $this->appHeaders($this->passportToken($this->editor)))->assertUnauthorized();
         // nor does an app token work on the web / MCP search routes of the extension
         $this->getJson('/api/ext/v1/search?q=rocket', $this->appHeaders($this->appToken($this->editor)))->assertUnauthorized();
+    }
+
+    public function test_without_words_it_lists_the_recent_content_the_user_can_open(): void
+    {
+        $old = $this->item(['title' => 'Older issue', 'updated_at' => now()->subDay()]);
+        $new = $this->item(['title' => 'Newer issue']);
+        $hiddenWorkspace = Workspace::factory()->create();
+        $hidden = $this->item(['title' => 'Hidden issue', 'board_id' => Board::factory()->create(['project_id' => Project::factory()->create(['workspace_id' => $hiddenWorkspace->id])->id])->id]);
+        $this->flush();
+
+        foreach (['', 'q=', 'q=%20%20'] as $query) {
+            $response = $this->find($query)->assertOk();
+            $ids = array_column($response->json('data'), 'id');
+            $this->assertNotContains("item:{$hidden->id}", $ids);
+            $this->assertContains("item:{$new->id}", $ids);
+            $this->assertContains("item:{$old->id}", $ids);
+            // same shape as a search, no places, no cursor
+            $this->assertSame(['data', 'next_cursor', 'total', 'counts', 'fuzzy', 'places'], array_keys($response->json()));
+            $response->assertJsonPath('next_cursor', null)->assertJsonPath('places', []);
+            $this->assertSame(array_keys($this->find('q=Newer')->json('data.0')), array_keys($response->json('data.0')));
+        }
+    }
+
+    public function test_recent_is_newest_first_limited_to_twelve_and_respects_filters(): void
+    {
+        foreach (range(1, 15) as $i) {
+            $this->item(['title' => "Issue $i", 'updated_at' => now()->subMinutes(100 - $i)]);
+        }
+        $this->item(['title' => 'Elsewhere', 'updated_at' => now()->subYear(), 'board_id' => Board::factory()->create(['project_id' => $this->secondProject->id])->id]);
+        $this->flush();
+
+        $recent = $this->find('')->assertOk();
+        $this->assertCount(12, $recent->json('data'));
+        $this->assertSame('Issue 15', $recent->json('data.0.title'));
+        $this->assertSame('Issue 4', $recent->json('data.11.title'));
+
+        $this->assertCount(3, $this->find('limit=3')->json('data'));
+        $this->assertCount(12, $this->find('limit=50')->json('data'));
+        $this->assertSame(['Elsewhere'], array_column($this->find('workspace='.$this->second->slug)->json('data'), 'title'));
+    }
+
+    public function test_recent_hides_other_peoples_drafts_and_captures_and_needs_a_token(): void
+    {
+        $draft = Page::factory()->create(['project_id' => $this->project->id, 'name' => 'Secret draft', 'created_by' => $this->owner->id, 'published_at' => null]);
+        $doc = Page::factory()->published()->create(['project_id' => $this->project->id, 'name' => 'Public doc', 'created_by' => $this->owner->id]);
+        $this->flush();
+
+        $titles = array_column($this->find('')->json('data'), 'title');
+        $this->assertContains('Public doc', $titles);
+        $this->assertNotContains('Secret draft', $titles);
+        // the author does see their own draft
+        $this->assertContains('Secret draft', array_column($this->find('', $this->appToken($this->owner))->json('data'), 'title'));
+
+        $this->getJson('/api/v1/search')->assertUnauthorized();
     }
 }

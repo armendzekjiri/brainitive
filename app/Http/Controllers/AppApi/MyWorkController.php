@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\AppApi;
 
+use App\Http\Controllers\AppApi\Concerns\AnswersWithETag;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AppApi\AddMyDayItemRequest;
 use App\Http\Requests\AppApi\ListWorkRequest;
@@ -18,7 +19,9 @@ use App\Support\MyWork\WorkRef;
 use App\Support\Work\WorkCompletion;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -32,6 +35,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 #[Group('My Work', weight: 130)]
 class MyWorkController extends Controller
 {
+    use AnswersWithETag;
+
     /**
      * The work assigned to the user.
      *
@@ -75,10 +80,10 @@ class MyWorkController extends Controller
         return new WorkItemResource($this->fresh($work));
     }
 
-    /** My Day: what the user planned for their local today, in their order. */
-    public function myDay(Request $request): MyDayResource
+    /** My Day: what the user planned for their local today, in their order. Answers an `ETag`: send it as `If-None-Match` to get 304 while nothing changed. */
+    public function myDay(Request $request): JsonResponse|Response
     {
-        return $this->day($request->user());
+        return $this->withETag($request, $this->day($request->user())->response($request));
     }
 
     /**

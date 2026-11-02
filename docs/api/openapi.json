@@ -1817,7 +1817,7 @@
         "/search": {
             "get": {
                 "operationId": "app.v1.search",
-                "description": "Without filters the first page also lists matching places (workspaces, projects, boards,\nplans, snippet and bookmark collections) by name, as the web's command palette does.",
+                "description": "Without filters the first page also lists matching places (workspaces, projects, boards,\nplans, snippet and bookmark collections) by name, as the web's command palette does.\n\nWithout `q` (empty or missing) it answers the user's recent content instead: the newest issues, docs,\ntickets, plans, tasks, snippets and bookmarks they can open (\u2264 12, `limit` can lower that), newest\nfirst, in the same shape (no `snippet`, `counts` and `places` empty, `next_cursor` null). The other\nfilters still apply. For the quick switcher's empty state.",
                 "summary": "Search everything the user can open: issues, docs, comments, tickets, tasks, plans, snippets,\nbookmarks, their captures and files \u2014 ranked, typo tolerant",
                 "tags": [
                     "Search"
@@ -1826,10 +1826,12 @@
                     {
                         "name": "q",
                         "in": "query",
-                        "required": true,
-                        "description": "words to find: \"exact phrase\", -excluded, an issue key like WEB-12 ranks that issue first",
+                        "description": "words to find: \"exact phrase\", -excluded, an issue key like WEB-12 ranks that issue first\nempty or missing: \"recent\" mode, the newest content the user can open (\u2264 12)",
                         "schema": {
-                            "type": "string",
+                            "type": [
+                                "string",
+                                "null"
+                            ],
                             "maxLength": 300
                         }
                     },
@@ -1971,11 +1973,8 @@
                                             "type": "integer"
                                         },
                                         "counts": {
-                                            "type": "object",
-                                            "description": "matches per group (issues, docs, comments, tickets, tasks, plans, snippets, bookmarks, captures, files)",
-                                            "additionalProperties": {
-                                                "type": "integer"
-                                            }
+                                            "type": "string",
+                                            "description": "matches per group (issues, docs, comments, tickets, tasks, plans, snippets, bookmarks, captures, files)"
                                         },
                                         "fuzzy": {
                                             "type": "boolean",
@@ -2107,25 +2106,17 @@
         "/notifications/unread-count": {
             "get": {
                 "operationId": "app.v1.notifications.unread-count",
-                "summary": "The badge count: unread notifications in the inbox",
+                "summary": "The badge count: unread notifications in the inbox. Answers an `ETag`: send it as `If-None-Match` to get 304 while the count is unchanged",
                 "tags": [
                     "Notifications"
                 ],
                 "responses": {
                     "200": {
-                        "description": "`UnreadCountResource`",
+                        "description": "",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/components/schemas/UnreadCountResource"
-                                        }
-                                    },
-                                    "required": [
-                                        "data"
-                                    ]
+                                    "type": "object"
                                 }
                             }
                         }
@@ -2662,25 +2653,17 @@
         "/me/my-day": {
             "get": {
                 "operationId": "app.v1.my-day.show",
-                "summary": "My Day: what the user planned for their local today, in their order",
+                "summary": "My Day: what the user planned for their local today, in their order. Answers an `ETag`: send it as `If-None-Match` to get 304 while nothing changed",
                 "tags": [
                     "My Work"
                 ],
                 "responses": {
                     "200": {
-                        "description": "`MyDayResource`",
+                        "description": "",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/components/schemas/MyDayResource"
-                                        }
-                                    },
-                                    "required": [
-                                        "data"
-                                    ]
+                                    "type": "object"
                                 }
                             }
                         }
@@ -2898,25 +2881,14 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "`TodayResource`",
+                        "description": "",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/components/schemas/TodayResource"
-                                        }
-                                    },
-                                    "required": [
-                                        "data"
-                                    ]
+                                    "type": "object"
                                 }
                             }
                         }
-                    },
-                    "304": {
-                        "description": ""
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
@@ -6225,25 +6197,18 @@
         "/me/timer": {
             "get": {
                 "operationId": "app.v1.timer.show",
+                "description": "Answers an `ETag`; send it back as `If-None-Match` to get 304 while nothing changed. The elapsed\ntime ticks by itself and does not change the tag: count from `timer.started_at` on a 304.",
                 "summary": "The user's running timer (or none) and what the stop dialog needs",
                 "tags": [
                     "Time tracking"
                 ],
                 "responses": {
                     "200": {
-                        "description": "`TimerStateResource`",
+                        "description": "",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/components/schemas/TimerStateResource"
-                                        }
-                                    },
-                                    "required": [
-                                        "data"
-                                    ]
+                                    "type": "object"
                                 }
                             }
                         }
@@ -6342,7 +6307,7 @@
         "/me/timer/stop": {
             "post": {
                 "operationId": "app.v1.timer.stop",
-                "description": "`time` defaults to the elapsed minutes, `spent_on` to the user's today. Answers what happened:\n`logged` (+ the work log), `already_stopped` (a retry, or stopped elsewhere: nothing logged) or\n`no_access` (the issue can't be logged on any more: stopped, nothing logged). A missing activity\nwhere one is required \u2192 422 and the timer keeps running.",
+                "description": "`time` defaults to the elapsed minutes, `spent_on` to the user's today. Answers what happened:\n`logged` (+ the work log), `already_stopped` (a retry, or stopped elsewhere: nothing logged) or\n`no_access` (the issue can't be logged on any more: stopped, nothing logged). A missing (or unusable)\nactivity where one is required \u2192 422 on `activity_id` and the timer keeps running; that answer also\ncarries `activities: [{id, name}]` (what can be picked) and `default_activity_id` (preselect it, or\nnull), so the app can show a picker and retry.",
                 "summary": "Stop the timer and log the time",
                 "tags": [
                     "Time tracking"
@@ -24884,55 +24849,6 @@
                     "default_activity_id"
                 ],
                 "title": "TimesheetResource"
-            },
-            "TodayResource": {
-                "type": "object",
-                "properties": {
-                    "date": {
-                        "type": "string",
-                        "description": "the user's local date (Y-m-d) and zone"
-                    },
-                    "timezone": {
-                        "type": "string"
-                    },
-                    "work": {
-                        "type": "array",
-                        "description": "open work assigned to the user, overdue first, then due today (at most 100), as GET /me/work?due=overdue,today",
-                        "items": {
-                            "$ref": "#/components/schemas/WorkItemResource"
-                        }
-                    },
-                    "my_day": {
-                        "type": "array",
-                        "description": "today's plan in the user's order, as GET /me/my-day",
-                        "items": {
-                            "$ref": "#/components/schemas/WorkItemResource"
-                        }
-                    },
-                    "events": {
-                        "type": "array",
-                        "description": "today's events of connected calendars and bookings, as GET /calendar/events?sources[]=external&sources[]=booking",
-                        "items": {
-                            "$ref": "#/components/schemas/CalendarEventResource"
-                        }
-                    },
-                    "errors": {
-                        "type": "array",
-                        "description": "calendars that failed this time",
-                        "items": {
-                            "$ref": "#/components/schemas/CalendarErrorResource"
-                        }
-                    }
-                },
-                "required": [
-                    "date",
-                    "timezone",
-                    "work",
-                    "my_day",
-                    "events",
-                    "errors"
-                ],
-                "title": "TodayResource"
             },
             "TokenResource": {
                 "type": "object",

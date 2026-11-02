@@ -22,7 +22,8 @@ class SearchRequest extends FormRequest
     {
         return [
             // words to find: "exact phrase", -excluded, an issue key like WEB-12 ranks that issue first
-            'q' => ['required', 'string', 'max:300'],
+            // empty or missing: "recent" mode, the newest content the user can open (≤ 12)
+            'q' => ['sometimes', 'nullable', 'string', 'max:300'],
             // one group: issues, docs, comments, tickets, tasks, plans, snippets, bookmarks, captures, files
             'type' => ['sometimes', 'nullable', Rule::in(array_keys(SearchTypes::GROUPS))],
             // a workspace slug: only that workspace's content
@@ -39,6 +40,14 @@ class SearchRequest extends FormRequest
         ];
     }
 
+    public const RECENT_LIMIT = 12;
+
+    /** No words typed: the answer is the recent list, not a search. */
+    public function isRecent(): bool
+    {
+        return trim((string) $this->validated('q')) === '';
+    }
+
     public function page(): int
     {
         return (int) ($this->validated('cursor') ?? 1);
@@ -46,6 +55,10 @@ class SearchRequest extends FormRequest
 
     public function limit(): int
     {
+        if ($this->isRecent()) {
+            return min((int) ($this->validated('limit') ?? self::RECENT_LIMIT), self::RECENT_LIMIT);
+        }
+
         return (int) ($this->validated('limit') ?? self::DEFAULT_LIMIT);
     }
 

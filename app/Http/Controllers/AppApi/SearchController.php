@@ -27,6 +27,11 @@ class SearchController extends Controller
      * Without filters the first page also lists matching places (workspaces, projects, boards,
      * plans, snippet and bookmark collections) by name, as the web's command palette does.
      *
+     * Without `q` (empty or missing) it answers the user's recent content instead: the newest issues, docs,
+     * tickets, plans, tasks, snippets and bookmarks they can open (≤ 12, `limit` can lower that), newest
+     * first, in the same shape (no `snippet`, `counts` and `places` empty, `next_cursor` null). The other
+     * filters still apply. For the quick switcher's empty state.
+     *
      * @throws NotFoundHttpException `workspace` is not one of the user's workspaces (404)
      */
     public function __invoke(SearchRequest $request, SearchService $search): JsonResponse
@@ -41,8 +46,9 @@ class SearchController extends Controller
             $workspaceIds = [$workspace->id];
         }
 
-        $found = $search->search($user, SearchService::queryFrom([
-            'q' => $validated['q'],
+        $recent = $request->isRecent();
+        $found = ($recent ? $search->recent(...) : $search->search(...))($user, SearchService::queryFrom([
+            'q' => $validated['q'] ?? '',
             'type' => $validated['type'] ?? null,
             'workspace' => $workspaceIds,
             'project' => $validated['project'] ?? [],
@@ -52,7 +58,7 @@ class SearchController extends Controller
             'page' => $request->page(),
         ], $user, $request->limit()));
 
-        $text = trim($validated['q']);
+        $text = trim((string) ($validated['q'] ?? ''));
         $places = $request->page() === 1 && $request->unfiltered() && mb_strlen($text) >= 2
             ? collect(PlaceSearch::find($user, $text, 0))->flatten(1)->values()->all()
             : [];

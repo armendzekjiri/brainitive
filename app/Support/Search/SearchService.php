@@ -49,6 +49,29 @@ class SearchService
     }
 
     /**
+     * "Recent" mode: no words, the newest content the user may see (same engine visibility, same result
+     * shape as `search()`; counts are empty). The query's filters and page size still apply.
+     *
+     * @return array{results: list<array<string, mixed>>, total: int, counts: array<string, int>, fuzzy: bool, page: int, per_page: int, has_more: bool}
+     */
+    public function recent(User $user, SearchQuery $query): array
+    {
+        $this->indexer->flush();
+
+        $results = $this->engine->recent($query, SearchViewer::for($user));
+
+        return [
+            'results' => SearchPresenter::present($results->hits),
+            'total' => $results->total,
+            'counts' => self::groupCounts([]),
+            'fuzzy' => false,
+            'page' => 1,
+            'per_page' => $query->perPage,
+            'has_more' => false,
+        ];
+    }
+
+    /**
      * The query from request-like input: q, type (a SearchTypes::GROUPS key), project (ids),
      * workspace (ids; resolve slugs and membership first — visibility still applies), status (open | done), assignee (me | user id), updated (7d | 30d | 90d | 365d), from / to
      * (Y-m-d), page. Unknown values are ignored, never an error.

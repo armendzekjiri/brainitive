@@ -95,7 +95,11 @@ class TimeTrackingTest extends TestCase
         Carbon::setTestNow(now()->addMinutes(25));
         $this->token = $this->appToken($this->editor); // access tokens live 15 minutes
         $this->getJson('/api/v1/me/timer', $this->headers())->assertOk()->assertJsonPath('data.timer.elapsed_minutes', 25);
-        $this->postJson('/api/v1/me/timer/stop', ['timer_id' => $timerId], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('activity_id');
+        $this->postJson('/api/v1/me/timer/stop', ['timer_id' => $timerId], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('activity_id')
+            // the picker's list: only what can be chosen, never a rate
+            ->assertJsonPath('code', 'validation_failed')
+            ->assertJsonPath('activities', [['id' => $this->programming->id, 'name' => 'Programming']])
+            ->assertJsonPath('default_activity_id', null);
         $this->assertTrue(WorkTimer::whereKey($timerId)->exists());
 
         $this->postJson('/api/v1/me/timer/stop', ['timer_id' => $timerId, 'activity_id' => $this->programming->id, 'note' => 'login fix'], $this->headers())
@@ -111,6 +115,26 @@ class TimeTrackingTest extends TestCase
         $this->postJson('/api/v1/me/timer/stop', ['timer_id' => $timerId, 'activity_id' => $this->programming->id], $this->headers())
             ->assertOk()->assertJsonPath('data.result', 'already_stopped')->assertJsonPath('data.work_log', null);
         $this->assertSame(1, TimeEntry::where('item_id', $item->id)->count());
+    }
+
+    public function test_an_unusable_activity_on_stop_also_lists_the_allowed_ones_and_archived_ones_are_left_out(): void
+    {
+        $archived = BillingActivity::create(['workspace_id' => $this->workspace->id, 'name' => 'Old', 'pricing_type' => 'hourly', 'rate_cents' => 100, 'archived_at' => now()]);
+        $timer = WorkTimers::start($this->editor, $this->item());
+
+        $this->postJson('/api/v1/me/timer/stop', ['timer_id' => $timer->id, 'activity_id' => $archived->id], $this->headers())
+            ->assertUnprocessable()->assertJsonValidationErrors('activity_id')
+            ->assertJsonPath('activities', [['id' => $this->programming->id, 'name' => 'Programming']]);
+        $this->assertTrue(WorkTimer::whereKey($timer->id)->exists());
+    }
+
+    public function test_a_validation_error_without_activity_keeps_the_plain_shape(): void
+    {
+        $timer = WorkTimers::start($this->editor, $this->item());
+
+        $response = $this->postJson('/api/v1/me/timer/stop', ['timer_id' => $timer->id, 'time' => 'nonsense', 'activity_id' => $this->programming->id], $this->headers());
+        $response->assertUnprocessable();
+        $this->assertArrayNotHasKey('activities', $response->json());
     }
 
     public function test_the_timer_needs_an_issue_the_user_may_edit(): void

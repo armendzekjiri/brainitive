@@ -18,4 +18,7 @@ interface SearchEngine
 
     /** Matching entries the viewer may see: one page, counts per type, highlighted. */
     public function search(SearchQuery $query, SearchViewer $viewer): SearchResults;
+
+    /** The newest content the viewer may see, without any words (the App API's "recent" mode). */
+    public function recent(SearchQuery $query, SearchViewer $viewer): SearchResults;
 }
