@@ -23,7 +23,7 @@ class PagePolicy
             return false;
         }
 
-        if ($page->isFolder() || ! $page->isDraft()) {
+        if ($page->isFolder() || ! $page->isPrivate()) {
             return true;
         }
 

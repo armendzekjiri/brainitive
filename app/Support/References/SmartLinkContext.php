@@ -44,7 +44,7 @@ final class SmartLinkContext
     /** Page::visibleTo for one page: unpublished docs are their author's and admins' only. */
     public function canSeePage(Page $page): bool
     {
-        if ($page->status !== 'draft' || (int) $page->created_by === (int) $this->user->id) {
+        if (! $page->isPrivate() || (int) $page->created_by === (int) $this->user->id) {
             return true;
         }
         $this->adminProjectIds ??= array_fill_keys(array_map('intval', $this->user->adminProjectIds()), true);
