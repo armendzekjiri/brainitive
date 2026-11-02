@@ -10,6 +10,8 @@
 //   {type: 'error', code, channel?} · {type: 'pong'}
 // A socket opened with an app device's token (`dev`, App API) is closed with 4410 once Brainitive revokes
 // that device (pushed to revokeDevices(), or found by the minute re-check).
+// Every token is confirmed with Brainitive when it is used (Codex realtime review 3): its channels, its device —
+// a token issued before access was removed grants nothing. Connect checks of many sockets share one request.
 import { CHANNEL, verifyLiveToken } from './token.js';
 
 export const CLOSE = {
@@ -40,6 +42,8 @@ export const DEFAULT_LIMITS = {
     maxPending: 500,
     /** failed access re-checks in a row before a user's sockets are closed (fail closed) */
     maxAccessFailures: 3,
+    /** connect checks (a token being used) wait this long to share one request with others */
+    authBatchMs: 10,
     maxSignalBytes: 1024,
     pingMs: 30_000,
     presenceDelayMs: 50,
@@ -75,6 +79,9 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
     /** user id → access re-checks failed in a row */
     const accessFailures = new Map();
     let rechecking = false;
+    /** connect checks waiting for the next request: {entry, resolve, reject} */
+    let pendingChecks = [];
+    let checkTimer = null;
 
     const sendRaw = (client, text) => {
         if (client.socket.readyState === client.socket.OPEN) client.socket.send(text);
@@ -143,10 +150,31 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
             client.device = device;
         }
         client.user = { id: payload.sub, name: payload.name.slice(0, 80), avatar: payload.avatar ? payload.avatar.slice(0, 500) : null };
-        for (const channel of payload.ch) {
-            if (client.grants.has(channel)) continue;
-            // revoked since this token was issued: only a newer token (Brainitive asked again) brings it back
-            if ((revoked.get(`${payload.sub}|${channel}`) ?? -1) >= payload.iat) continue;
+        // one token after the other: each `ready` answers its own `auth`
+        client.auth = client.auth.then(() => confirm(client, payload)).catch((error) => {
+            logger.error(`[live] connect check for user ${payload.sub} failed (${error?.message ?? error})`);
+            close(client, CLOSE.accessUnknown);
+        });
+    }
+
+    /** Grant the token's channels Brainitive confirms right now, then `ready`. */
+    async function confirm(client, payload) {
+        // revoked since this token was issued: only a newer token (Brainitive asked again) brings it back
+        const wanted = payload.ch.filter((channel) => !client.grants.has(channel) && (revoked.get(`${payload.sub}|${channel}`) ?? -1) < payload.iat);
+        let allowed = new Set();
+        if (wanted.length > 0 || client.device !== null) {
+            const answer = await checkNow(client.device !== null
+                ? { id: payload.sub, channels: wanted, devices: [client.device] }
+                : { id: payload.sub, channels: wanted });
+            if (!clients.has(client)) return;
+            if (client.device !== null && answer.revokedDevices.includes(client.device)) {
+                revokeDevices([client.device]);
+                return;
+            }
+            allowed = new Set(Array.isArray(answer.users[String(payload.sub)]) ? answer.users[String(payload.sub)] : []);
+        }
+        for (const channel of wanted) {
+            if (!allowed.has(channel) || client.grants.has(channel)) continue;
             // full: forget the oldest grant this socket isn't subscribed to (a long-lived tab moves on)
             if (client.grants.size >= L.maxGrants) {
                 const idle = [...client.grants].find((granted) => !client.subs.has(granted));
@@ -156,6 +184,30 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
             client.grants.add(channel);
         }
         send(client, { type: 'ready', user: { id: client.user.id }, channels: [...client.grants] });
+    }
+
+    /** One connect check, sent with the others of the next authBatchMs (≤ 100 entries per request). */
+    function checkNow(entry) {
+        return new Promise((resolve, reject) => {
+            pendingChecks.push({ entry, resolve, reject });
+            if (checkTimer === null) {
+                checkTimer = setTimeout(flushChecks, L.authBatchMs);
+                checkTimer.unref?.();
+            }
+        });
+    }
+
+    function flushChecks() {
+        checkTimer = null;
+        const batch = pendingChecks;
+        pendingChecks = [];
+        for (let i = 0; i < batch.length; i += 100) {
+            const chunk = batch.slice(i, i + 100);
+            access(chunk.map(({ entry }) => entry)).then(
+                (answer) => chunk.forEach(({ resolve }) => resolve(answer)),
+                (error) => chunk.forEach(({ reject }) => reject(error)),
+            );
+        }
     }
 
     function subscribe(client, { channel, presence }) {
@@ -236,6 +288,8 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
             messageLimit: bucket(L.messageBurst, L.messagesPerSecond),
             alive: true,
             deadline: null,
+            /** the auth messages, confirmed one after the other */
+            auth: Promise.resolve(),
         };
         clients.add(client);
         // a socket must authenticate quickly, or it is closed (no anonymous sockets holding memory)
@@ -378,6 +432,7 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
         stats: () => ({ sockets: clients.size, channels: channels.size }),
         destroy() {
             clearInterval(ping);
+            clearTimeout(checkTimer);
             presenceTimers.forEach((timer) => clearTimeout(timer));
             presenceTimers.clear();
             clients.forEach((client) => close(client, CLOSE.shutdown));

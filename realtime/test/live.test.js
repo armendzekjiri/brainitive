@@ -30,7 +30,7 @@ before(async () => {
         const failing = laravel.fail || JSON.parse(body || '{}').users?.some(({ id }) => laravel.failFor?.has(id));
         if (request.headers.authorization !== `Bearer ${internal}` || failing) return response.writeHead(failing ? 500 : 401).end();
         const entries = JSON.parse(body).users;
-        const users = Object.fromEntries(entries.map(({ id, channels }) => [String(id), channels.filter((c) => laravel.allowed.get(id)?.has(c))]));
+        const users = Object.fromEntries(entries.map(({ id, channels }) => [String(id), channels.filter((c) => !laravel.allowed.has(id) || laravel.allowed.get(id).has(c))]));
         const revoked = entries.flatMap(({ devices = [] }) => devices).filter((device) => laravel.revokedDevices.has(device));
         response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ users, revoked_devices: revoked }));
     });
@@ -330,6 +330,7 @@ test('access re-check: channels a user lost are dropped; Brainitive down keeps e
     // a token issued before the revocation can't bring it back; a newer one (Brainitive asked again) can
     ada.send({ type: 'auth', token: token(1, ['item.5'], { iat: now() - 30 }) });
     assert.ok(!(await ada.next('ready')).channels.includes('item.5'));
+    laravel.allowed.set(1, new Set(['user.1', 'item.5'])); // Ada was added back: Brainitive issues a new token
     ada.send({ type: 'auth', token: token(1, ['item.5'], { iat: now() + 1 }) });
     assert.ok((await ada.next('ready')).channels.includes('item.5'));
     ada.close();
@@ -338,10 +339,10 @@ test('access re-check: channels a user lost are dropped; Brainitive down keeps e
 
 test('access re-check: a failing entry doesn’t shield the others; a user whose check keeps failing is disconnected', async () => {
     laravel.allowed.set(6, new Set(['item.6']));
-    laravel.allowed.set(7, new Set());
-    laravel.failFor = new Set([6]);
     const six = await joined(6, ['item.6']);
     const seven = await joined(7, ['item.7']);
+    laravel.allowed.set(7, new Set());
+    laravel.failFor = new Set([6]);
 
     await live.recheckAccess();
     assert.deepEqual(await seven.next('revoked'), { type: 'revoked', channel: 'item.7' }, 'checked one by one after the batch failed');
@@ -453,4 +454,56 @@ test('the device push reaches live co-editing too (onDevicesRevoked)', async () 
     assert.deepEqual(pushedToCollab, [131, 132]);
     await until(() => desktop.closed);
     assert.equal(desktop.closed.code, 4410);
+});
+
+// ── Codex realtime review 3: a token is confirmed with Brainitive when it is used ───────────────────
+
+test('on connect Brainitive is asked: a channel removed since the token was issued is never granted', async () => {
+    laravel.allowed.set(30, new Set(['user.30']));
+    const client = await open();
+    client.send({ type: 'auth', token: token(30, ['user.30', 'item.30']) });
+    assert.deepEqual((await client.next('ready')).channels, ['user.30']);
+    const asked = laravel.calls.find((c) => c.body.users?.some((u) => u.id === 30));
+    assert.deepEqual(asked.body.users.find((u) => u.id === 30).channels.sort(), ['item.30', 'user.30'], 'asked before ready');
+    client.send({ type: 'subscribe', channel: 'item.30' });
+    assert.equal((await client.next('error')).code, 'forbidden');
+    await publish([{ channel: 'item.30', event: 'item.updated', payload: { id: 30 } }]);
+    await client.none('event');
+    // a second token on the same socket is confirmed too
+    client.send({ type: 'auth', token: token(30, ['board.30']) });
+    laravel.allowed.set(30, new Set(['user.30']));
+    assert.deepEqual((await client.next('ready')).channels, ['user.30']);
+    client.close();
+});
+
+test('on connect: a device revoked while its push was missed closes with 4410 before anything is delivered', async () => {
+    laravel.revokedDevices = new Set([140]);
+    const client = await open();
+    client.send({ type: 'auth', token: token(31, ['user.31'], { dev: 140 }) });
+    await until(() => client.closed);
+    assert.equal(client.closed.code, 4410);
+    assert.equal(client.messages.filter((m) => m.type === 'ready').length, 0);
+    laravel.revokedDevices = new Set();
+});
+
+test('on connect: Brainitive unreachable → refused (4403), nothing granted; fine again once it answers', async () => {
+    laravel.fail = true;
+    const client = await open();
+    client.send({ type: 'auth', token: token(32, ['user.32']) });
+    await until(() => client.closed);
+    assert.equal(client.closed.code, 4403);
+    assert.equal(client.messages.filter((m) => m.type === 'ready').length, 0);
+    laravel.fail = false;
+    const again = await joined(32, ['user.32']);
+    again.close();
+});
+
+test('connect checks of many sockets at once share one request', async () => {
+    laravel.calls = [];
+    const clients = await Promise.all([40, 41, 42, 43].map(() => open()));
+    clients.forEach((client, i) => client.send({ type: 'auth', token: token(40 + i, [`user.${40 + i}`]) }));
+    await Promise.all(clients.map((client) => client.next('ready')));
+    assert.ok(laravel.calls.length <= 2, `${laravel.calls.length} requests`);
+    assert.deepEqual(laravel.calls.flatMap((c) => c.body.users.map((u) => u.id)).sort(), [40, 41, 42, 43]);
+    clients.forEach((client) => client.close());
 });
