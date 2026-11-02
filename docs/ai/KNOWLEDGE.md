@@ -2271,8 +2271,14 @@ Findings and tests: `docs/ai/tasks/release-v1.49.0.md` → Codex realtime review
   `HMAC(live token key, 'realtime-session|' . session id)` — the token routes run `ReadOnlySession`, so nothing may be
   *written* to the session there; an HMAC of the id needs no write and never exposes the id. It changes only on
   `regenerate()` (sign-in) / `invalidate()`. Ended sessions are found by the **Logout / CurrentDeviceLogout event**
-  (LiveServiceProvider) — it fires before `invalidate()`, so `request()->session()->getId()` is still the old id. A
-  remember-me sign-in after an expired session is a new session id → new `sid`; the old sockets were never "signed out".
+  (LiveServiceProvider) — it fires before `invalidate()`, so `request()->session()->getId()` is still the old id.
+- **…and an allowlist** (security follow-up): a session can end with no Logout event — it expires (ReadOnly requests,
+  like the token / live-save routes, never refresh `last_activity`), or remember-me rebuilds the login under a new id. So
+  each issued `sid` is cached as active (session lifetime, refreshed per token) with its session id, and `endedAmong()`
+  reports ended for unknown sids and — database driver — sids whose `sessions` row is gone, signed out / another user or
+  older than `SESSION_LIFETIME`. Consequence: a tab that only live-edits for longer than the session lifetime loses its
+  sockets (4401) like any expired session; with remember-me the reconnect signs in again. `ReadOnlySession` therefore
+  **saves** a session that remember-me rebuilt in that request (else the token names a session no request ever saved).
 - **`gen` reuses `users.app_auth_generation`** (bumped only by `SignOutEverywhere`) instead of a new column: one bump ends
   app approvals *and* all web realtime sockets. The session a password change keeps is closed too (4401) and reconnects at
   once with a new token — by design ("sign out everywhere closes all sockets").
@@ -2287,14 +2293,20 @@ Findings and tests: `docs/ai/tasks/release-v1.49.0.md` → Codex realtime review
   like `Forbidden` (fetch a session, reattach). Re-checks go in batches (≤ 200 users, ≤ 500 devices + sessions):
   Laravel validates `max:500`, so one big document used to get a 422 forever.
 - **Document size is enforced in the realtime server's `beforeHandleMessage`** (before Yjs applies the update and before
-  any peer gets it): a running size estimate per document, measured exactly (`Y.mergeUpdates`) only near the limit. The
+  any peer gets it): each update is charged `growthBound()` — its bytes + 32 per struct + 64 per delete range, from
+  decoding the update only (deleting every other character grows the state ~6× the update; a plain `update.length`
+  budget let it through). The real size is measured only on load and at each store (which encodes anyway): never
+  re-encode the whole document per message — near 16 MB that is ~0.4 s and let one editor stall the process. The
   limit is Laravel's `collab.max_state_bytes` (the access answer's `max_state_bytes`; env `COLLAB_MAX_STATE_BYTES` with
   the same 16 MiB default — a Node test compares the defaults). It is the **Yjs state** limit, not
   `ContentLimits::PAGE_BODY` (characters of the draft HTML, 10 M): the HTML of a doc that fits the state limit can still
   be refused by the draft save, and the other way round.
 - **Collab rate limit runs before Hocuspocus:** `socket.prependListener('message')` + a `flooded` set checked in
   `beforeHandleMessage` — ws calls every listener for a message, so the limiter can't stop Hocuspocus's own listener,
-  only make the hook reject what follows. Defaults (`DEFAULT_COLLAB_LIMITS`): 30 sockets / user, 300 burst, 100 msg/s.
+  only make the hook reject what follows. Defaults (`DEFAULT_COLLAB_LIMITS`): 30 sockets / user, 30 open documents / user
+  (Hocuspocus multiplexes many documents over one socket, so sockets alone don't bound it), 300 burst, 100 msg/s.
+- **The `connected` hook re-checks sign-out / device revocation:** between `onAuthenticate` and the connection being
+  added the document loads from Laravel; a push in that gap finds nothing to close.
 - **Log lines with client values** go through `realtime/src/log.js` `fields()`: escaped, truncated, `key="value"`.
 - **Deploy:** restart `brainitive-realtime` after the deploy (old server: the session push 404s — reported, harmless —
   and old tokens without `sid` keep working until they expire). New realtime env vars are optional (defaults above).

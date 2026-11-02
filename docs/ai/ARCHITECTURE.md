@@ -256,10 +256,11 @@ Laravel session id) + `gen` (`users.app_auth_generation`) — `App\Support\Live\
 `SignOutEverywhere` → `{users: [{id, generation}]}`; the realtime server closes those web sockets with **4401 "Signed out"**
 (4410 stays the app-device code) and the access endpoints answer `ended_sessions` + `generations` for missed pushes. The live
 hub confirms every `auth` with Brainitive before `ready` (batched, `authBatchMs`); the collab server fails closed after
-`COLLAB_ACCESS_MAX_FAILURES` (2) unanswered re-checks, batches re-checks (≤ 200 users), limits sockets per user / messages
-per socket / message size (`DEFAULT_COLLAB_LIMITS` in `realtime/src/server.js`), and refuses an update that would grow a
-document past `max_state_bytes` (from the access answer; env `COLLAB_MAX_STATE_BYTES`) in `beforeHandleMessage`, before
-peers see it. Refusal logs are structured and escaped (`realtime/src/log.js`).
+`COLLAB_ACCESS_MAX_FAILURES` (2) unanswered re-checks, batches re-checks (≤ 200 users), limits sockets and open documents
+per user / messages per socket / message size (`DEFAULT_COLLAB_LIMITS` in `realtime/src/server.js`), and refuses an update
+whose `growthBound()` could grow a document past `max_state_bytes` (from the access answer; env `COLLAB_MAX_STATE_BYTES`)
+in `beforeHandleMessage`, before peers see it. Issued `sid`s are an allowlist (`RealtimeSession::endedAmong`: unknown,
+signed out, or — database sessions — row gone / expired = ended). Refusal logs are structured and escaped (`realtime/src/log.js`).
 - **Tests:** `tests/Feature/Live/{LiveChannelsTest,LivePublishTest,RealtimeSessionTest}.php`, `realtime/test/{live,limits}.test.js`, e2e `e2e/tests/live-channel.spec.ts`. Self-hosting: `docs/self-hosting.md` → "Live updates (bell, presence, typing)", `.env.example` (`LIVE_*`).
 
 ### Live whiteboards — draw together (v1.44.0, BRAI-153)

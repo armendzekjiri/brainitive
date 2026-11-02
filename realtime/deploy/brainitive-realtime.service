@@ -34,6 +34,7 @@ Environment=COLLAB_APP_URL=https://brainitive.app
 #   Environment=COLLAB_MAX_STATE_BYTES=16777216
 #   Environment=COLLAB_ACCESS_MAX_FAILURES=2
 #   Environment=COLLAB_MAX_SOCKETS_PER_USER=30
+#   Environment=COLLAB_MAX_DOCUMENTS_PER_USER=30
 #   Environment=COLLAB_MESSAGE_BURST=300
 #   Environment=COLLAB_MESSAGES_PER_SECOND=100
 ExecStart=/usr/bin/node realtime/src/index.js

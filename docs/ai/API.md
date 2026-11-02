@@ -1139,8 +1139,8 @@ tabs get (`LiveToken::grant`, shared with the web's `POST /live/token`). Access 
 - **Client → server signals:** `{type: "signal", channel, name, data}` (subscribed channels, ≤ 1 KB, ~4/s): today only `typing`
   on `item.{id}` — `{}` while typing (≤ every 2 s), `{stop: true}` on send / cancel; receivers expire it after 4.5 s.
 - **Limits:** 50 subscriptions per socket, 20 sockets per user, 8 messages/s (burst 40).
-- **Live documents (Yjs, `collab-token`)** — same server, own limits (v1.49.0, Codex realtime review): 30 document sockets per
-  user (more → refused, reason `too-many-connections`, close 4429), 100 messages/s per socket (burst 300; beyond → 4429
+- **Live documents (Yjs, `collab-token`)** — same server, own limits (v1.49.0, Codex realtime review): 30 document sockets and
+  30 open documents per user (more → refused, reason `too-many-connections`; a socket over the limit closes with 4429), 100 messages/s per socket (burst 300; beyond → 4429
   "Too many messages"), one message ≤ the document limit + 64 KiB (else 1009). An update that would make the document
   larger than Brainitive stores (`COLLAB_MAX_STATE_BYTES`, 16 MiB) is refused **before anyone else sees it**: only the
   sender's document closes (CLOSE message "Document too large"; don't resend it). When Brainitive can't answer the
