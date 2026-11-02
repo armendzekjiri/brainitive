@@ -12,6 +12,7 @@ use App\Models\TimeEntry;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Billing report data, snapshot v1 (v1.38.0, BRAI-101). Contract and money rules:
@@ -63,7 +64,9 @@ class ReportBuilder implements BuildsReportData
             $entries = TimeEntry::where('billing_report_id', $report->id)->orderBy('spent_on')->orderBy('id')->get();
         }
 
-        $entries->concat($excluded)->load(['user:id,name', 'activity:id,name,pricing_type,rate_cents', 'item:id,key,title']);
+        $entries->concat($excluded)->load(['user:id,name', 'activity:id,name,pricing_type,rate_cents', 'item' => fn ($q) => $q->select(['items.id', 'items.key', 'items.title'])
+            ->addSelect(['ticket_workspace_id' => DB::table('boards')->join('projects', 'projects.id', '=', 'boards.project_id')
+                ->whereColumn('boards.id', 'items.board_id')->select('projects.workspace_id')->limit(1)])]);
         $projects ??= Project::withTrashed()->whereIn('id', $entries->pluck('project_id')->unique()->values())->get(['id', 'name', 'key'])->keyBy('id');
 
         $taxRate = (int) ($report->client?->tax_rate_bp ?? $setting->default_tax_rate_bp ?? 0);
@@ -381,10 +384,13 @@ class ReportBuilder implements BuildsReportData
         return [$sum, $tax, $sum + $tax];
     }
 
-    /** [key, title] of the entry's ticket: the live issue while it exists, else the snapshot at logging. */
+    /**
+     * [key, title] of the entry's ticket: the live issue while it exists in the entry's workspace, else the snapshot
+     * at logging — an issue moved to another workspace never shows its new key or title here (Codex web review R).
+     */
     private function ticket(TimeEntry $entry): array
     {
-        if ($entry->item) {
+        if ($entry->item && (int) $entry->item->getAttribute('ticket_workspace_id') === (int) $entry->workspace_id) {
             return [$entry->item->key, $entry->item->title];
         }
 

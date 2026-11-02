@@ -149,7 +149,7 @@ class TimesheetController extends Controller
             'billable' => $entry->billable,
             'source' => $entry->source,
             'locked' => $entry->isLocked(),
-            'project' => $entry->project ? $entry->project->only(['id', 'name', 'key']) : null,
+            'project' => TimeEntries::visibleProject($entry, $accessible), // never a moved project's new name (Codex web review S)
             'item' => $entry->item_id || $entry->item_key ? [
                 'id' => $entry->item_id,
                 'key' => $item?->key ?? $entry->item_key,
