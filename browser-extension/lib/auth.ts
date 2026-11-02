@@ -41,7 +41,45 @@ export function normalizeServer(input: string): string {
     return url.origin;
 }
 
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * The background's own check of a server origin (the sign-in form checks too, but any
+ * extension page can send `sign-in`): https, or plain http only on an exact loopback
+ * address; no user name / password, path, query or fragment.
+ */
+export function checkServer(server: string): void {
+    let url: URL;
+    try {
+        url = new URL(server);
+    } catch {
+        throw new Error(`${server} is not a valid server address.`);
+    }
+    if (url.username || url.password || url.origin !== server) {
+        throw new Error(`${server} is not a plain server address (https://host[:port]).`);
+    }
+    if (url.protocol === 'https:') return;
+    if (url.protocol === 'http:' && LOOPBACK.has(url.hostname)) return;
+    throw new Error(`Use https for ${url.host}: plain http only works for localhost, 127.0.0.1 and [::1].`);
+}
+
+/**
+ * True when `endpoint` is on exactly the server's origin (scheme, host and port) without
+ * credentials in the URL. OAuth metadata, the stored token endpoint and every token request
+ * must pass this (Codex CLI/extension review 4): a code + PKCE verifier or a refresh token
+ * never goes to another origin.
+ */
+export function sameOrigin(server: string, endpoint: string): boolean {
+    try {
+        const url = new URL(endpoint);
+        return !url.username && !url.password && url.origin === new URL(server).origin;
+    } catch {
+        return false;
+    }
+}
+
 export async function signIn(server: string): Promise<Session> {
+    checkServer(server);
     const metadata = await discover(server);
     const redirectUri = browser.identity.getRedirectURL();
 
@@ -131,7 +169,7 @@ export async function getAccessToken(force = false): Promise<{ token: string; se
 }
 
 async function refresh(session: Session): Promise<Session> {
-    if (!session.refreshToken) {
+    if (!session.refreshToken || !sameOrigin(session.server, session.tokenEndpoint)) {
         await setSession(null);
         throw new NotSignedInError('Your Brainitive session expired. Sign in again.');
     }
@@ -165,6 +203,11 @@ async function discover(server: string): Promise<ServerMetadata> {
     const metadata = response.ok ? ((await response.json().catch(() => null)) as ServerMetadata | null) : null;
     if (!metadata?.authorization_endpoint || !metadata.token_endpoint || !metadata.registration_endpoint) {
         throw new Error(`${server} doesn’t look like a Brainitive server.`);
+    }
+    for (const endpoint of [metadata.authorization_endpoint, metadata.token_endpoint, metadata.registration_endpoint]) {
+        if (!sameOrigin(server, endpoint)) {
+            throw new Error(`${server}’s sign-in settings point at another address (${endpoint}). Not signing in.`);
+        }
     }
     return metadata;
 }
