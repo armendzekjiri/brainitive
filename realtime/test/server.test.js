@@ -14,7 +14,7 @@ const DOC = 'page.123e4567-e89b-42d3-a456-426614174000.0';
 const OTHER = 'page.123e4567-e89b-42d3-a456-426614174999.0';
 
 /** Brainitive's internal API, in memory. */
-const laravel = { states: new Map(), stale: new Set(), tooLarge: new Set(), access: { 1: 'edit', 2: 'edit', 3: 'view', 4: 'edit' }, calls: [], bearer: [], revokedDevices: new Set(), accessBodies: [] };
+const laravel = { states: new Map(), stale: new Set(), tooLarge: new Set(), access: { 1: 'edit', 2: 'edit', 3: 'view', 4: 'edit' }, calls: [], bearer: [], revokedDevices: new Set(), accessBodies: [], endedSessions: new Set(), generations: new Map() };
 let api;
 let collab;
 let url;
@@ -32,13 +32,15 @@ before(async () => {
         const name = decodeURIComponent(request.url.split('/documents/')[1] ?? '');
         const json = (status, data) => response.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(data));
         if (request.url.endsWith('/access')) {
-            const { document, user_ids: ids, devices = [] } = JSON.parse(body);
+            const { document, user_ids: ids, devices = [], sessions = [] } = JSON.parse(body);
             laravel.accessBodies.push(JSON.parse(body));
             if (laravel.failAccess) return json(laravel.failAccess, { message: 'down' });
             return json(200, {
                 current: !laravel.stale.has(document),
                 users: Object.fromEntries(ids.map((id) => [String(id), laravel.access[id] ?? null])),
                 revoked_devices: devices.map(({ id }) => id).filter((id) => laravel.revokedDevices.has(id)),
+                ended_sessions: sessions.filter((sid) => laravel.endedSessions.has(sid)),
+                generations: Object.fromEntries(ids.map((id) => [String(id), laravel.generations.get(id) ?? 0])),
             });
         }
         if (laravel.stale.has(name)) return json(409, { message: 'Stale document.' });
@@ -355,4 +357,60 @@ test('re-checks ask in batches Brainitive accepts (≤ 500 users / devices): man
     clients.forEach((c) => c.close());
     await small.destroy();
     small.server.httpServer.closeAllConnections();
+});
+
+// ── Codex realtime review 1: a signed-out browser session loses its document sockets ────────────────
+
+const SID_A = 'a'.repeat(32);
+const SID_B = 'b'.repeat(32);
+const webToken = (doc, sub, sid, gen = 0) => token(doc, true, sub, undefined, { sid, gen });
+
+test('collab tokens: `sid` is 32 hex characters, `gen` a non-negative integer', async () => {
+    const { verifyToken } = await import('../src/token.js');
+    assert.equal(verifyToken(webToken(DOC, 1, SID_A), keys.token).sid, SID_A);
+    assert.equal(verifyToken(webToken(DOC, 1, 'x'), keys.token), null);
+    assert.equal(verifyToken(webToken(DOC, 1, SID_A, -1), keys.token), null);
+});
+
+test('session ended (pushed): its document sockets close with 4401 "Signed out", other sessions stay, its tokens are refused', async () => {
+    const signedOut = connect(DOC, webToken(DOC, 1, SID_A));
+    const otherBrowser = connect(DOC, webToken(DOC, 1, SID_B));
+    await until(() => signedOut.events.synced && otherBrowser.events.synced);
+    assert.deepEqual(laravel.accessBodies.find((b) => b.sessions?.includes(SID_A)).sessions, [SID_A], 'asked on connect');
+
+    assert.equal(collab.endSessions({ sessions: [SID_A], users: [] }), 1);
+    await until(() => signedOut.events.socketCodes.includes(4401));
+    await new Promise((r) => setTimeout(r, 150));
+    assert.deepEqual(otherBrowser.events.socketCodes, []);
+
+    const again = connect(DOC, webToken(DOC, 1, SID_A));
+    await until(() => again.events.failed !== null);
+    assert.equal(again.events.failed, 'signed-out');
+    assert.equal(again.events.synced, false);
+    [signedOut, otherBrowser, again].forEach((c) => c.close());
+});
+
+test('session ended (push missed): refused on connect, closed by the re-check; a newer generation closes older tokens', async () => {
+    const SID_C = 'c'.repeat(32);
+    const open1 = connect(DOC, webToken(DOC, 2, SID_C));
+    const other = connect(DOC, webToken(DOC, 2, SID_B));
+    await until(() => open1.events.synced && other.events.synced);
+    laravel.endedSessions.add(SID_C);
+    await collab.recheckAccess();
+    await until(() => open1.events.socketCodes.includes(4401));
+    assert.deepEqual(other.events.socketCodes, []);
+
+    const fresh = connect(DOC, webToken(DOC, 2, SID_C));
+    await until(() => fresh.events.failed !== null);
+    assert.equal(fresh.events.failed, 'signed-out');
+
+    // signed out everywhere, push missed: the generation in the answer closes the rest
+    laravel.generations.set(2, 1);
+    await collab.recheckAccess();
+    await until(() => other.events.socketCodes.includes(4401));
+    const renewed = connect(DOC, webToken(DOC, 2, SID_B, 1));
+    await until(() => renewed.events.synced);
+    [open1, other, fresh, renewed].forEach((c) => c.close());
+    laravel.endedSessions.clear();
+    laravel.generations.clear();
 });

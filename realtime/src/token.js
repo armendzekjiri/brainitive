@@ -20,6 +20,14 @@ export function deriveKeys(secret) {
 const base64url = (buffer) => Buffer.from(buffer).toString('base64url');
 
 /**
+ * Web tokens' browser session (`sid`: RealtimeSession::id, an HMAC of the Laravel session id) and the user's
+ * sign-out-everywhere generation (`gen`) — Codex realtime review 1. Both optional (App API tokens carry `dev`).
+ */
+export const SESSION_ID = /^[a-f0-9]{32}$/;
+export const validSession = (data) => (data.sid === undefined || (typeof data.sid === 'string' && SESSION_ID.test(data.sid)))
+    && (data.gen === undefined || (Number.isInteger(data.gen) && data.gen >= 0));
+
+/**
  * `page.<uuid>.<epoch>` (documents), `whiteboard.<uuid>.<epoch>` (BRAI-153) and `item.<id>.<epoch>`
  * (issue descriptions, BRAI-151) — the only documents this server opens.
  */
@@ -28,7 +36,7 @@ export const DOCUMENT_NAME = /^(?:(?:page|whiteboard)\.[0-9a-f]{8}-[0-9a-f]{4}-[
 /**
  * The payload of a valid, unexpired token, else null. `dev`: the app device (App API tokens only, BRAI-377;
  * the web's tokens have none) — its sockets are closed with 4410 once Brainitive revokes it.
- * @returns {{v: 1, sub: number, dev?: number, name: string, doc: string, edit: boolean, exp: number} | null}
+ * @returns {{v: 1, sub: number, dev?: number, sid?: string, gen?: number, name: string, doc: string, edit: boolean, exp: number} | null}
  */
 export function verifyToken(token, key, now = Math.floor(Date.now() / 1000)) {
     return inspectToken(token, key, now).payload;
@@ -58,7 +66,7 @@ export function inspectToken(token, key, now = Math.floor(Date.now() / 1000)) {
         return invalid;
     }
     if (!data || data.v !== 1 || !Number.isInteger(data.sub) || typeof data.doc !== 'string' || typeof data.edit !== 'boolean'
-        || !Number.isInteger(data.exp) || (data.dev !== undefined && (!Number.isInteger(data.dev) || data.dev < 1))) {
+        || !Number.isInteger(data.exp) || (data.dev !== undefined && (!Number.isInteger(data.dev) || data.dev < 1)) || !validSession(data)) {
         return invalid;
     }
     if (data.exp <= now) return { payload: null, problem: 'expired-token' };

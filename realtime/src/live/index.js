@@ -36,6 +36,8 @@ export function attachLive(server, {
     limits = {},
     /** (ids) => number: also close these revoked app devices elsewhere — the collab server's documents (BRAI-377) */
     onDevicesRevoked = null,
+    /** ({sessions, users}) => number: also close these signed-out web sessions' documents (Codex realtime review 1) */
+    onSessionsEnded = null,
 }) {
     if (!secret) throw new Error('COLLAB_SECRET (or APP_KEY) is required');
     if (!appUrl) throw new Error('COLLAB_APP_URL (or APP_URL) is required');
@@ -45,7 +47,8 @@ export function attachLive(server, {
     const hub = createLiveHub({ tokenKey: keys.token, access, logger, limits });
     // a device push closes the device's live sockets and (through onDevicesRevoked) its document sockets
     const revokeEverywhere = (ids) => hub.revokeDevices(ids) + (onDevicesRevoked ? Number(onDevicesRevoked(ids)) || 0 : 0);
-    const handlePublish = createPublishHandler({ key: keys.publish, hub: { ...hub, revokeDevices: revokeEverywhere }, allowFrom: publishFrom, logger });
+    const endEverywhere = (ended) => hub.endSessions(ended) + (onSessionsEnded ? Number(onSessionsEnded(ended)) || 0 : 0);
+    const handlePublish = createPublishHandler({ key: keys.publish, hub: { ...hub, revokeDevices: revokeEverywhere, endSessions: endEverywhere }, allowFrom: publishFrom, logger });
     const sockets = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 });
     sockets.on('connection', (socket) => hub.handleConnection(socket));
 

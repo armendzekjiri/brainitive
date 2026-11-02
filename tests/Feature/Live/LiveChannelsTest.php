@@ -283,7 +283,7 @@ class LiveChannelsTest extends TestCase
         $url = route('internal.collab.live.access');
         $this->postJson($url, ['users' => [['id' => 'x', 'channels' => []]]], $this->internal())->assertUnprocessable();
         $this->postJson($url, ['users' => [['id' => 1, 'channels' => array_fill(0, 101, 'user.1')]]], $this->internal())->assertUnprocessable();
-        $this->postJson($url, ['users' => []], $this->internal())->assertOk()->assertExactJson(['users' => [], 'revoked_devices' => []]);
+        $this->postJson($url, ['users' => []], $this->internal())->assertOk()->assertExactJson(['users' => [], 'revoked_devices' => [], 'ended_sessions' => [], 'generations' => []]);
         $this->postJson($url, ['users' => [['id' => 1, 'channels' => [], 'devices' => ['x']]]], $this->internal())->assertUnprocessable();
         $this->postJson($url, ['users' => [['id' => 1, 'channels' => [], 'devices' => range(1, 21)]]], $this->internal())->assertUnprocessable();
     }

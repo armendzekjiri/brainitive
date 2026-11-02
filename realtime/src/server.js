@@ -4,7 +4,9 @@
 //  - the Yjs state is loaded from / stored to Brainitive's internal API (debounced, retried);
 //  - every minute Brainitive re-checks who may still be connected;
 //  - a connection whose token carries an app device (`dev`, App API) is closed with 4410 once Brainitive
-//    revokes that device (pushed through revokeDevices(), or found by the re-check) — BRAI-377.
+//    revokes that device (pushed through revokeDevices(), or found by the re-check) — BRAI-377;
+//  - a web connection (`sid` + `gen`) is closed with 4401 "Signed out" once its browser session signs out or the user
+//    is signed out everywhere (pushed through endSessions(), or found on connect / by the re-check) — Codex review 1.
 import { Server } from '@hocuspocus/server';
 import * as Y from 'yjs';
 import { removeAwarenessStates } from 'y-protocols/awareness';
@@ -23,6 +25,8 @@ const TOO_LARGE = { code: 4413, reason: 'Document too large' };
 const ACCESS_UNKNOWN = { code: 4403, reason: 'Access could not be checked' };
 /** the app device of the token was signed out: drop tokens, show sign-in (same code as live channels) */
 const DEVICE_REVOKED = { code: 4410, reason: 'Device signed out' };
+/** the browser session of the token signed out, or the user everywhere (same code as live channels) */
+const SIGNED_OUT = { code: 4401, reason: 'Signed out' };
 const COLOR = /^#[0-9a-f]{6}$/i;
 /** Codex realtime review 4: one socket sent too much, or one user holds too many document sockets */
 const TOO_MANY_MESSAGES = { code: 4429, reason: 'Too many messages' };
@@ -155,6 +159,11 @@ export function createCollabServer({
 
     /** app device id → when it was revoked (unix s): its still-valid tokens can't open a document */
     const revokedDevices = new Map();
+    /** browser session (`sid`) → when it signed out (unix s); user id → {gen: lowest valid generation, at} */
+    const endedSessions = new Map();
+    const generations = new Map();
+    const isSignedOut = (userId, session, generation) => (session !== null && endedSessions.has(session))
+        || (generation !== null && generation < (generations.get(userId)?.gen ?? -1));
 
     /** request → socket, to close sockets that never authenticate or fail to */
     const sockets = new WeakMap();
@@ -249,10 +258,19 @@ export function createCollabServer({
                 throw Object.assign(new Error('Not authorized: device-revoked'), { reason: 'device-revoked' });
             };
             if (device !== null && revokedDevices.has(device)) refuseDevice();
+            const session = device === null ? payload.sid ?? null : null;
+            const generation = device === null ? payload.gen ?? null : null;
+            // a signed-out browser session: 4401 "Signed out" — a new token needs a new sign-in
+            const refuseSignedOut = () => {
+                warn(`[realtime] refused ${fields({ document: documentName, user: payload.sub, reason: 'signed-out' })}`);
+                setImmediate(() => closeSocket(request, SIGNED_OUT.code, SIGNED_OUT.reason));
+                throw Object.assign(new Error('Not authorized: signed-out'), { reason: 'signed-out' });
+            };
+            if (isSignedOut(payload.sub, session, generation)) refuseSignedOut();
             // the token is only a few minutes old at most, but access can change in between: ask Brainitive
             let result;
             try {
-                result = await laravel.access(documentName, [payload.sub], device !== null ? [{ id: device, user_id: payload.sub }] : []);
+                result = await laravel.access(documentName, [payload.sub], device !== null ? [{ id: device, user_id: payload.sub }] : [], session !== null ? [session] : []);
             } catch (error) {
                 // this server can't reach the app's internal API (0: firewall / no hairpin NAT / DNS / TLS —
                 // see COLLAB_APP_URL + COLLAB_APP_HOST), or it refused (401 = secret differs, 404 = page /
@@ -268,6 +286,10 @@ export function createCollabServer({
                 refuseDevice();
             }
             learnLimit(result);
+            // a push that never arrived: what Brainitive says now also closes what is already open
+            const ended = endedAmong(result, new Set(session !== null ? [session] : []));
+            if (learnGenerations(result) || ended.length > 0) setImmediate(closeSignedOutConnections);
+            if (device === null && isSignedOut(payload.sub, session, generation)) refuseSignedOut();
             if (!result?.current) refuse('document-replaced');
             const access = result.users?.[String(payload.sub)] ?? null;
             if (access === null) refuse('access-denied');
@@ -275,7 +297,7 @@ export function createCollabServer({
             // view-only: Hocuspocus drops this connection's document updates
             connectionConfig.readOnly = !edit;
             authenticated.add(request);
-            return { user: { id: payload.sub, name: payload.name }, edit, device };
+            return { user: { id: payload.sub, name: payload.name }, edit, device, session, generation };
         },
 
         // Awareness is client data: everyone must announce themselves as who their token says,
@@ -371,6 +393,60 @@ export function createCollabServer({
         if (socket && socket.readyState === socket.OPEN) socket.close(DEVICE_REVOKED.code, DEVICE_REVOKED.reason);
     }
 
+    /** The asked sessions an access answer names as signed out — remembered (their tokens are refused) and returned. */
+    function endedAmong(result, asked) {
+        const at = Math.floor(Date.now() / 1000);
+        const ended = (Array.isArray(result?.ended_sessions) ? result.ended_sessions : []).filter((sid) => asked.has(sid));
+        ended.forEach((sid) => endedSessions.set(sid, at));
+        return ended;
+    }
+
+    /** The users' current generations from an access answer (older web tokens are signed out); true when one is new. */
+    function learnGenerations(result) {
+        const at = Math.floor(Date.now() / 1000);
+        let changed = false;
+        Object.entries(result?.generations && typeof result.generations === 'object' ? result.generations : {}).forEach(([id, gen]) => {
+            const user = Number(id);
+            if (!Number.isInteger(user) || !Number.isInteger(gen) || gen < 0 || gen <= (generations.get(user)?.gen ?? -1)) return;
+            generations.set(user, { gen, at });
+            changed = true;
+        });
+        return changed;
+    }
+
+    /** Close one connection of a signed-out browser session: the document, then its whole socket (4401). */
+    function closeSignedOut(connection) {
+        connection.close(SIGNED_OUT);
+        const socket = connection.webSocket;
+        if (socket && socket.readyState === socket.OPEN) socket.close(SIGNED_OUT.code, SIGNED_OUT.reason);
+    }
+
+    /** Close the web connections of signed-out sessions / generations. Returns how many closed. */
+    function closeSignedOutConnections() {
+        let closed = 0;
+        for (const [, document] of server.hocuspocus.documents) {
+            for (const connection of document.getConnections()) {
+                const context = connection.context ?? {};
+                if (context.device !== null && context.device !== undefined) continue;
+                if (!Number.isInteger(context.user?.id) || !isSignedOut(context.user.id, context.session ?? null, context.generation ?? null)) continue;
+                closed++;
+                closeSignedOut(connection);
+            }
+        }
+        return closed;
+    }
+
+    /**
+     * Brainitive signed these browser sessions out / these users out everywhere (pushed by the live endpoint
+     * POST /internal/live/sessions/ended): close their web connections (4401) and refuse their remaining tokens.
+     * @param {{sessions?: string[], users?: {id: number, generation: number}[]}} ended
+     */
+    function endSessions({ sessions = [], users = [] }) {
+        endedAmong({ ended_sessions: sessions }, new Set(sessions));
+        learnGenerations({ generations: Object.fromEntries(users.map(({ id, generation }) => [String(id), generation])) });
+        return closeSignedOutConnections();
+    }
+
     /**
      * Brainitive revoked these app devices (sign-out, password change, suspension …; the live publish endpoint
      * passes them on): close their connections and refuse their remaining tokens. Returns how many connections closed.
@@ -396,16 +472,17 @@ export function createCollabServer({
     let rechecking = false;
 
     /**
-     * The users of one document in requests Brainitive accepts: ≤ accessBatchSize users and ≤ 500 devices each.
-     * @param {Map<number, number[]>} devicesByUser
+     * The users of one document in requests Brainitive accepts: ≤ accessBatchSize users and ≤ 500 devices and
+     * sessions each.
+     * @param {Map<number, number>} extras user id → their devices + sessions
      * @returns {number[][]}
      */
-    function batches(userIds, devicesByUser) {
+    function batches(userIds, extras) {
         const out = [];
         let current = [];
         let devices = 0;
         for (const id of userIds) {
-            const own = devicesByUser.get(id)?.length ?? 0;
+            const own = extras.get(id) ?? 0;
             if (current.length > 0 && (current.length >= accessBatchSize || devices + own > 500)) {
                 out.push(current);
                 current = [];
@@ -437,26 +514,35 @@ export function createCollabServer({
         // a token lives minutes at most: older revocations can't matter any more
         const now = Math.floor(Date.now() / 1000);
         revokedDevices.forEach((at, id) => { if (now - at > 3600) revokedDevices.delete(id); });
+        endedSessions.forEach((at, sid) => { if (now - at > 3600) endedSessions.delete(sid); });
+        generations.forEach(({ at }, id) => { if (now - at > 3600) generations.delete(id); });
         const present = new Set();
         for (const [documentName, document] of server.hocuspocus.documents) {
             const connections = document.getConnections();
             const userIds = [...new Set(connections.map((c) => c.context?.user?.id).filter(Number.isInteger))];
             if (userIds.length === 0) continue;
+            // per user: the app devices and the browser sessions of their connections (each counts against the 500)
             const devicesByUser = new Map();
+            const sessionsByUser = new Map();
+            const add = (map, id, value) => {
+                const list = map.get(id) ?? [];
+                if (!list.includes(value)) list.push(value);
+                map.set(id, list);
+            };
             connections.forEach((c) => {
-                if (!Number.isInteger(c.context?.device)) return;
-                const list = devicesByUser.get(c.context.user.id) ?? [];
-                if (!list.includes(c.context.device)) list.push(c.context.device);
-                devicesByUser.set(c.context.user.id, list);
+                if (Number.isInteger(c.context?.device)) add(devicesByUser, c.context.user.id, c.context.device);
+                if (typeof c.context?.session === 'string') add(sessionsByUser, c.context.user.id, c.context.session);
             });
+            const extras = new Map(userIds.map((id) => [id, (devicesByUser.get(id)?.length ?? 0) + (sessionsByUser.get(id)?.length ?? 0)]));
             userIds.forEach((id) => present.add(`${documentName}|${id}`));
-            for (const batch of batches(userIds, devicesByUser)) {
+            for (const batch of batches(userIds, extras)) {
                 const inBatch = new Set(batch);
                 const mine = connections.filter((c) => inBatch.has(c.context?.user?.id));
                 const devices = batch.flatMap((id) => (devicesByUser.get(id) ?? []).map((device) => ({ id: device, user_id: id })));
+                const sessions = batch.flatMap((id) => sessionsByUser.get(id) ?? []);
                 let result;
                 try {
-                    result = await laravel.access(documentName, batch, devices);
+                    result = await laravel.access(documentName, batch, devices, sessions);
                 } catch (error) {
                     if (isGone(error)) {
                         closeDocument(documentName, RESET);
@@ -482,8 +568,13 @@ export function createCollabServer({
                 const asked = new Set(devices.map(({ id }) => id));
                 const lost = new Set((Array.isArray(result.revoked_devices) ? result.revoked_devices : []).filter((id) => asked.has(id)));
                 if (lost.size > 0) revokeDevices([...lost]);
+                endedAmong(result, new Set(sessions));
+                learnGenerations(result);
+                const signedOut = new Set(mine.filter((c) => !Number.isInteger(c.context?.device) && Number.isInteger(c.context?.user?.id)
+                    && isSignedOut(c.context.user.id, c.context.session ?? null, c.context.generation ?? null)));
+                signedOut.forEach((connection) => closeSignedOut(connection));
                 for (const connection of mine) {
-                    if (lost.has(connection.context?.device)) continue;
+                    if (lost.has(connection.context?.device) || signedOut.has(connection)) continue;
                     const access = result.users?.[String(connection.context?.user?.id)] ?? null;
                     if (access === null) connection.close(FORBIDDEN);
                     else connection.readOnly = access !== 'edit' || !connection.context.edit;
@@ -499,6 +590,7 @@ export function createCollabServer({
         server,
         recheckAccess,
         revokeDevices,
+        endSessions,
         async listen() {
             // Not server.listen(): Hocuspocus 3.4 passes `address` where Node expects `host`, so it would
             // listen on every interface instead of COLLAB_HOST (127.0.0.1 behind nginx).

@@ -2,6 +2,7 @@
 // keep them in sync. Same scheme as the co-editing token (src/token.js), other key labels, so a
 // document token is never a channel token and neither is ever the publish key.
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { validSession } from '../token.js';
 
 /** Keys derived from the shared secret (COLLAB_SECRET or derived from APP_KEY). */
 export function deriveLiveKeys(secret) {
@@ -22,7 +23,7 @@ const base64url = (buffer) => Buffer.from(buffer).toString('base64url');
 /**
  * The payload of a valid, unexpired live token, else null. `dev`: the app device (App API tokens only;
  * the web's tokens have none) — a revoked device's sockets are closed.
- * @returns {{v: 1, typ: 'live', sub: number, dev?: number, name: string, avatar: string | null, ch: string[], iat: number, exp: number} | null}
+ * @returns {{v: 1, typ: 'live', sub: number, dev?: number, sid?: string, gen?: number, name: string, avatar: string | null, ch: string[], iat: number, exp: number} | null}
  */
 export function verifyLiveToken(token, key, now = Math.floor(Date.now() / 1000)) {
     if (typeof token !== 'string' || token.length > 8192) return null;
@@ -41,7 +42,7 @@ export function verifyLiveToken(token, key, now = Math.floor(Date.now() / 1000))
         return null;
     }
     if (!data || data.v !== 1 || data.typ !== 'live' || !Number.isInteger(data.sub) || data.sub < 1
-        || (data.dev !== undefined && (!Number.isInteger(data.dev) || data.dev < 1))
+        || (data.dev !== undefined && (!Number.isInteger(data.dev) || data.dev < 1)) || !validSession(data)
         || typeof data.name !== 'string' || !(data.avatar === null || typeof data.avatar === 'string')
         || !Array.isArray(data.ch) || data.ch.length > MAX_TOKEN_CHANNELS
         || !data.ch.every((channel) => typeof channel === 'string' && CHANNEL.test(channel))

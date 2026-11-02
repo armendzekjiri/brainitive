@@ -185,6 +185,7 @@ const REFUSALS: Record<string, string> = {
     'document-replaced': 'the document was replaced',
     'access-denied': 'no access',
     'too-many-connections': 'too many live documents open',
+    'signed-out': 'you were signed out',
 };
 
 /** A permission-denied / close reason from realtime/src/server.js → what it means. */

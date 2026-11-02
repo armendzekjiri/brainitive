@@ -61,6 +61,8 @@ attachLive(collab.server, {
     accessIntervalMs,
     publishFrom: env.LIVE_PUBLISH_FROM === 'private' ? 'private' : 'loopback',
     onDevicesRevoked: (ids) => collab.revokeDevices(ids),
+    // a signed-out browser session (POST /internal/live/sessions/ended) loses its document sockets too
+    onSessionsEnded: (ended) => collab.endSessions(ended),
 });
 
 await collab.listen();
