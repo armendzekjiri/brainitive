@@ -9,6 +9,7 @@ use App\Models\Workspace;
 use App\Support\Billing\BillingDocument;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
@@ -67,15 +68,23 @@ class BillingDocumentController extends Controller
         $cc = $this->ccList((string) ($data['cc'] ?? ''), $to);
 
         $user = $request->user();
-        Mail::to($to)
-            ->cc($cc)
-            ->queue(new BillingReportMail($report, $data['subject'], $data['message'] ?? null, $user->email, $user->name));
+        // Codex web review W: the status changes on the locked row, from what it is there (a void or paid in between
+        // is never overwritten), and the mail is queued only after that commit — never for a report voided meanwhile
+        DB::transaction(function () use ($report, $to, $cc, $data, $user) {
+            $locked = BillingReport::whereKey($report->id)->lockForUpdate()->firstOrFail();
+            if (! in_array($locked->status, self::SENDABLE, true)) {
+                throw ValidationException::withMessages(['status' => 'Only finalized reports can be sent. Finalize the report first.']);
+            }
+            $locked->forceFill([
+                'sent_at' => now(),
+                'sent_to' => mb_substr($to, 0, 255),
+                'status' => $locked->status === 'finalized' ? 'sent' : $locked->status,
+            ])->save();
 
-        $report->forceFill([
-            'sent_at' => now(),
-            'sent_to' => mb_substr($to, 0, 255),
-            'status' => $report->status === 'finalized' ? 'sent' : $report->status,
-        ])->save();
+            Mail::to($to)
+                ->cc($cc)
+                ->queue((new BillingReportMail($locked, $data['subject'], $data['message'] ?? null, $user->email, $user->name))->afterCommit());
+        });
 
         return back()->with('success', 'The report is on its way to '.$to.'.');
     }
