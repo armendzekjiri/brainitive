@@ -266,8 +266,11 @@ class BillingReportController extends Controller
         return [
             'period_from' => ['required', 'date_format:Y-m-d'],
             'period_to' => ['required', 'date_format:Y-m-d', 'after_or_equal:period_from', function ($attribute, $value, $fail) {
+                // parsed, not strtotime() truthiness: 1970-01-01 is 0 and skipped the check (Codex web review Y)
                 $from = request()->input('period_from');
-                if (is_string($from) && strtotime($from) && strtotime((string) $value) - strtotime($from) > 366 * 86400) {
+                $start = is_string($from) ? CarbonImmutable::createFromFormat('!Y-m-d', $from, 'UTC') : false;
+                $end = is_string($value) ? CarbonImmutable::createFromFormat('!Y-m-d', $value, 'UTC') : false;
+                if ($start && $end && $start->diffInDays($end, false) > 366) {
                     $fail('A report covers at most one year.');
                 }
             }],

@@ -375,6 +375,41 @@ class BillingReportFlowTest extends TestCase
         $this->assertSame('void', $report->fresh()->status);
     }
 
+    /** Codex web review Y: the one-year limit also holds for a period starting on 1970-01-01 (strtotime() = 0). */
+    public function test_a_period_from_the_epoch_is_limited_to_one_year_too(): void
+    {
+        $this->actingAs($this->admin)->post($this->url('billing.reports.store'), [
+            'client_id' => $this->client->id, 'period_from' => '1970-01-01', 'period_to' => '2099-12-31',
+        ])->assertSessionHasErrors('period_to');
+        $this->assertSame(0, BillingReport::count());
+
+        $report = $this->draft();
+        $update = ['group_by' => 'ticket', 'show_people' => true, 'show_notes' => false, 'excluded_entry_ids' => []];
+        $this->actingAs($this->admin)->patch($this->url('billing.reports.update', $report), $update + ['period_from' => '1970-01-01', 'period_to' => '2099-12-31'])
+            ->assertSessionHasErrors('period_to');
+        $this->assertSame('2026-10-01', $report->fresh()->period_from->format('Y-m-d'));
+
+        // the boundary: 366 days apart is fine, 367 is not
+        $this->actingAs($this->admin)->patch($this->url('billing.reports.update', $report), $update + ['period_from' => '2026-01-01', 'period_to' => '2027-01-02'])
+            ->assertSessionHasNoErrors();
+        $this->actingAs($this->admin)->patch($this->url('billing.reports.update', $report), $update + ['period_from' => '2026-01-01', 'period_to' => '2027-01-03'])
+            ->assertSessionHasErrors('period_to');
+    }
+
+    /** Codex web review Z: title and project_ids are optional on update — leaving them out is not a 500. */
+    public function test_an_update_without_the_optional_fields_keeps_the_defaults(): void
+    {
+        $report = $this->draft(['title' => 'Custom']);
+
+        $this->actingAs($this->admin)->patch($this->url('billing.reports.update', $report), [
+            'period_from' => '2026-10-01', 'period_to' => '2026-10-31', 'group_by' => 'ticket', 'show_people' => true, 'show_notes' => false, 'excluded_entry_ids' => [],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $report->refresh();
+        $this->assertNull($report->options['project_ids']); // all of the client's projects
+        $this->assertNotSame('', (string) $report->title);
+    }
+
     public function test_a_draft_can_be_deleted(): void
     {
         $report = $this->draft();
