@@ -91,6 +91,24 @@ final class TimeEntries
     }
 
     /**
+     * The entry's project as the timesheet shows it (Codex web review S): live only while it is still in the entry's
+     * workspace and the viewer can open it; a project moved to another workspace (billed entries stay behind) or out
+     * of reach gets a neutral label — never its new name or key.
+     *
+     * @param  array<int, int>  $accessible  project ids the viewer can open, as keys
+     * @return array{id: int|null, name: string, key: string|null}|null
+     */
+    public static function visibleProject(TimeEntry $entry, array $accessible): ?array
+    {
+        $project = $entry->project;
+        if ($project && (int) $project->workspace_id === (int) $entry->workspace_id && isset($accessible[(int) $project->id])) {
+            return ['id' => (int) $project->id, 'name' => (string) $project->name, 'key' => $project->key];
+        }
+
+        return $entry->project_id === null ? null : ['id' => null, 'name' => TimeOverview::PROJECT_GONE, 'key' => null];
+    }
+
+    /**
      * The entry's issue while the user can still open it (where it is now — issues move between projects);
      * null otherwise, and the entry shows its snapshot (item_key / item_title).
      *

@@ -29,7 +29,6 @@ class WorkLogResource extends JsonResource
     {
         $entry = $this->resource;
         $item = TimeEntries::visibleIssue($entry, $this->accessible);
-        $project = $entry->project;
         $activity = $entry->activity;
 
         return [
@@ -45,11 +44,8 @@ class WorkLogResource extends JsonResource
             'source' => $this->source,
             // billed on a finalized report: no edits, no deletes
             'locked' => $entry->isLocked(),
-            'project' => $project ? [
-                'id' => (int) $project->id,
-                'name' => (string) $project->name,
-                'key' => $project->key,
-            ] : null,
+            // id null + "Deleted or moved project" once it moved away or is out of reach (Codex web review S)
+            'project' => TimeEntries::visibleProject($entry, $this->accessible),
             'issue' => $entry->item_id || $entry->item_key ? [
                 'id' => $entry->item_id === null ? null : (int) $entry->item_id,
                 'work_id' => $item ? 'issue:'.$item->id : null,
