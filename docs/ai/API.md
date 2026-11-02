@@ -60,6 +60,9 @@ Token response (exchange + refresh):
 
 Cancel on the consent page → `brainitive://auth/callback?error=access_denied&state=…`.
 
+A consent-page code approved before the user **signed out everywhere** (password change or reset, suspension,
+account takeover) is dead: the exchange answers 400 `invalid_grant` (Codex review; `users.app_auth_generation`).
+
 **Webview link `/app/session/{code}` (BRAI-377):** the code is spent on the first open (60 s, single use) and the
 sign-in it carries is bound to that browser session; the session is then bound to the device (revoking the device
 logs it out on its next request). It signs in **at once** only when the same user is already signed in, or when
@@ -100,7 +103,7 @@ or 400 `{message, code}` with `code`:
 |---|---|---|
 | `authorization_pending` | not decided yet | poll again after `interval` |
 | `slow_down` | polled sooner than `interval` (+ `interval`: the new wait, +5 s each time) | wait the new `interval` from now on |
-| `access_denied` | the user clicked Deny (or was suspended) | stop, show "denied" |
+| `access_denied` | the user clicked Deny (or was suspended, or signed out everywhere — password change / reset — after approving) | stop, show "denied" |
 | `expired_token` | 10 minutes passed | start again |
 | `invalid_grant` | unknown or already used `device_code` | start again |
 

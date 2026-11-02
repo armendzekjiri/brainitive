@@ -208,6 +208,8 @@ class AppSignInTest extends TestCase
             'client' => 'desktop',
             'code_challenge' => self::CHALLENGE,
             'device_name' => 'Ada’s MacBook',
+            // "sign out everywhere" before the exchange kills it (Codex review)
+            'auth_generation' => 0,
         ], AppAuthCodes::consume(AppAuthCodes::EXCHANGE, $query['code']));
     }
 

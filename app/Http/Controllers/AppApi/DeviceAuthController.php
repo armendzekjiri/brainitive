@@ -47,7 +47,7 @@ class DeviceAuthController extends Controller
      * Once the user approved: the same token response as `/auth/exchange` (unwrapped, with `device`),
      * once. Until then a 400 with an RFC 8628 `code`: `authorization_pending` (ask again after
      * `interval`), `slow_down` (asked too soon: wait 5 s longer from now on), `access_denied` (the user
-     * said no: stop), `expired_token` (start again), `invalid_grant` (unknown or already used code).
+     * said no, or signed out everywhere after approving: stop), `expired_token` (start again), `invalid_grant` (unknown or already used code).
      *
      * @unauthenticated
      */
@@ -74,7 +74,12 @@ class DeviceAuthController extends Controller
             return AppApiErrors::json(400, 'The sign-in was denied.', code: 'access_denied');
         }
 
-        [$device, $tokens] = AppDeviceSignIn::create($user, (string) $payload['client'], $payload['device'], $ip);
+        $signIn = AppDeviceSignIn::create($user, (string) $payload['client'], $payload, $payload['device'], $ip);
+        // the user signed out everywhere (password change / reset …) after approving: as a denial (Codex review)
+        if ($signIn === null) {
+            return AppApiErrors::json(400, 'The sign-in was denied.', code: 'access_denied');
+        }
+        [$device, $tokens] = $signIn;
 
         return TokenResource::for($tokens, $device);
     }

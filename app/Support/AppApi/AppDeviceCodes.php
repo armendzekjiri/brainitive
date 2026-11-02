@@ -126,6 +126,8 @@ final class AppDeviceCodes
 
             $payload['status'] = $approve ? self::APPROVED : self::DENIED;
             $payload['user_id'] = $user->id;
+            // a "sign out everywhere" after this approval kills it (AppDeviceSignIn, Codex review)
+            $payload[AppSignInGeneration::KEY] = AppSignInGeneration::current($user);
             self::save($hash, $payload);
             Cache::forget(self::userKey(self::normalize((string) $userCode)));
 

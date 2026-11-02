@@ -58,6 +58,7 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'app_auth_generation',
     ];
 
     /**
@@ -77,6 +78,7 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
             'task_digest' => 'boolean',
             'notification_preferences' => 'array',
             'sidebar_preferences' => 'array',
+            'app_auth_generation' => 'integer',
         ];
     }
 

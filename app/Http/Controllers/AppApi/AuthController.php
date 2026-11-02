@@ -34,7 +34,8 @@ class AuthController extends Controller
      * Exchange the one-time code from the consent page for the first token pair.
      *
      * Creates the device (signing out the least recently used one beyond the per-user limit).
-     * A wrong, used or expired code, or a verifier that doesn't match its challenge → 400 `invalid_grant`.
+     * A wrong, used or expired code, a verifier that doesn't match its challenge, or a code approved before
+     * the user signed out everywhere (password change / reset …) → 400 `invalid_grant`.
      *
      * @unauthenticated
      */
@@ -59,7 +60,12 @@ class AuthController extends Controller
             throw ValidationException::withMessages(['device.platform' => ['This platform does not belong to the '.$client.' app.']]);
         }
 
-        [$device, $tokens] = AppDeviceSignIn::create($user, $client, $request->validated('device'), $request->ip());
+        // null: the user signed out everywhere (password change / reset …) after approving (Codex review)
+        $signIn = AppDeviceSignIn::create($user, $client, $payload, $request->validated('device'), $request->ip());
+        if ($signIn === null) {
+            return $this->invalidGrant(400, 'The sign-in code is invalid or has expired. Please sign in again.');
+        }
+        [$device, $tokens] = $signIn;
 
         return TokenResource::for($tokens, $device);
     }

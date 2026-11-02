@@ -2,6 +2,7 @@
 
 namespace App\Support\AppApi;
 
+use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
@@ -11,6 +12,8 @@ use Illuminate\Support\Str;
  *    bound to the PKCE challenge;
  *  - `web_session`: POST /api/v1/auth/web-session → the webview opens /app/session/{code}.
  * Only the sha256 of a code is used as the key; a code never reaches the logs or the database.
+ * An `exchange` code carries the user's AppSignInGeneration from when it was issued (= approved), so a
+ * "sign out everywhere" before the exchange kills it (Codex review).
  */
 final class AppAuthCodes
 {
@@ -22,6 +25,9 @@ final class AppAuthCodes
     public static function issue(string $purpose, array $payload): string
     {
         $code = Str::random(64);
+        if ($purpose === self::EXCHANGE && isset($payload['user_id']) && ! array_key_exists(AppSignInGeneration::KEY, $payload)) {
+            $payload[AppSignInGeneration::KEY] = (int) User::query()->whereKey((int) $payload['user_id'])->value('app_auth_generation');
+        }
         Cache::put(self::key($purpose, $code), $payload, (int) config('app-api.code_ttl'));
 
         return $code;
