@@ -43,6 +43,22 @@ final class LiveConfig
         return $collab.(str_contains($collab, '?') ? '&' : '?').'live=1';
     }
 
+    /**
+     * The WebSocket URL for native clients (App API): always absolute. A path (`LIVE_URL=/collab?live=1`)
+     * is resolved against APP_URL (https → wss, http → ws).
+     */
+    public static function absoluteUrl(): string
+    {
+        $url = self::url();
+        if (preg_match('#\Awss?://#i', $url) === 1) {
+            return $url;
+        }
+        $app = rtrim((string) config('app.url'), '/');
+        $base = preg_replace('#\Ahttp(s?)://#i', 'ws$1://', $app) ?? $app;
+
+        return $base.'/'.ltrim($url, '/');
+    }
+
     /** Where to POST events (the realtime server's own address), null = publishing is off. */
     public static function publishUrl(): ?string
     {

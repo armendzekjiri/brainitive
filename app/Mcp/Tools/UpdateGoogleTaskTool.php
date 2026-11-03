@@ -22,7 +22,8 @@ class UpdateGoogleTaskTool extends Tool
     {
         $validated = $request->validate([
             'connection_id' => 'required|integer',
-            'task_id' => 'required|string',
+            // one opaque id of the selected list: no `/`, `\\`, `..` or control characters (Codex review)
+            'task_id' => GoogleTasksService::TASK_ID_RULES,
             'title' => 'sometimes|string|max:1024',
             'description' => 'sometimes|nullable|string|max:8000',
             'date' => 'sometimes|nullable|date_format:Y-m-d',
@@ -30,6 +31,10 @@ class UpdateGoogleTaskTool extends Tool
             'completed' => 'sometimes|boolean',
             'timezone' => 'nullable|string|max:64',
         ]);
+
+        if ($limited = $this->calendarWriteLimited($request->user())) {
+            return $limited;
+        }
 
         try {
             $connection = $this->connectionForUser($request->user(), $validated['connection_id'], 'tasks');

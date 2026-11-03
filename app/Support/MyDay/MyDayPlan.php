@@ -53,6 +53,52 @@ class MyDayPlan
         return self::resolve($user, $earlier)->filter(fn (array $row) => ! self::isDone($row['work']))->values();
     }
 
+    /**
+     * Put work on the user's plan for their local today, at the end (twice is a no-op). The caller has
+     * checked that the user can open it.
+     */
+    public static function add(User $user, string $workType, int $workId): MyDayEntry
+    {
+        $today = self::today($user);
+
+        return MyDayEntry::firstOrCreate(
+            ['user_id' => $user->id, 'work_type' => $workType, 'work_id' => $workId, 'plan_date' => $today],
+            ['position' => self::nextPosition($user->id, $today)],
+        );
+    }
+
+    /** Take work off the user's plan for today (the task itself is never touched). */
+    public static function remove(User $user, string $workType, int $workId): void
+    {
+        MyDayEntry::where('user_id', $user->id)
+            ->where('plan_date', self::today($user))
+            ->where('work_type', $workType)
+            ->where('work_id', $workId)
+            ->delete();
+    }
+
+    /** "Bring over": unfinished work of earlier days onto today, at the end. Returns how many. */
+    public static function carryOver(User $user): int
+    {
+        $today = self::today($user);
+        $position = self::nextPosition($user->id, $today);
+
+        $rows = self::carryOverCandidates($user, $today);
+        foreach ($rows as $row) {
+            MyDayEntry::firstOrCreate(
+                ['user_id' => $user->id, 'work_type' => $row['entry']->work_type, 'work_id' => $row['entry']->work_id, 'plan_date' => $today],
+                ['position' => $position++],
+            );
+        }
+
+        return $rows->count();
+    }
+
+    public static function nextPosition(int $userId, string $date): int
+    {
+        return (int) MyDayEntry::where('user_id', $userId)->where('plan_date', $date)->max('position') + 1;
+    }
+
     public static function isDone(Item|TaskListItem $work): bool
     {
         return $work instanceof Item ? $work->completed_at !== null : $work->status === 'done';

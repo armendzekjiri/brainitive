@@ -200,7 +200,8 @@ test.describe('task lists', () => {
 test.describe('my work', () => {
     test('shows the issues assigned to the signed-in user only', async ({ page, memberPage }) => {
         await page.goto('/my-work');
-        await expect(page.getByText('Checkout bug')).toBeVisible();
+        // .first(): on dev the issue can also be in My Day (planned by the app-api journeys), so it shows twice
+        await expect(page.getByText('Checkout bug').first()).toBeVisible();
         await expect(page.getByText('Pricing page copy')).toHaveCount(0);
 
         await page.getByRole('button', { name: /Created by me/ }).click();

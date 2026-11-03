@@ -11,6 +11,7 @@ Codex, Cursor). The per-agent entry files are thin pointers to the docs here.
 | **Write code** (any backend/frontend change) | [`CONVENTIONS.md`](./CONVENTIONS.md) — the rules & patterns |
 | **Start a feature or fix** | [`WORKFLOW.md`](./WORKFLOW.md) — branch → plan → build → update docs |
 | **Do a common task the project's way** | [`skills/`](./skills) — step-by-step recipes |
+| **Add or use a desktop / mobile app endpoint (`/api/v1`)** | [`API.md`](./API.md) — registry + conventions; recipe [`skills/add-app-api-endpoint.md`](./skills/add-app-api-endpoint.md); spec [`docs/api/openapi.json`](../api/openapi.json) |
 | **Avoid a known trap / understand a decision** | [`KNOWLEDGE.md`](./KNOWLEDGE.md) — gotchas & decisions |
 | **See plans for past/in-flight work** | [`tasks/`](./tasks) — one plan file per branch |
 

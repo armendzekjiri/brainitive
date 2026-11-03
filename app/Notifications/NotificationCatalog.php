@@ -73,6 +73,7 @@ final class NotificationCatalog
         'sla_breached' => 'helpdesk',
         'automation_notice' => 'status', // BRAI-63: the "Notify" action of an automation rule
         'export_ready' => 'workspace', // BRAI-81: a project export can be downloaded
+        'plan_limit_reached' => 'workspace', // v1.49.0: a public form turned a submission away (content limit), once a day
         'data_export_ready' => 'workspace', // BRAI-156: "Download my data" is ready (in-app + email always; push per category)
         // BRAI-158 (booking pages): to the host
         'booking_created' => 'bookings',
@@ -111,6 +112,35 @@ final class NotificationCatalog
             'description' => $c['description'],
             'channels' => self::preferences($user, $key),
         ])->values()->all();
+    }
+
+    /**
+     * Rules of a (partial) preferences update: {preferences: {"<category>": {"in_app"|"push"|"email": bool}}}
+     * (Profile → Notifications, App API `PUT /me/notification-preferences`).
+     *
+     * @return array<string, mixed>
+     */
+    public static function preferenceRules(): array
+    {
+        return [
+            'preferences' => ['required', 'array:'.implode(',', array_keys(self::CATEGORIES))],
+            'preferences.*' => ['required', 'array:'.implode(',', self::CHANNELS)],
+            'preferences.*.*' => ['required', 'boolean'],
+        ];
+    }
+
+    /**
+     * Save a validated partial update: only the sent categories and channels change.
+     *
+     * @param  array<string, array<string, mixed>>  $preferences
+     */
+    public static function updatePreferences(User $user, array $preferences): void
+    {
+        $stored = is_array($user->notification_preferences) ? $user->notification_preferences : [];
+        foreach ($preferences as $category => $channels) {
+            $stored[$category] = array_replace(self::preferences($user, $category), array_map('boolval', $channels));
+        }
+        $user->update(['notification_preferences' => $stored]);
     }
 
     /** Laravel channel names for a type: 'database', WebPushChannel::class, 'mail'. */

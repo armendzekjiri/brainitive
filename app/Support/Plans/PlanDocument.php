@@ -151,6 +151,49 @@ class PlanDocument
         ];
     }
 
+    /**
+     * What a public share ("publish to web") may send: an explicit whitelist of what the read-only chart shows (Codex
+     * web review A). Hidden columns (who, status, notes) are not sent at all, nor are internal ids (`itemId`) or any
+     * key an older document still holds.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $settings  normalizeSettings()
+     * @return array{rows: list<array<string, mixed>>, dependencies: list<array{id: string, from: string, to: string}>}
+     */
+    public static function publicData(array $data, array $settings): array
+    {
+        $columns = $settings['columns'] ?? [];
+        $rowKeys = ['id', 'name', 'level', 'collapsed'];
+        foreach (['who', 'status', 'notes'] as $column) {
+            if (! empty($columns[$column])) {
+                $rowKeys[] = $column;
+            }
+        }
+        $barKeys = array_flip(['id', 'start', 'end', 'type', 'color', 'label', 'progress']);
+
+        $rows = [];
+        foreach (is_array($data['rows'] ?? null) ? $data['rows'] : [] as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $public = array_intersect_key($row, array_flip($rowKeys));
+            $public['bars'] = array_values(array_map(
+                fn ($bar) => array_intersect_key((array) $bar, $barKeys),
+                array_filter(is_array($row['bars'] ?? null) ? $row['bars'] : [], 'is_array'),
+            ));
+            $rows[] = $public;
+        }
+
+        $dependencies = [];
+        foreach (is_array($data['dependencies'] ?? null) ? $data['dependencies'] : [] as $dependency) {
+            if (is_array($dependency) && isset($dependency['id'], $dependency['from'], $dependency['to'])) {
+                $dependencies[] = ['id' => $dependency['id'], 'from' => $dependency['from'], 'to' => $dependency['to']];
+            }
+        }
+
+        return ['rows' => $rows, 'dependencies' => $dependencies];
+    }
+
     private static function text(?string $value): ?string
     {
         $value = $value === null ? null : trim($value);

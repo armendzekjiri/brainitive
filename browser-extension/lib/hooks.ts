@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
-import { getSession } from './storage';
-import type { Destinations, Session } from './types';
+import { type Account, getAccount } from './storage';
+import type { Destinations } from './types';
 
-/** The stored session, kept in sync when another context signs in or out. */
-export function useSession(): { session: Session | null; loading: boolean } {
-    const [state, setState] = useState<{ session: Session | null; loading: boolean }>({ session: null, loading: true });
+/**
+ * The signed-in account (its server; no tokens — those stay in the background), kept in sync
+ * when another context signs in or out.
+ */
+export function useSession(): { session: Account | null; loading: boolean } {
+    const [state, setState] = useState<{ session: Account | null; loading: boolean }>({ session: null, loading: true });
 
     useEffect(() => {
-        getSession().then((session) => setState({ session, loading: false }));
+        getAccount().then((session) => setState({ session, loading: false }));
         const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
-            if (area === 'local' && 'session' in changes) {
-                setState({ session: (changes.session.newValue as Session | undefined) ?? null, loading: false });
+            if (area === 'local' && 'account' in changes) {
+                setState({ session: (changes.account?.newValue as Account | undefined) ?? null, loading: false });
             }
         };
         browser.storage.onChanged.addListener(listener);

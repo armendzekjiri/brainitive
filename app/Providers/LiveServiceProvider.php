@@ -5,6 +5,9 @@ namespace App\Providers;
 use App\Models\User;
 use App\Support\Live\BoardLive;
 use App\Support\Live\Live;
+use App\Support\Live\RealtimeSession;
+use Illuminate\Auth\Events\CurrentDeviceLogout;
+use Illuminate\Auth\Events\Logout;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Support\Facades\Event;
@@ -25,6 +28,10 @@ class LiveServiceProvider extends ServiceProvider
                 Live::publish("user.{$event->notifiable->id}", 'notification.created', ['id' => (string) $event->response->id]);
             }
         });
+
+        // a browser session signs out (logout button, suspension, revoked app webview …): its realtime sockets close
+        // and its remaining tokens stop working (Codex realtime review 1). Before the session is invalidated.
+        Event::listen([Logout::class, CurrentDeviceLogout::class], fn () => RealtimeSession::end());
 
         // live boards + plans (BRAI-152): cards, columns, sprints, plans → board.{id} / plan.{id}
         BoardLive::register();

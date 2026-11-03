@@ -141,6 +141,13 @@ test.describe('workspace members', () => {
 });
 
 test.describe('projects', () => {
+    test('the old projects URL opens the workspace home, which lists the projects', async ({ page }) => {
+        await page.goto(`${urls.workspace()}/projects`);
+        await expect(page).toHaveURL(urls.workspace());
+        await expect(page.getByRole('heading', { level: 1, name: 'E2E Workspace' })).toBeVisible();
+        await expect(page.getByRole('link', { name: /Website/ }).first()).toBeVisible();
+    });
+
     test('the first issue of a new project is KEY-1', async ({ page }) => {
         // regression BRAI-97: blank projects used to start at KEY-2
         const workspace = await createWorkspace(page);

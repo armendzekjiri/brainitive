@@ -30,6 +30,10 @@ class CreateGoogleTaskTool extends Tool
             'timezone' => 'nullable|string|max:64',
         ]);
 
+        if ($limited = $this->calendarWriteLimited($request->user())) {
+            return $limited;
+        }
+
         try {
             $connection = $this->resolveTargetList($request->user(), $validated['connection_id'] ?? null);
         } catch (AuthorizationException $e) {

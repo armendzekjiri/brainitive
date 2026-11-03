@@ -194,6 +194,12 @@ interface CalendarProvider
      */
     public function updateEvent(CalendarConnection $connection, string $eventId, array $data): array;
 
-    /** @throws CalendarReadOnly|CalendarSyncFailed */
-    public function deleteEvent(CalendarConnection $connection, string $eventId): void;
+    /**
+     * Delete an event. An id that names a whole recurring series (a CalDAV object without its `~<occurrence>`, a
+     * Google instance id without its `_<time>`) is refused unless `$wholeSeries` (Codex review, finding 16): the
+     * lists only hand out occurrence ids, so a series id is a stripped or made-up one.
+     *
+     * @throws CalendarReadOnly|CalendarSyncFailed
+     */
+    public function deleteEvent(CalendarConnection $connection, string $eventId, bool $wholeSeries = false): void;
 }

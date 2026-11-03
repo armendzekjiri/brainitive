@@ -30,3 +30,7 @@ storage/e2e/
 /e2e/.auth/
 /e2e/test-results/
 /e2e/playwright-report/
+
+# The desktop app (Tauri) is its own repo (armendzekjiri/brainitive-desktop), checked out here
+# so local agents share this project's docs and memory. Never commit it into this repo.
+/desktop/

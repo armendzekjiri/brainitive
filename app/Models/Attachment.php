@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ReservesFileStorage;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Attachment extends Model
 {
+    use ReservesFileStorage;
+
     protected $fillable = [
         'item_id',
         'user_id',
@@ -61,5 +64,11 @@ class Attachment extends Model
     public function isImage(): bool
     {
         return str_starts_with($this->mime_type ?? '', 'image/');
+    }
+
+    /** The workspace whose file storage this file counts against (Codex web review C). */
+    public function meteredWorkspace(): ?Workspace
+    {
+        return $this->item?->board?->project?->workspace;
     }
 }

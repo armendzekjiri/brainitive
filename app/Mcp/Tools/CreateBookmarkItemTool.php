@@ -3,6 +3,8 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\InteractsWithBrainitive;
+use App\Support\Entitlements\LimitGate;
+use App\Support\Entitlements\LimitReached;
 use App\Support\Mcp\ResourceLocator;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -44,6 +46,12 @@ class CreateBookmarkItemTool extends Tool
         try {
             $this->authorizeFor($user, 'update', $bookmark);
         } catch (AuthorizationException $e) {
+            return Response::error($e->getMessage());
+        }
+
+        try {
+            app(LimitGate::class)->ensureContentRoom($bookmark->workspace); // content limit (Codex web review B)
+        } catch (LimitReached $e) {
             return Response::error($e->getMessage());
         }
 

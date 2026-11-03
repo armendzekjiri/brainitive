@@ -2,6 +2,7 @@
 
 namespace App\Support\Search\Sources;
 
+use App\Models\Page;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\Search\SearchDocument;
 use App\Support\Search\SearchText;
@@ -39,7 +40,7 @@ class PageSource extends Source
         return DB::table('pages')
             ->join('projects', 'projects.id', '=', 'pages.project_id')
             ->where('pages.type', 'page')
-            ->select(['pages.id', 'pages.name', 'pages.status', 'pages.created_by', 'pages.updated_at', 'pages.project_id', 'projects.workspace_id'])
+            ->select(['pages.id', 'pages.name', 'pages.status', 'pages.archived_private', 'pages.created_by', 'pages.updated_at', 'pages.project_id', 'projects.workspace_id'])
             // whiteboard scenes stay in the database
             ->selectRaw('case when pages.content like ? then null else pages.content end as content', [self::WHITEBOARD_PREFIX])
             ->selectRaw('case when pages.content like ? then 1 else 0 end as is_whiteboard', [self::WHITEBOARD_PREFIX]);
@@ -57,7 +58,7 @@ class PageSource extends Source
                 title: (string) $row->name,
                 projectId: (int) $row->project_id,
                 authorId: self::int($row->created_by),
-                isDraft: $row->status === 'draft',
+                isDraft: Page::privateStatus((string) $row->status, (bool) $row->archived_private), // an archived draft stays private (L)
                 subtype: $whiteboard ? 'whiteboard' : 'doc',
                 body: $whiteboard ? null : self::text($row->content),
                 updatedAt: self::time($row->updated_at),

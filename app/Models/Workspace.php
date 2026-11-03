@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\Entitlements\LimitGate;
+use App\Support\Entitlements\LimitReached;
 use App\Support\Entitlements\WorkspaceMembershipChanged;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class Workspace extends Model
@@ -227,12 +230,39 @@ class Workspace extends Model
     }
 
     /**
-     * Remove a user from this workspace.
+     * Remove a user from this workspace, and from its projects in the same transaction (Codex review, finding 6):
+     * a project membership must never outlive the workspace membership.
      */
     public function removeUser(User $user): void
     {
-        $this->users()->detach($user->id);
+        DB::transaction(function () use ($user) {
+            DB::table('project_user')
+                ->where('user_id', $user->id)
+                ->whereIn('project_id', Project::withTrashed()->where('workspace_id', $this->id)->select('id'))
+                ->delete();
+            $this->users()->detach($user->id);
+        });
         WorkspaceMembershipChanged::dispatch($this);
+    }
+
+    /**
+     * A new workspace owned by the user, who becomes its admin (web form, App API first run).
+     * Cloud plans: it starts free, and one person may own only so many free ones.
+     *
+     * @throws LimitReached
+     */
+    public static function createOwnedBy(User $owner, string $name, ?string $description = null): self
+    {
+        app(LimitGate::class)->ensureCanCreateWorkspace($owner);
+
+        $workspace = self::create([
+            'name' => $name,
+            'description' => $description,
+            'owner_id' => $owner->id,
+        ]);
+        $workspace->addUser($owner, 'admin');
+
+        return $workspace;
     }
 
     /**

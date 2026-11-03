@@ -10,6 +10,7 @@ use App\Support\Live\BoardLive;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\Mcp\ResourceLocator;
 use App\Support\Mcp\ToolError;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -30,7 +31,7 @@ class UpdateBoardItemTool extends Tool
             'board' => 'required|string',
             'item_id' => 'required|integer',
             'title' => 'sometimes|string|max:255',
-            'description' => 'sometimes|nullable|string',
+            'description' => ['sometimes', 'nullable', ...ContentLimits::body()],
             'start_date' => 'sometimes|nullable|date_format:Y-m-d',
             'start_time' => 'sometimes|nullable|date_format:H:i',
             'due_date' => 'sometimes|nullable|date_format:Y-m-d',

@@ -20,13 +20,7 @@ class MyDayController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validateWork($request);
-        $user = $request->user();
-        $today = MyDayPlan::today($user);
-
-        MyDayEntry::firstOrCreate(
-            ['user_id' => $user->id, 'work_type' => $data['work_type'], 'work_id' => $data['work_id'], 'plan_date' => $today],
-            ['position' => $this->nextPosition($user->id, $today)],
-        );
+        MyDayPlan::add($request->user(), $data['work_type'], (int) $data['work_id']);
 
         return back();
     }
@@ -39,11 +33,7 @@ class MyDayController extends Controller
             'work_id' => 'required|integer',
         ]);
 
-        MyDayEntry::where('user_id', $request->user()->id)
-            ->where('plan_date', MyDayPlan::today($request->user()))
-            ->where('work_type', $data['work_type'])
-            ->where('work_id', $data['work_id'])
-            ->delete();
+        MyDayPlan::remove($request->user(), $data['work_type'], (int) $data['work_id']);
 
         return back();
     }
@@ -71,19 +61,9 @@ class MyDayController extends Controller
     /** Bring unfinished tasks from earlier days onto today's plan (only when asked). */
     public function carryOver(Request $request): RedirectResponse
     {
-        $user = $request->user();
-        $today = MyDayPlan::today($user);
-        $position = $this->nextPosition($user->id, $today);
+        $count = MyDayPlan::carryOver($request->user());
 
-        $rows = MyDayPlan::carryOverCandidates($user, $today);
-        foreach ($rows as $row) {
-            MyDayEntry::firstOrCreate(
-                ['user_id' => $user->id, 'work_type' => $row['entry']->work_type, 'work_id' => $row['entry']->work_id, 'plan_date' => $today],
-                ['position' => $position++],
-            );
-        }
-
-        return back()->with('success', $rows->count() === 1 ? 'Brought over 1 task.' : "Brought over {$rows->count()} tasks.");
+        return back()->with('success', $count === 1 ? 'Brought over 1 task.' : "Brought over {$count} tasks.");
     }
 
     /** @return array{work_type: string, work_id: int} */
@@ -102,10 +82,5 @@ class MyDayController extends Controller
         }
 
         return $data;
-    }
-
-    private function nextPosition(int $userId, string $date): int
-    {
-        return (int) MyDayEntry::where('user_id', $userId)->where('plan_date', $date)->max('position') + 1;
     }
 }

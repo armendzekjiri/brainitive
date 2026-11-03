@@ -217,6 +217,7 @@ import { normalizeAiHtml } from '@/lib/aiHtml';
 import { COLLAB_EXCLUDED_PROPERTIES, RICH_EDITOR_NODES } from './richEditorNodes';
 import type { LiveEditorBinding } from './collab/shared';
 import { openIfLimitReached } from '@/lib/entitlements';
+import { currentWorkspaceSlug } from '@/lib/currentWorkspace';
 
 // Custom commands
 export const INSERT_IMAGE_COMMAND: LexicalCommand<{ src: string; altText: string }> = createCommand();
@@ -1061,6 +1062,9 @@ function InsertImageModal({ open, onClose, onInsert }: { open: boolean; onClose:
         setUploading(true); setUploadError('');
         const formData = new FormData();
         formData.append('image', file);
+        // the workspace the file counts against (required by the server; the referrer is only a fallback)
+        const workspace = currentWorkspaceSlug();
+        if (workspace) formData.append('workspace', workspace);
         const csrf = document.head.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
         try {
             const res = await fetch('/upload/image', {

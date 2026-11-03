@@ -60,9 +60,9 @@ async function start(appUrl, extra = {}) {
 const token = (doc = DOC, exp = Math.floor(Date.now() / 1000) + 60, key = keys.token) => signToken({ v: 1, sub: 1, name: 'User 1', doc, edit: true, exp }, key);
 
 /** connect once; resolves with the refusal reason, the socket's close reason, or 'synced' */
-async function outcome(url, tokenValue) {
+async function outcome(url, tokenValue, name = DOC) {
     const websocketProvider = new HocuspocusProviderWebsocket({ url, WebSocketPolyfill: WebSocket, maxAttempts: 1 });
-    const provider = new HocuspocusProvider({ name: DOC, token: tokenValue, websocketProvider, awareness: null });
+    const provider = new HocuspocusProvider({ name, token: tokenValue, websocketProvider, awareness: null });
     provider.attach();
     const result = { failed: null, closeReason: null, synced: false };
     provider.on('authenticationFailed', ({ reason }) => { result.failed = reason; });
@@ -100,11 +100,24 @@ test('every refusal names its cause to the browser (auth message + close reason)
         assert.equal(result.synced, false, reason);
         assert.equal(result.failed, reason);
         assert.equal(result.closeReason, `Unauthorized: ${reason}`);
-        assert.ok(logs.some((line) => line.includes(`refused ${DOC}`) && line.includes(reason)), `logged: ${reason} in ${logs}`);
+        assert.ok(logs.some((line) => line.includes(`refused document="${DOC}"`) && line.includes(`reason="${reason}"`)), `logged: ${reason} in ${logs}`);
     }
     assert.ok(logs.some((line) => line.includes('redirects to https://example.test/api')), 'the redirect target is logged');
     app.mode = 'ok';
     assert.equal((await outcome(url, token())).synced, true);
+});
+
+test('Codex realtime review 6: a crafted document name can\'t forge log lines (escaped, truncated, structured)', async () => {
+    const url = await start(`http://127.0.0.1:${apiPort}`);
+    logs.length = 0;
+    const evil = `x\n[realtime] stored page.fake for user 1\r\u001b[31m\u2028${'y'.repeat(300)}`;
+    const result = await outcome(url, token(), evil);
+    assert.equal(result.failed, 'invalid-document');
+    const line = logs.find((l) => l.includes('reason="invalid-document"'));
+    assert.ok(line, String(logs));
+    assert.ok(!/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(line), `no control characters or line breaks: ${JSON.stringify(line)}`);
+    assert.ok(line.includes('document="x?[realtime] stored page.fake'), line);
+    assert.ok(line.length < 300, 'truncated');
 });
 
 test('the app unreachable from the realtime server: app-unreachable, with the URL it tried in the log', async () => {

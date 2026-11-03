@@ -1,3 +1,4 @@
+import { desktop } from '@/lib/desktop';
 import { useLiveChannel } from '@/lib/live';
 import type { AppNotification, NotificationFeed, NotificationFilter, PageProps } from '@/types';
 import { usePage } from '@inertiajs/react';
@@ -101,6 +102,11 @@ export function useUnreadCount({ manageTitle = false, poll = true }: { manageTit
 
     // only one owner may rewrite the title (two would undo each other forever)
     useTitleBadge(count, manageTitle);
+
+    // the same owner sets the dock / taskbar badge in Brainitive Desktop (no-op in a browser)
+    useEffect(() => {
+        if (manageTitle) void desktop.setBadge(count);
+    }, [count, manageTitle]);
 
     return { count, refresh };
 }

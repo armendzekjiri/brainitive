@@ -2,6 +2,7 @@ import ApplicationLogo from '@/components/ApplicationLogo';
 import Dropdown from '@/components/Dropdown';
 import NavLink from '@/components/NavLink';
 import ResponsiveNavLink from '@/components/ResponsiveNavLink';
+import { desktop } from '@/lib/desktop';
 import { Link, usePage } from '@inertiajs/react';
 import { PropsWithChildren, ReactNode, useState } from 'react';
 
@@ -73,6 +74,7 @@ export default function Authenticated({
                                             href={route('logout')}
                                             method="post"
                                             as="button"
+                                            onSuccess={() => void desktop.signOut()}
                                         >
                                             Log Out
                                         </Dropdown.Link>
@@ -157,6 +159,7 @@ export default function Authenticated({
                                 method="post"
                                 href={route('logout')}
                                 as="button"
+                                onSuccess={() => void desktop.signOut()}
                             >
                                 Log Out
                             </ResponsiveNavLink>

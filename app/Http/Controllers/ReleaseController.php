@@ -7,6 +7,7 @@ use App\Models\Item;
 use App\Models\Project;
 use App\Models\Release;
 use App\Models\Workspace;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Releases\ReleaseNotes;
 use App\Support\SafeHtml;
 use Illuminate\Http\JsonResponse;
@@ -86,6 +87,7 @@ class ReleaseController extends Controller
         $this->authorize('create', [Release::class, $project]);
         $validated = $this->validated($request, $project);
 
+        app(LimitGate::class)->ensureContentRoom($workspace); // content limit (Codex web review B)
         $release = $project->releases()->create($validated + ['created_by' => $request->user()->id]);
 
         return redirect()->route('releases.show', [$workspace->slug, $project->slug, $release->id])->with('success', "Release {$release->name} created.");

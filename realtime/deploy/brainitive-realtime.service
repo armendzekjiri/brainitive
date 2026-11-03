@@ -29,6 +29,14 @@ Environment=COLLAB_APP_URL=https://brainitive.app
 # (Host header + TLS SNI = COLLAB_APP_HOST, so the certificate verifies) — BRAI-345:
 #   Environment=COLLAB_APP_URL=https://127.0.0.1
 #   Environment=COLLAB_APP_HOST=brainitive.app
+# Limits (v1.49.0; defaults shown — only set what differs; COLLAB_MAX_STATE_BYTES must match the app's .env, whose
+# access answers carry it anyway):
+#   Environment=COLLAB_MAX_STATE_BYTES=16777216
+#   Environment=COLLAB_ACCESS_MAX_FAILURES=2
+#   Environment=COLLAB_MAX_SOCKETS_PER_USER=30
+#   Environment=COLLAB_MAX_DOCUMENTS_PER_USER=30
+#   Environment=COLLAB_MESSAGE_BURST=300
+#   Environment=COLLAB_MESSAGES_PER_SECOND=100
 ExecStart=/usr/bin/node realtime/src/index.js
 Restart=always
 RestartSec=3

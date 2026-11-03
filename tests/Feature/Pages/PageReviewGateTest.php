@@ -170,8 +170,11 @@ class PageReviewGateTest extends TestCase
 
         BrainitiveServer::actingAs($this->editor)
             ->tool(UpdatePageTool::class, ['workspace' => $this->workspace->slug, 'project' => $this->project->slug, 'page_uuid' => $page->uuid, 'markdown' => 'Agent rewrite'])
-            ->assertHasErrors();
+            ->assertOk()
+            ->assertSee('saved_as_draft');
+        // the agent's text waits in the draft for a review, like the web editor's
         $this->assertSame('<p>Live text</p>', $page->fresh()->content['html']);
+        $this->assertStringContainsString('Agent rewrite', $page->fresh()->draft_content['html']);
 
         $this->actingAs($this->author)
             ->post($this->pageRoute('pages.versions.restore', $page, [1]))

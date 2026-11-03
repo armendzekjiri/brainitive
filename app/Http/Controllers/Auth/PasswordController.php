@@ -26,7 +26,7 @@ class PasswordController extends Controller
         ]);
 
         // a changed password must lock out whoever knew the old one: other browsers, apps, CLI
-        SignOutEverywhere::run($request->user(), $request->session()->getId());
+        SignOutEverywhere::run($request->user(), $request->session()->getId(), 'password_changed');
 
         return back();
     }

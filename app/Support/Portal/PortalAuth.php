@@ -6,6 +6,7 @@ use App\Models\PortalIdentity;
 use App\Models\PortalLoginToken;
 use App\Models\User;
 use App\Notifications\PortalLoginLinkNotification;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
@@ -62,16 +63,40 @@ final class PortalAuth
         return $identity;
     }
 
-    /** The identity a Brainitive account acts through; links an earlier guest identity with the same email. */
+    /**
+     * The identity a Brainitive account acts through: always the one of its CURRENT email (Codex web review O). An
+     * identity linked to an earlier address is detached first — it, its memberships, decisions and votes stay with
+     * that address (whoever signs in with a link to it); a guest identity of the current address is linked.
+     */
     public static function identityForUser(User $user): PortalIdentity
     {
-        if ($linked = PortalIdentity::where('user_id', $user->id)->first()) {
+        $email = PortalIdentity::normalizeEmail($user->email);
+        $linked = PortalIdentity::where('user_id', $user->id)->first();
+        if ($linked && $linked->email === $email) {
             return $linked;
         }
 
-        return DB::transaction(function () use ($user) {
-            $identity = PortalIdentity::where('email', PortalIdentity::normalizeEmail($user->email))->lockForUpdate()->first()
-                ?? new PortalIdentity(['email' => $user->email]);
+        try {
+            return self::link($user, $email);
+        } catch (UniqueConstraintViolationException) {
+            // a concurrent request linked it first (user_id / email are unique): use that one
+            return PortalIdentity::where('user_id', $user->id)->where('email', $email)->firstOrFail();
+        }
+    }
+
+    /** Detach the account from an identity of another address (an email change) — callers run it with the change. */
+    public static function unlink(User $user): void
+    {
+        PortalIdentity::where('user_id', $user->id)->update(['user_id' => null]);
+    }
+
+    private static function link(User $user, string $email): PortalIdentity
+    {
+        return DB::transaction(function () use ($user, $email) {
+            PortalIdentity::where('user_id', $user->id)->where('email', '!=', $email)->update(['user_id' => null]);
+
+            $identity = PortalIdentity::where('email', $email)->lockForUpdate()->first()
+                ?? new PortalIdentity(['email' => $email]);
 
             $identity->fill([
                 'user_id' => $user->id,
@@ -153,8 +178,11 @@ final class PortalAuth
         $request->session()->regenerateToken();
     }
 
-    /** A local portal path, or "/" (no hosts, no "//", no backslashes, no control characters). */
-    public static function safeReturnTo(?string $path): string
+    /**
+     * A local portal path, or "/" (no hosts, no "//", no backslashes, no control characters). Takes any request
+     * input: an array (`?return_to[]=…`) falls back to "/" instead of a TypeError (Codex web review Q).
+     */
+    public static function safeReturnTo(mixed $path): string
     {
         if (! is_string($path) || $path === '' || ! str_starts_with($path, '/') || str_starts_with($path, '//')
             || str_contains($path, '\\') || preg_match('/[\x00-\x1F\x7F]/', $path) || strlen($path) > 500) {

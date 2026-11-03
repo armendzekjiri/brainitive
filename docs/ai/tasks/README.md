@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Release v1.49.0: App API v1 foundation + native sign-in (desktop phase 01–02, server side)](./release-v1.49.0.md) | in progress |
 | [Release v1.47.0: the Brainitive CLI (Go binary, one-line install, MCP client + stdio bridge) and MCP project setup / bulk import tools](./release-v1.47.0.md) | done |
 | [Release v1.38.0: time tracking & client billing (BRAI-99/100/101)](./release-v1.38.0-billing.md) | done |
 | [Release v1.39.0: notifications, webhooks, insights, custom sidebar (BRAI-102…111)](./release-v1.39.0.md) | done |

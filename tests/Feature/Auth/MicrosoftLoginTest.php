@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\AppDevice;
 use App\Models\InstanceSettings;
 use App\Models\User;
 use App\Models\Workspace;
@@ -238,10 +239,13 @@ class MicrosoftLoginTest extends TestCase
     public function test_signing_in_takes_over_an_unverified_preregistered_account_and_locks_the_squatter_out(): void
     {
         $squatter = User::factory()->unverified()->create(['email' => 'owner@outlook.com', 'password' => Hash::make('attacker-pass')]);
+        $app = AppDevice::create(['user_id' => $squatter->id, 'client' => 'desktop', 'platform' => 'macos', 'name' => 'Squatter Mac', 'app_version' => '0.1.0']);
 
         $this->signIn(['tid' => MicrosoftLogin::CONSUMER_TENANT, 'email' => 'owner@outlook.com']);
         $this->assertAuthenticatedAs($squatter->fresh());
         Auth::logout();
+        // the squatter's apps are signed out too (BRAI-377)
+        $this->assertSame('account_takeover', $app->fresh()->revoked_reason);
 
         $this->assertNotNull($squatter->fresh()->email_verified_at);
         $this->assertFalse(Auth::attempt(['email' => 'owner@outlook.com', 'password' => 'attacker-pass']));

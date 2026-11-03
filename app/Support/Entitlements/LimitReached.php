@@ -4,6 +4,7 @@ namespace App\Support\Entitlements;
 
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\AppApi\AppApiErrors;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -47,6 +48,11 @@ final class LimitReached extends RuntimeException
 
     public function render(Request $request): JsonResponse|RedirectResponse
     {
+        // App API v1: its own error shape (rendered here because an exception's render() wins over callbacks)
+        if (AppApiErrors::applies($request)) {
+            return AppApiErrors::limitReached($this->payload($request->user()));
+        }
+
         $payload = $this->payload($request->user());
 
         if ($request->expectsJson() && ! $request->header('X-Inertia')) {

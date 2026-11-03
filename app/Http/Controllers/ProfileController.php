@@ -3,16 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Http\Resources\AppApi\DeviceResource;
 use App\Models\InstanceSettings;
 use App\Notifications\NotificationCatalog;
 use App\Support\Admin\UserDeletion;
-use App\Support\Uploads;
+use App\Support\Portal\PortalAuth;
+use App\Support\Profile\Avatar;
+use App\Support\Profile\ConnectedApps;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -30,6 +33,8 @@ class ProfileController extends Controller
             'status' => session('status'),
             'connectedApps' => $this->connectedApps($request),
             'notificationCategories' => NotificationCatalog::forUser($request->user()),
+            // signed-in desktop / mobile installs (App API v1, BRAI-385), same fields as GET /api/v1/devices
+            'appDevices' => DeviceResource::collection($request->user()->appDevices()->active()->recentFirst()->get())->resolve($request),
         ]);
     }
 
@@ -39,11 +44,7 @@ class ProfileController extends Controller
      */
     public function updatePreferences(Request $request)
     {
-        $validated = $request->validate([
-            // all_with_bc: browsers still report old names such as "Asia/Calcutta".
-            'timezone' => 'sometimes|required|string|timezone:all_with_bc',
-            'task_digest' => 'sometimes|boolean',
-        ]);
+        $validated = $request->validate(ProfileUpdateRequest::preferenceRules());
 
         $request->user()->update($validated);
 
@@ -61,21 +62,22 @@ class ProfileController extends Controller
         unset($validated['avatar']);
         $user->fill($validated);
 
-        if ($user->isDirty('email')) {
+        $emailChanged = $user->isDirty('email');
+        if ($emailChanged) {
             $user->email_verified_at = null;
         }
 
         if ($request->hasFile('avatar')) {
-            if ($user->avatar && Storage::disk('public')->exists($user->avatar)) {
-                Storage::disk('public')->delete($user->avatar);
-            }
-            $file = $request->file('avatar');
-            $ext = Uploads::imageExtension($file);
-            $path = $file->storeAs('profile-photos/'.$user->id, 'avatar.'.$ext, 'public');
-            $user->avatar = $path;
+            Avatar::replace($user, $request->file('avatar'));
         }
 
-        $user->save();
+        // a new address: the portal identity of the old one is no longer this account's (Codex web review O)
+        DB::transaction(function () use ($user, $emailChanged) {
+            $user->save();
+            if ($emailChanged) {
+                PortalAuth::unlink($user);
+            }
+        });
 
         return Redirect::route('profile.edit');
     }
@@ -115,38 +117,19 @@ class ProfileController extends Controller
 
     /**
      * Apps holding an active token for this account (MCP connectors, the browser extension, the CLI),
-     * one row per app.
+     * one row per app — shared with the App API (ConnectedApps, BRAI-394).
      *
      * @return list<array{client_id: string, name: string, scopes: list<string>, last_issued: ?string, expires_at: ?string, tokens: int}>
      */
     private function connectedApps(Request $request): array
     {
-        return $request->user()->tokens()
-            ->with('client:id,name')
-            ->where('revoked', false)
-            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->latest()
-            ->get()
-            ->groupBy('client_id')
-            ->map(fn ($tokens) => [
-                'client_id' => (string) $tokens->first()->client_id,
-                'name' => $tokens->first()->client?->name ?? 'Unknown app',
-                'scopes' => $tokens->pluck('scopes')->flatten()->unique()->values()->all(),
-                'last_issued' => $tokens->first()->created_at?->toIso8601String(),
-                'expires_at' => $tokens->max('expires_at')?->toIso8601String(),
-                'tokens' => $tokens->count(),
-            ])
-            ->values()
-            ->all();
+        return array_map(fn (array $app) => collect($app)->except('kind')->all(), ConnectedApps::for($request->user()));
     }
 
     /** Disconnect an app: revoke all of this account's tokens (and refresh tokens) for it. */
     public function disconnectApp(Request $request, string $clientId): RedirectResponse
     {
-        foreach ($request->user()->tokens()->where('client_id', $clientId)->where('revoked', false)->get() as $token) {
-            $token->revoke();
-            $token->refreshToken?->revoke();
-        }
+        ConnectedApps::disconnect($request->user(), $clientId);
 
         return back()->with('status', 'app-disconnected');
     }

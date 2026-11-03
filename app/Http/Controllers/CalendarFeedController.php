@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CalendarFeed;
 use App\Models\Project;
 use App\Support\CalendarFeed\CalendarFeedBuilder;
+use App\Support\CalendarFeed\CalendarFeeds;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -29,11 +30,9 @@ class CalendarFeedController extends Controller
     /** Turn the feed on; when one is already active, its options are updated instead. */
     public function store(Request $request): JsonResponse
     {
-        $options = $this->validatedOptions($request);
-        $feed = CalendarFeed::activeFor($request->user());
-        $feed ? $feed->update(['options' => $options]) : CalendarFeed::issue($request->user(), $options);
+        $created = CalendarFeeds::enable($request->user(), $this->validatedOptions($request));
 
-        return response()->json($this->payload($request), $feed ? 200 : 201);
+        return response()->json($this->payload($request), $created ? 201 : 200);
     }
 
     public function update(Request $request): JsonResponse
@@ -57,7 +56,7 @@ class CalendarFeedController extends Controller
     /** Turn the feed off: the URL stops working. */
     public function destroy(Request $request): JsonResponse
     {
-        CalendarFeed::active()->where('user_id', $request->user()->id)->update(['revoked_at' => now()]);
+        CalendarFeeds::disable($request->user());
 
         return response()->json($this->payload($request));
     }
@@ -106,23 +105,9 @@ class CalendarFeedController extends Controller
 
     private function validatedOptions(Request $request): array
     {
-        $validated = $request->validate([
-            'options' => 'nullable|array',
-            'options.assigned' => 'sometimes|boolean',
-            'options.created' => 'sometimes|boolean',
-            'options.tasks' => 'sometimes|boolean',
-            'options.my_day' => 'sometimes|boolean',
-            'options.focus' => 'sometimes|boolean',
-            'options.completed' => 'sometimes|boolean',
-            'options.descriptions' => 'sometimes|boolean',
-            'options.project_ids' => 'sometimes|array|max:500',
-            'options.project_ids.*' => 'integer',
-        ]);
-        $options = CalendarFeed::normalizeOptions($validated['options'] ?? []);
-        // only projects the user can open now (also re-checked on every fetch)
-        $options['project_ids'] = array_values(array_intersect($options['project_ids'], $request->user()->accessibleProjectIds()));
+        $validated = $request->validate(CalendarFeeds::rules());
 
-        return $options;
+        return CalendarFeeds::options($request->user(), $validated['options'] ?? []);
     }
 
     private function payload(Request $request): array

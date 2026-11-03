@@ -243,7 +243,25 @@ Plan + normative contract [`tasks/feat-live-foundation.md`](./tasks/feat-live-fo
 - **Laravel:** `config/live.php`; `app/Support/Live/` — `LiveConfig` (on when live editing is configured, `LIVE_ENABLED=false` turns it off; URLs), `LiveToken` (HMAC token, key label `live-token`, TTL `LIVE_TOKEN_TTL` 120 s; sent as the first socket message, never in the URL), `LiveChannels` (`TYPES` = type → id pattern + policy resolver: `user.{id}`, `item.{id}`, `board.{id}`, `plan.{id}`, `page.{uuid}`, `ticket.{id}`; parents must not be trashed; suspended users get nothing), `Live` (`publish()`, allow-list `KEY`, `flush()`). `LiveTokenController` (`live.token`, POST `{channels[]}` ≤ 50 → `{url, token, expires_at, channels, denied, user}`; 404 when off), `LiveInternalController` (`internal.collab.live.access`, `VerifyCollabSecret`), `app/Providers/LiveServiceProvider.php` (bell: `NotificationSent` on `database` → `user.{id}` `notification.created`; registers `BoardLive`). Shared prop `live` (null = off).
 - **Publishing:** `Live::publish($channel, $event, $payload)` — payload validated against `Live::KEY` (ids / uuids, counts, revisions, positions, `*_at`, status / type keys, `fields`; ≤ 16 keys, flat, ≤ 2 KB; never titles / names / bodies), queued in `DB::afterCommit`, sent once per request / queued job / command after the response (`defer(..., 'live.publish')->always()`) to `LIVE_PUBLISH_URL` (the realtime server's own address: prod `http://127.0.0.1:6201`, dev `:6202`, Docker `http://realtime:1234`; empty → derived from a localhost live URL, else publishing off). Never throws; after a failure publishing pauses 15 s.
 - **Frontend:** `resources/js/lib/live/` — `client.ts` (`LiveClient` singleton: ref-counted subscriptions, batched token fetch, reconnect with backoff + jitter, re-auth to add channels, hidden tab > 2 min disconnects), `hooks.ts` (`useLiveConfig`, `useLiveChannel(channel, {onEvent, onResync})`, `useLivePresence`, `useLiveSignal`). Complete no-op when `live` is null. Subscribers refetch through the normal permission-checked endpoints and again on `onResync` (events during a gap are lost). e2e only: `window.__brainitiveLive` (`e2e/helpers/live.ts` → `liveTab(page)`).
-- **Tests:** `tests/Feature/Live/{LiveChannelsTest,LivePublishTest}.php`, `realtime/test/live.test.js`, e2e `e2e/tests/live-channel.spec.ts`. Self-hosting: `docs/self-hosting.md` → "Live updates (bell, presence, typing)", `.env.example` (`LIVE_*`).
+- **Native clients (v1.49.0, BRAI-426):** `GET /api/v1/realtime` + `POST /api/v1/realtime/token` (App API) hand out the same token
+  through `LiveToken::grant()` plus the device (`dev` claim; the web's tokens have none). A revoked device's sockets close with
+  4410: pushed by `AppTokens::revoke` → `Live::deviceRevoked()` → `POST /internal/live/devices/revoked` (publish key, loopback), and
+  re-checked every minute (`users.*.devices` → `revoked_devices` in `internal.collab.live.access`). Live co-editing too
+  (BRAI-377): App API collab tokens carry `dev`, `internal.collab.access` answers `revoked_devices` for `devices`, the push
+  reaches the collab server (`attachLive({onDevicesRevoked})` → `createCollabServer().revokeDevices`). Every event: `API.md` →
+  Realtime (keep that catalog in sync when adding an event).
+- **Signed-out sessions + limits (v1.49.0, Codex realtime review):** web tokens (live and collab) carry `sid` (HMAC of the
+Laravel session id) + `gen` (`users.app_auth_generation`) — `App\Support\Live\RealtimeSession`. A `Logout` /
+`CurrentDeviceLogout` (LiveServiceProvider) → `Live::sessionEnded()` → `POST /internal/live/sessions/ended {sessions}`;
+`SignOutEverywhere` → `{users: [{id, generation}]}`; the realtime server closes those web sockets with **4401 "Signed out"**
+(4410 stays the app-device code) and the access endpoints answer `ended_sessions` + `generations` for missed pushes. The live
+hub confirms every `auth` with Brainitive before `ready` (batched, `authBatchMs`); the collab server fails closed after
+`COLLAB_ACCESS_MAX_FAILURES` (2) unanswered re-checks, batches re-checks (≤ 200 users), limits sockets and open documents
+per user / messages per socket / message size (`DEFAULT_COLLAB_LIMITS` in `realtime/src/server.js`), and refuses an update
+whose `growthBound()` could grow a document past `max_state_bytes` (from the access answer; env `COLLAB_MAX_STATE_BYTES`)
+in `beforeHandleMessage`, before peers see it. Issued `sid`s are an allowlist (`RealtimeSession::endedAmong`: unknown,
+signed out, or — database sessions — row gone / expired = ended). Refusal logs are structured and escaped (`realtime/src/log.js`).
+- **Tests:** `tests/Feature/Live/{LiveChannelsTest,LivePublishTest,RealtimeSessionTest}.php`, `realtime/test/{live,limits}.test.js`, e2e `e2e/tests/live-channel.spec.ts`. Self-hosting: `docs/self-hosting.md` → "Live updates (bell, presence, typing)", `.env.example` (`LIVE_*`).
 
 ### Live whiteboards — draw together (v1.44.0, BRAI-153)
 Plan [`tasks/feat-live-whiteboards.md`](./tasks/feat-live-whiteboards.md). Several people draw on one Excalidraw whiteboard with named cursors; offline drawing merges on reconnect; Laravel stays the source of truth (`pages.content`, same JSON as the single-user editor). Runs on the live-docs Yjs / Hocuspocus stack, not on live channels.
@@ -291,6 +309,9 @@ Plan [`tasks/feat-offline.md`](./tasks/feat-offline.md). Opt-in per device (Prof
 - **Controller / routes:** `OfflineSyncController` — `shell` (`GET /offline`, `offline.shell`, `throttle:60,1`, **session-free**: no `EncryptCookies` / `StartSession` / CSRF, `Inertia::flushShared()`), `store` (`POST /offline/sync`, `offline.sync`, ReadOnlySession, `throttle:240,1,offline.sync`; one mutation per request `{id, type, target, base, data, user_id}`; wrong `user_id` → 401 `wrong_account`).
 - **Service worker / PWA:** `public/sw.js` (PWA install, web push, offline). Only same-origin GET: failed navigation → cached shell (or a static "you're offline" page when offline mode is off), failed full Inertia visit → `409 + X-Inertia-Location`, `/build/assets/*` → shell cache first. Everything else (documents, realtime, JSON, writes) gets no `respondWith`.
 - **Frontend:** `lib/offline/` (`db`, `settings`, `shell`, `store`, `sync` (engine: `online`, focus, every 30 s; `applyLocally`), `session` (clearing on sign-out / other account), `actions` (queue a change, then the local copy), `resolve`, `snapshots` (`useOfflineSnapshot` + snapshot builders), `bootLocation` (imported first in `app.tsx`: keeps the real URL under the shell)), `components/offline/` (`OfflineIndicator` in `AppLayout`'s top bar, `ConflictsPanel`, `OfflineSettingCard` in `Profile/Edit`, `Offline{MyDay,TaskList,Issue,Capture}View`, `NotSyncedBadge`, `useSnapshot`), `Pages/Offline/Shell.tsx`. Snapshot hooks in `Pages/Lists/Show.tsx`, `Pages/MyWork/Index.tsx`, `components/item/ItemDetail.tsx` (`useItemDetail`); `QuickCaptureDialog` queues while offline.
+- **Native clients (v1.49.0, BRAI-425):** the App API's `POST /api/v1/sync` runs the same `OfflineSync::handle` per change (batches,
+  `request_id` = the mutation uuid); `GET /api/v1/sync/changes` is their snapshot source (the web builds snapshots from page props).
+  Type `work.done` (`WorkMutations`) exists for them; the web's outbox doesn't send it yet.
 - **Tests:** `tests/Feature/Offline/OfflineSyncTest.php`, e2e `e2e/tests/offline.spec.ts` (no JS unit runner: the client is covered by e2e).
 
 ### Push devices + test notification (v1.44.0, BRAI-154)
@@ -422,6 +443,137 @@ Plan [`tasks/feat-legal-compliance.md`](./tasks/feat-legal-compliance.md); human
   task lists only) is gone since v1.47.0. Its server side, `CliController` (`routes/api.php`: password
   `/cli/login`, workspaces + task lists), is still there with no client; removal is a separate decision.
 
+### App API v1 — desktop + mobile apps (v1.49.0, BRAI-380)
+JSON API of the first-party **Brainitive Desktop** (Tauri, own repo `armendzekjiri/brainitive-desktop`,
+checked out at `desktop/`, gitignored), **Brainitive TV** (own folder `brainitive-tv/`, signs in with a
+device code) and later **Brainitive Mobile** (Expo). Separate from MCP / CLI /
+extension: own tokens, guard, throttles; only Support services and policies are shared.
+**Registry of every endpoint + conventions: [`API.md`](./API.md); recipe:
+[skills/add-app-api-endpoint.md](./skills/add-app-api-endpoint.md).**
+- **Routes:** `routes/app-api.php`, loaded in `bootstrap/app.php` (`then:`) under `/api/v1`, names
+  `app.v1.*`, middleware group `app-api` (`AppApiJson` → JSON always, `SubstituteBindings`,
+  `throttle:app-api`; no session / CSRF / CORS). Signed-in routes: `auth:app` +
+  `EnsureUserIsNotSuspended` + `EnsureAppClientAbility` (the client's `abilities`: the TV's read-mostly scope,
+  403 `client_not_allowed`, BRAI-377). Browser half of sign-in (`/app/authorize`, `/app/session/{code}` + its
+  confirm page `POST /app/session` → `Pages/AppAuth/Session.tsx`): `routes/app-auth.php` → `AppAuthController`.
+  Webview sessions are bound to their device: `Support\AppApi\AppWebSessions` + web middleware
+  `EndRevokedAppDeviceSessions` (logs the session out once the device is revoked).
+- **Model:** `AppDevice` (`app_devices`, `User::appDevices()`): one row per signed-in install, holding its
+  one token pair as sha256 hashes + expiries, `previous_refresh_hash` (reuse detection), `revoked_at` /
+  `revoked_reason` (the audit trail). No token / code tables.
+- **Support (`app/Support/AppApi/`):** `AppTokens` (issue / resolve / revoke / revokeAllFor, guard
+  resolver, `currentDevice($request)`), `AppAuthCodes` (single-use sign-in codes in the cache, PKCE
+  S256), `AppApiErrors` (the one error shape `{message, code, errors?}`, rendered for `api/v1/*` in
+  `bootstrap/app.php`; `limitReached()` for 402), `OpenApi/*` (Scramble extensions: the error shape and
+  429 / 402 responses in the spec).
+- **Providers:** `AppApiServiceProvider` (guard `app` = `Auth::viaRequest('app-token')`, rate limiters
+  `app-api` / `app-auth`), `AppApiDocsServiceProvider` (OpenAPI: Bearer scheme, `{instance}` server
+  variable, gate `viewApiDocs` = instance admins).
+- **Config:** `config/app-api.php` (TTLs, clients + redirects + `abilities`, `max_devices`, `min_versions` ←
+  `APP_API_MIN_DESKTOP_VERSION` / `APP_API_MIN_MOBILE_VERSION`), `config/auth.php` guard `app`,
+  `config/scramble.php` (documents only `api/v1`; API version `1.0.0`).
+- **Endpoints:** `app/Http/Controllers/AppApi/*` (Instance, Auth, Me + MeAvatar, Device, Invitation,
+  Workspace, Project, Member, Navigation, Search, Notification, ConnectedApp, DeviceAuth, MyWork, Today,
+  Calendar, TaskList, Capture, Snippet, Bookmark, Timer + WorkLog, Board, Issue + IssueActivity + IssueLink, Sprint,
+  Page + PageCollab + DocReview + Link, Whiteboard, Plan, Release, Upload, CalendarEvent + Meeting + CalendarFeed, Booking,
+  Helpdesk, Lead, Portal, Insights, Sync, Realtime —
+  one `#[Group]` tag per
+  `API.md` module), Form Requests in `app/Http/Requests/AppApi/`, Resources in
+  `app/Http/Resources/AppApi/`. The tables in `API.md` are the list.
+- **Lists + visibility (phase 03):** `Requests\AppApi\ListRequest` (`cursor` / `limit` /
+  `updated_since`) + a `Resources\AppApi\CursorCollection` subclass per list (`{data, next_cursor}`);
+  `Controllers\AppApi\Concerns\ResolvesVisible` (workspace by slug / project by id → 404 when the
+  user can't open it). Workspace content routes are in a `verified` group.
+- **Shared with the web (phase 03):** `Support\Projects\ProjectCreator` (new project: rules, limits,
+  template), `Support\Workspaces\WorkspaceInvites`, `Support\Navigation\RecentDestinations` (command
+  palette recents) + `PinnedContent`, `SidebarPreferences`, `SearchService` (`SearchQuery::$workspaceIds`),
+  `Support\Notifications\NotificationInbox` + `NotificationCatalog::preferenceRules/updatePreferences`,
+  `Support\Profile\ConnectedApps` + `DataExports`, `AppTokens::signOutDevice()`.
+- **Shared with the web (phase 04a):** `Support\MyWork\AssignedWork` (the "assigned to me" query of
+  `ext/v1/my-work` + the union list of `/me/work`) + `WorkRef` (`issue:<id>` / `task:<id>`),
+  `Support\MyDay\MyDayPlan::add/remove/carryOver` (`MyDayController`, offline sync),
+  `Support\Work\WorkCompletion` (done / reopen, issue moves + watcher notifications, repeating tasks;
+  `BoardController@moveItem`, `TaskListController@updateItem`, offline list tasks),
+  `Support\Calendar\CalendarEvents` (the web calendar's events, from `CalendarController@index`) +
+  `AgendaEvent` (the API's event shape, cut to the user's local days).
+- **Shared with the web (phase 04b):** `Support\TaskLists\TaskLists` (visible lists, list / task create, task
+  rules, reorder; web `TaskListController`, the CLI `/api/cli/lists*`, MCP `create_task_list`, `ContentCapture`),
+  `Support\Captures\CaptureInbox` (inbox query, counts, create, archive / restore; web inbox, extension + MCP
+  "save to inbox"), `Support\Snippets\Snippets`, `Support\Bookmarks\Bookmarks` (rules, create, files, deletes;
+  web `SnippetController` / `BookmarkController`), `Support\Billing\WorkTimers` (web `WorkTimerController`) and
+  `Support\Billing\TimeEntries` (week, rules, create / update / delete, guard; web `TimesheetController`).
+  `Controllers\AppApi\Concerns\CreatesOnce`: `request_id` retries of creates (`IdempotentRequest`, `mcp_requests`).
+- **Shared with the web (phase 06, boards / issues / scrum):** `Support\Boards\Issues` (the issue dialog's rules, create,
+  update, labels, delete; web `BoardController@storeItem|updateItem|updateItemLabels|destroyItem`), `Support\Boards\ItemAttachments`
+  (web `storeAttachment|destroyAttachment`), `WorkCompletion::moveIssue(..., $withSubtasks)` (web `moveItem`),
+  `SprintLifecycle::moveIssues` (MCP `move_items_to_sprint`), plus the API's own `Support\Boards\BoardCards` (the cards a board page
+  shows: Scrum = running sprint, Kanban = done retention), `BoardFilters` (the board URL / saved-view filter params in SQL, as
+  `Pages/Boards/Show.tsx` + `lib/customFields.ts` apply them) and `IssueMarkdown` (descriptions / comments as Markdown with
+  `@[Name](user:<id>)` mentions). Reused as they were: `ItemComments`, `ItemLinks` + `ContentLinkFormatter::issueLinks`,
+  `ItemFieldValues`, `BoardViewConfig::sanitize`, `SprintReport`, `ItemDevelopment`.
+- **Shared with the web (phase 07, docs / whiteboards / plans / releases / files):** `Support\Pages\PageWrites` (create, the editor's
+  draft save with the edit-revision check on the locked row, publish / publish changes through `ReviewGate` + watcher notifications;
+  web `PageController@store|saveDraft|publish|publishChanges`, MCP `create_page`), `Support\Plans\PlanReader` (rows, bars,
+  dependencies, visible linked issues; MCP `get_plan` / `list_plans`), `Support\Files\EditorUploads` (web `FileController`) +
+  `FileRoom` (the `file.room` storage check for App API uploads, attachments, bookmark files), `SmartLinks::refFromUrl` (a Brainitive
+  URL → smart link ref). Reused as they were: `PageCollab` (native live editing: token, bootstrap, live draft save), `PageMover`,
+  `PageReviews` + `ReviewPresenter` + `QuoteAnchor`, `ContentLinkFormatter::references`, `SmartLinks::resolve`, `IssueMarkdown`
+  (doc text too). `Controllers\AppApi\Concerns\ResolvesPageReviews`: reviews through a page of an accessible project +
+  `PageReviewPolicy` (reviewers see a draft's snapshot, not the draft). Pages are `/pages/{uuid}` with the route parameter `{uuid}`
+  (`{page}` has an explicit binding in `AppServiceProvider`).
+- **Shared with the web (phase 08, calendar writes / booking / helpdesk / leads / portals / insights):**
+  `Support\Meetings\MeetingScheduler` (rules, schedule, remove, the meeting row, the notes doc; web `MeetingController`),
+  `Support\CalendarFeed\CalendarFeeds` (feed option rules + enable / disable; web `CalendarFeedController`),
+  `Support\Booking\BookingRows` (the host's pages + booking rows; web `BookingPageController`), `Support\Helpdesks\TicketActions`
+  (reply / internal note, move / resolve, assign; web `TicketController`) + `Sla\SlaStatus` (PHP twin of `lib/sla.ts`, with an SQL
+  filter), `Support\LeadForms\LeadActions` + `LeadFormAnalytics` (web `LeadController` / `LeadFormController`),
+  `FeedbackModeration::counts / tabQuery / row` (web `FeedbackModerationController`), `Deliverables::summary / detail` (web
+  `ClientPortalTeamController`), `Support\ProjectHealth\HealthWindow` (web `ProjectHealthController`). Reused as they were:
+  `CalendarProviders` (+ `CalendarEvents::mapExternalEvent`, now public), `MeetingCalendars`, `BookingService::cancel`,
+  `LeadController::present`, the `Insights\*Insights` classes + `InsightsFilters`, `HealthMetrics`, `WorkloadGrid`.
+  `CalendarProviderException::render` answers in the App API error shape on `/api/v1`.
+- **Offline sync (phase 09, BRAI-425):** `Controllers\AppApi\SyncController` (`GET /sync/changes`, `POST /sync`, tag Sync 330).
+  Writes reuse the web's offline engine as it is (`Support\Offline\OfflineSync` + appliers, BRAI-82), batched with one result per
+  change; new applier `Offline\Appliers\WorkMutations` (`work.done` → `WorkCompletion::setDone`), `FieldMerge::BOOL`;
+  `CaptureMutations` now writes through `CaptureInbox::create`. Reads: `Support\Sync\ChangeFeed` (phased keyset feed over My Work /
+  kept task lists / My Day / captures, built on `AssignedWork`, `TaskLists::withCounts`, `MyDayPlan`, `CaptureConversion::locations`)
+  + `SyncCursor` (opaque cursor v2: scope, lists asked for + `mine`, captures filter, kept / fresh / gone lists, abilities hash,
+  run `since`, phase name, keyset, My Day hash; reads v1) + `SyncChange`; resources `SyncChangeResource` (wraps the existing
+  resources; `SyncTaskListResource` = list + `can`) / `SyncResultResource`. `POST /sync` results render `entity` through
+  `Support\Sync\SyncRecords` (the feed's record by the outcome's entity type + id, BRAI-441). Deletions = soft deletes + table `sync_tombstones` (`SyncTombstone`,
+  migration `2026_11_08_100000`, pruned 30 days at 04:37): written by `Capture::deleted` and the Item / TaskListItem observers when
+  the assignee changes. Tests `tests/Feature/AppApi/SyncTest.php`, e2e `e2e/tests/app-api-sync.spec.ts`.
+- **Client gaps (v1.49.0, feat/app-api-client-gaps):** sync types `timer.start|stop|discard` (`Offline\Appliers\TimerMutations` →
+  `WorkTimers`, clamped device times, status `gone` = `SyncOutcome::gone`) and `notification.read` / `notifications.read_all`
+  (`NotificationMutations` → `NotificationInbox::apply` / `markAllRead($before)`); `issue.create` now goes through
+  `Boards\Issues::create` (+ `description` Markdown via `IssueMarkdown`, `item_type_id`). `SyncRecords` renders `timer`
+  (`TimerStateResource`), `notification`, `unread_count`; an invalid timer stop carries the activity picker
+  (`Support\AppApi\TimerStopRefusal`, shared with `POST /me/timer/stop`). Notification `summary` / `url`:
+  `Support\Notifications\NotificationText` (+ one `Summaries\*` class per worded type, `ContractSummary` fallback) and
+  `NotificationLinks` (route match + access checks). `work_timers.description` (migration `2026_11_09_100000`),
+  `TimeEntries::loggedSecondsToday`. ETags on `/me/work`, `/notifications` (first page), `/capture-destinations`.
+  Tests `SyncClientChangesTest`, `NotificationSummariesTest`, `PollingETagsTest`, `TimeTrackingTest`.
+- **Realtime (phase 09, BRAI-426):** `Controllers\AppApi\RealtimeController` (`GET /realtime`, `POST /realtime/token`, tag
+  Realtime 340): native clients join the web's **live channels** (no Laravel broadcasting exists). `LiveToken::grant()` (extracted
+  from `LiveTokenController`, used by both) → `LiveChannels::authorize` (one copy of the channel rules); `LiveConfig::absoluteUrl()`
+  (a path `LIVE_URL` resolved against APP_URL, ws / wss). Resources `RealtimeInfoResource`, `RealtimeTokenResource`. The event
+  catalog is in `API.md` → Realtime. Tests `tests/Feature/AppApi/RealtimeTest.php`, e2e `e2e/tests/app-api-realtime.spec.ts`.
+- **TV device-code sign-in (BRAI-438):** `Support\AppApi\AppDeviceCodes` (RFC 8628 codes in the cache),
+  `AppDeviceSignIn` (device row + `max_devices` + first pair; also used by `/auth/exchange`), `AppClients`
+  (`config/app-api.php` → `clients.*.grant` / `platforms`); `Controllers\AppApi\DeviceAuthController`;
+  the confirm page `/app/device` = `AppDeviceApprovalController` + `Pages/AppAuth/Device.tsx`
+  (`routes/app-auth.php`).
+- **Spec:** `docs/api/openapi.json` (committed; `composer openapi` regenerates it through
+  `tests/Feature/AppApi/OpenApiSpecTest.php`, which is also the CI drift check). UI `/docs/api` +
+  `/docs/api.json`: local env or instance admins.
+- **Web ↔ desktop bridge:** `resources/js/lib/desktop.ts` (`isDesktop()`, `desktop.notify / setBadge /
+  openExternal`, `isOutdatedDesktop(desktopMinVersion)`): Tauri IPC commands `brainitive_notify`,
+  `brainitive_set_badge`, `brainitive_open_external` via `window.__TAURI_INTERNALS__.invoke`, no-op in
+  a browser; the shell's user agent ends in ` BrainitiveDesktop/<version>`. Shared prop
+  `desktopMinVersion`. Used by `useUnreadCount` (bell → dock badge).
+- **Tests:** `tests/Feature/AppApi/*` (helper `Concerns\ActsAsAppClient`: `appToken()`, `appHeaders()`,
+  `passportToken()`). Public docs for self-hosters: `docs-site/self-hosting/desktop-and-mobile-apps.md`.
+
 ### Browser extension (Chrome, Edge, Firefox)
 - **Extension source:** `browser-extension/` (WXT + React + TS, own `package.json`, not part of
   the app build) — see its `README.md`. `entrypoints/` = popup, side panel, options, background
@@ -429,7 +581,7 @@ Plan [`tasks/feat-legal-compliance.md`](./tasks/feat-legal-compliance.md); human
 - **Sign-in:** OAuth 2.1 + PKCE via Dynamic Client Registration (`/oauth/register` from
   `Mcp::oauthRoutes()`), scope `capture`; consent screen `resources/views/mcp/authorize.blade.php`.
 - **API:** `routes/api.php` → `/api/ext/v1/*` (`ext.*` routes):
-  `Extension/ExtensionController` (me, destinations, search — since v1.43.0 `SearchController::extension`
+  `Extension/ExtensionController` (me, logout (revokes the token + refresh token), destinations, search — since v1.43.0 `SearchController::extension`
   on the search index, **titles and keys only**, no comments; my-work) and
   `Extension/CaptureController` (issue + screenshot, bookmark item, doc, task, snippet, and
   `ext.captures.store` = "Save to inbox", create only). Create logic + policies are shared with
@@ -626,9 +778,12 @@ Code name "entitlements", never "plan" (`App\Models\Plan` is the Gantt plan).
   may update the workspace. Callers: invite (`WorkspaceController`), invitation accept (`InvitationController`,
   `WorkspaceInvitation::acceptPendingForUser` skips when full), `WorkspaceController::store`,
   `ProjectController::store` / move, `ImportController::ensureRoom`, page / issue creation (web, MCP tools return
-  `Response::error`, `ContentCapture`), files via middleware `EnsureFileRoom` (`file.room`, on the
-  `workspaces/{workspace}` group, `/upload/*` (workspace field or Referer), public widget POSTs, extension items);
-  inbound helpdesk mail drops attachments that don't fit.
+  `Response::error`, `ContentCapture`; issues: inside `Issues::create`, so sync is covered), files via middleware
+  `EnsureFileRoom` (`file.room`, on the `workspaces/{workspace}` group, public widget POSTs, extension items; fails
+  closed when files come without a resolvable workspace); inbound helpdesk mail drops attachments that don't fit.
+  Editor uploads (`/upload/*`, App API `POST /uploads`) go through `EditorUploads::store`: a required workspace
+  (`workspaceFor`), `LimitGate::reserveFiles` (check + add the bytes under a row lock of `workspace_usages`;
+  `releaseFiles` on failure) and an `editor_uploads` row the meter counts (Codex review).
 - **Membership event:** `Workspace::addUser` / `removeUser` (and `UserDeletion`) dispatch
   `WorkspaceMembershipChanged`; the package syncs Paddle seats from it.
 - **Usage:** `WorkspaceUsageMeter` + `usage:measure` (nightly 02:30) → `workspace_usages` (`WorkspaceUsage`,
@@ -671,6 +826,7 @@ Code name "entitlements", never "plan" (`App\Models\Plan` is the Gantt plan).
 | A policy | `app/Policies/` **and register it** in `AppServiceProvider` |
 | An Inertia page | `resources/js/Pages/<Module>/` + type in `types/index.d.ts` — [add-inertia-page skill](./skills/add-inertia-page.md) |
 | An MCP tool | `app/Mcp/Tools/` + `BrainitiveServer::$tools` — [add-mcp-tool skill](./skills/add-mcp-tool.md) |
+| A desktop / mobile app endpoint | `routes/app-api.php` + `app/Http/Controllers/AppApi/` + Form Request + Resource + tests, then `composer openapi`, a row in [`API.md`](./API.md) and the mobile card — [add-app-api-endpoint skill](./skills/add-app-api-endpoint.md) |
 | A browser-extension capture | `Support/Captures/ContentCapture` (rules, policy, create — also used by the capture inbox) + `Extension/CaptureController` + `ext.*` route, then `browser-extension/lib/api.ts` + a form in `components/forms.tsx` |
 | A notification | `app/Notifications/` — new types extend `CatalogNotification` + a `NotificationCatalog::TYPES` entry; senders in `app/Support/Notifications/` — [add-notification skill](./skills/add-notification.md) |
 | A queued job | `app/Jobs/` |
@@ -747,4 +903,8 @@ Code name "entitlements", never "plan" (`App\Models\Plan` is the Gantt plan).
   no Cloud legal facts: `/legal/dpa`, `/legal/subprocessors` and `/refund` are 404, `/imprint` too
   until the operator sets `LEGAL_*` fields or `LEGAL_IMPRINT_URL` (`.env.example`).
 - User guide: `docs/self-hosting.md` (incl. "Live updates (bell, presence, typing)", "Legal pages
-  (imprint, privacy, terms)"). `TRUSTED_PROXIES` (env, `bootstrap/app.php`) for reverse proxies.
+  (imprint, privacy, terms)"). `TRUSTED_PROXIES` (env, `bootstrap/app.php`) for reverse proxies;
+  empty in `.env.docker.example`, ports published on `BIND_ADDRESS` (default `127.0.0.1`) since v1.49.0.
+- **Security headers (v1.49.0):** `FrameProtection` (frame-ancestors / X-Frame-Options) and `SecurityHeaders`
+  (`config/security.php`: HSTS on HTTPS in production, report-only nonce script CSP; Blade scripts carry
+  `nonce="{{ Vite::cspNonce() }}"`) in the web group. Production misconfig warnings: `App\Support\Admin\ProductionConfigWarnings`.

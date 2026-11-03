@@ -609,6 +609,8 @@ export type PageProps<
     activeTimer?: ActiveTimer | null;
     /** "New version available" (BRAI-433, UpdateCheck::noticeFor): instance admins of self-hosted installs only. */
     updateNotice?: UpdateNotice | null;
+    /** Oldest Brainitive Desktop version this server works with (config app-api.min_versions.desktop); see lib/desktop.ts. */
+    desktopMinVersion?: string;
     // Shared layout data
     workspaces?: Workspace[];
     currentWorkspace?: Workspace & {
@@ -2974,6 +2976,25 @@ export interface PushDevice {
     last_error_at: string | null;
     /** The push service answered 404 / 410: no more pushes go there. */
     expired_at: string | null;
+}
+
+/**
+ * A signed-in desktop / mobile app install (App API v1, BRAI-385): Profile prop `appDevices`, same
+ * fields as `GET /api/v1/devices` (App\Http\Resources\AppApi\DeviceResource). Dates are ISO-8601 UTC.
+ */
+export interface AppDevice {
+    id: number;
+    client: 'desktop' | 'mobile' | 'tv';
+    platform: 'macos' | 'windows' | 'linux' | 'ios' | 'android' | 'android_tv';
+    name: string;
+    app_version: string | null;
+    os_version: string | null;
+    has_push_token: boolean;
+    /** The device of the calling app token; always false on the web. */
+    current: boolean;
+    last_used_at: string | null;
+    /** When it signed in. */
+    created_at: string | null;
 }
 
 /** POST push-subscriptions.test — what the push service answered. */

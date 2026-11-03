@@ -51,8 +51,9 @@ The Docker setup starts all four for you, plus PostgreSQL and Redis. In a manual
 5. [Email](./email): SMTP settings, which emails Brainitive sends, testing, SPF and DKIM.
 6. [Queue worker and scheduler](./queue-and-scheduler): why both are required and what they run.
 7. [Search](./search): full-text search on PostgreSQL and how to rebuild the index.
-8. [Upgrading](./upgrading): update a Docker or manual installation safely.
-9. [Backups](./backups): what to back up, how to restore, and project export.
-10. [Troubleshooting](./troubleshooting): common problems and their fixes.
+8. [Desktop and mobile apps](./desktop-and-mobile-apps): what the apps use on your server (`/api/v1`, `/app`), minimum app versions, proxy paths.
+9. [Upgrading](./upgrading): update a Docker or manual installation safely.
+10. [Backups](./backups): what to back up, how to restore, and project export.
+11. [Troubleshooting](./troubleshooting): common problems and their fixes.
 
 After installing, open **avatar menu → Instance admin** to manage users and settings. See the [Instance admin guide](/admin/). Social logins and calendars are covered under [Integrations](/integrations/).

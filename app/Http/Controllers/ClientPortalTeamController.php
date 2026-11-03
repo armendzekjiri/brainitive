@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\ClientDeliverable;
 use App\Models\ClientDeliverableComment;
-use App\Models\ClientDeliverableDecision;
 use App\Models\ClientPortal;
 use App\Models\ClientPortalMember;
 use App\Models\Page;
@@ -72,7 +71,7 @@ class ClientPortalTeamController extends Controller
                     'revoked_at' => $m->revoked_at?->toIso8601String(),
                     'last_seen_at' => $m->last_seen_at?->toIso8601String(),
                 ])->values() : [],
-            'deliverables' => $deliverables->map(fn (ClientDeliverable $d) => $this->summary($d))->values(),
+            'deliverables' => $deliverables->map(fn (ClientDeliverable $d) => Deliverables::summary($d))->values(),
             'candidates' => $canPublish ? [
                 'pages' => Page::where('project_id', $project->id)->visibleTo($user)
                     ->where('type', 'page')->where('status', 'published')->where('current_version', '>', 0)
@@ -227,29 +226,7 @@ class ClientPortalTeamController extends Controller
             'workspace' => $workspace,
             'project' => $project,
             'portal' => ['title' => $portal->title, 'slug' => $portal->slug, 'enabled' => $portal->enabled, 'url' => $portal->publicUrl()],
-            'deliverable' => $this->summary($item) + [
-                'message' => $item->message,
-                'html' => $item->kind === 'page' ? ($item->content['html'] ?? '') : null,
-                'plan' => $item->kind === 'plan' ? ($item->content['plan'] ?? null) : null,
-                'client_url' => $item->withdrawn_at === null ? route('client-portal.deliverable', [$portal->slug, $item->uuid]) : null,
-                'decisions' => $item->decisions->map(fn (ClientDeliverableDecision $d) => [
-                    'id' => $d->id,
-                    'name' => $d->identity_name,
-                    'email' => $canManage ? $d->identity_email : null,
-                    'decision' => $d->decision,
-                    'note' => $d->note,
-                    'version' => $d->version,
-                    'created_at' => $d->created_at?->toIso8601String(),
-                ])->values(),
-                'comments' => $item->comments->map(fn (ClientDeliverableComment $c) => [
-                    'id' => $c->id,
-                    'author' => $c->author_name,
-                    'from_team' => $c->isFromTeam(),
-                    'visibility' => $c->visibility,
-                    'body' => $c->body,
-                    'created_at' => $c->created_at?->toIso8601String(),
-                ])->values(),
-            ],
+            'deliverable' => Deliverables::detail($portal, $item, $canManage),
             'versions' => $versions->map(fn (ClientDeliverable $d) => [
                 'id' => $d->id,
                 'version' => $d->version,
@@ -304,26 +281,5 @@ class ClientPortalTeamController extends Controller
         abort_unless($portal, 404);
 
         return $portal;
-    }
-
-    /** @return array<string, mixed> */
-    private function summary(ClientDeliverable $d): array
-    {
-        $last = $d->relationLoaded('decisions') ? $d->decisions->last() : null;
-
-        return [
-            'id' => $d->id,
-            'uuid' => $d->uuid,
-            'kind' => $d->kind,
-            'title' => $d->title,
-            'version' => $d->version,
-            'status' => $d->displayStatus(),
-            'decision' => $d->status,
-            'published_at' => $d->published_at?->toIso8601String(),
-            'published_by' => $d->publisher?->name,
-            'decisions_count' => $d->decisions_count ?? ($d->relationLoaded('decisions') ? $d->decisions->count() : null),
-            'comments_count' => $d->comments_count ?? ($d->relationLoaded('comments') ? $d->comments->count() : null),
-            'last_decision_at' => $last?->created_at?->toIso8601String(),
-        ];
     }
 }

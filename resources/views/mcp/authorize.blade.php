@@ -138,7 +138,7 @@
         </div>
     </div>
 
-    <script>
+    <script nonce="{{ Vite::cspNonce() }}">
         document.getElementById('authorizeForm').addEventListener('submit', function () {
             var btn = document.getElementById('authorizeButton');
             btn.disabled = true;

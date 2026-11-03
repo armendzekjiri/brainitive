@@ -9,7 +9,8 @@ use Illuminate\Database\QueryException;
 /**
  * "Find anything" (BRAI-55) for one person: request input → SearchQuery, pending index writes
  * flushed, the engine searched with the person's SearchViewer, hits turned into results with
- * links (SearchPresenter). Used by the search page, the command palette and the MCP `search` tool.
+ * links (SearchPresenter). Used by the search page, the command palette, the MCP `search` tool,
+ * the browser extension and the App API `GET /api/v1/search`.
  */
 class SearchService
 {
@@ -48,8 +49,31 @@ class SearchService
     }
 
     /**
+     * "Recent" mode: no words, the newest content the user may see (same engine visibility, same result
+     * shape as `search()`; counts are empty). The query's filters and page size still apply.
+     *
+     * @return array{results: list<array<string, mixed>>, total: int, counts: array<string, int>, fuzzy: bool, page: int, per_page: int, has_more: bool}
+     */
+    public function recent(User $user, SearchQuery $query): array
+    {
+        $this->indexer->flush();
+
+        $results = $this->engine->recent($query, SearchViewer::for($user));
+
+        return [
+            'results' => SearchPresenter::present($results->hits),
+            'total' => $results->total,
+            'counts' => self::groupCounts([]),
+            'fuzzy' => false,
+            'page' => 1,
+            'per_page' => $query->perPage,
+            'has_more' => false,
+        ];
+    }
+
+    /**
      * The query from request-like input: q, type (a SearchTypes::GROUPS key), project (ids),
-     * status (open | done), assignee (me | user id), updated (7d | 30d | 90d | 365d), from / to
+     * workspace (ids; resolve slugs and membership first — visibility still applies), status (open | done), assignee (me | user id), updated (7d | 30d | 90d | 365d), from / to
      * (Y-m-d), page. Unknown values are ignored, never an error.
      *
      * @param  array<string, mixed>  $input
@@ -60,6 +84,7 @@ class SearchService
 
         $group = is_string($input['type'] ?? null) && isset(SearchTypes::GROUPS[$input['type']]) ? $input['type'] : null;
         $projects = array_values(array_unique(array_filter(array_map('intval', (array) ($input['project'] ?? [])), fn (int $id) => $id > 0)));
+        $workspaces = array_values(array_unique(array_filter(array_map('intval', (array) ($input['workspace'] ?? [])), fn (int $id) => $id > 0)));
         $status = in_array($input['status'] ?? null, SearchQuery::STATUSES, true) ? $input['status'] : null;
         $assignee = match (true) {
             ($input['assignee'] ?? null) === 'me' => (int) $user->id,
@@ -88,6 +113,7 @@ class SearchService
             contextProjectId: is_numeric($input['context_project'] ?? null) ? (int) $input['context_project'] : null,
             withCounts: $withCounts,
             titlesOnly: $titlesOnly,
+            workspaceIds: array_slice($workspaces, 0, 50),
         );
     }
 

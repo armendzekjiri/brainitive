@@ -4,12 +4,12 @@ namespace App\Http\Controllers\Extension;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\SearchController;
-use App\Models\Board;
 use App\Models\InstanceSettings;
 use App\Models\Item;
 use App\Models\TaskListItem;
 use App\Support\Captures\CaptureDestinations;
 use App\Support\Mcp\ResourceLocator;
+use App\Support\MyWork\AssignedWork;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -19,6 +19,19 @@ use Illuminate\Http\Request;
  */
 class ExtensionController extends Controller
 {
+    /**
+     * Sign-out: revokes the calling capture token and its refresh token (the extension calls this
+     * before clearing its local session; `/api/cli/logout` rejects capture tokens).
+     */
+    public function logout(Request $request): JsonResponse
+    {
+        $token = $request->user()->currentAccessToken();
+        $token?->revoke();
+        $token?->refreshToken?->revoke();
+
+        return response()->json(['message' => 'Logged out.']);
+    }
+
     public function me(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -61,11 +74,8 @@ class ExtensionController extends Controller
         $user = $request->user();
         $projectIds = $user->accessibleProjectIds();
 
-        $issues = Item::query()
-            ->whereIn('board_id', Board::whereIn('project_id', $projectIds)->select('id'))
-            ->where('assigned_to', $user->id)
-            ->whereNull('completed_at')
-            ->whereHas('column', fn ($q) => $q->where('is_done_column', false))
+        // the shared "assigned to me, still open" query (also GET /api/v1/me/work)
+        $issues = AssignedWork::issues($user, $projectIds)
             ->with(['board.project.workspace', 'column:id,name'])
             ->orderByRaw('due_date IS NULL')
             ->orderBy('due_date')
@@ -83,10 +93,7 @@ class ExtensionController extends Controller
                 'url' => route('boards.items.show', [$item->board->project->workspace->slug, $item->board->project->slug, $item->board->slug, $item->id]),
             ]);
 
-        $tasks = TaskListItem::query()
-            ->whereHas('taskList', fn ($q) => $q->whereIn('project_id', $projectIds))
-            ->where('assignee_id', $user->id)
-            ->where('status', '!=', 'done')
+        $tasks = AssignedWork::tasks($user, $projectIds)
             ->with('taskList.project.workspace')
             ->orderByRaw('due_date IS NULL')
             ->orderBy('due_date')

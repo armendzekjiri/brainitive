@@ -24,4 +24,27 @@ final class ReportComputation
         public readonly array $fixedCharges,
         public readonly array $warnings,
     ) {}
+
+    /**
+     * A digest of every value that shapes the document (Codex web review V): each contained entry (minutes,
+     * billable, activity, rate, amount, ticket, person, note), the options, title, period, tax, rounding, currency,
+     * issuer and client details, the totals and the fixed charges. The preview sends it; finalize recomputes it
+     * under the locks and refuses a mismatch. What finalize itself assigns (kind, number, issue date) and the
+     * derived grouping are left out; lists are sorted, so the order entries were read in doesn't matter.
+     */
+    public function revision(): string
+    {
+        $byId = function (array $list): array {
+            usort($list, fn ($a, $b) => [(int) ($a['id'] ?? 0), json_encode($a)] <=> [(int) ($b['id'] ?? 0), json_encode($b)]);
+
+            return $list;
+        };
+        $snapshot = $this->snapshot;
+        unset($snapshot['version'], $snapshot['kind'], $snapshot['number'], $snapshot['issued_on'], $snapshot['groups']);
+        $snapshot['entries'] = $byId((array) ($snapshot['entries'] ?? []));
+        $charges = $this->fixedCharges;
+        usort($charges, fn ($a, $b) => json_encode($a) <=> json_encode($b));
+
+        return hash('sha256', (string) json_encode([$snapshot, $byId($this->rows), $this->entryIds, $charges], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
 }

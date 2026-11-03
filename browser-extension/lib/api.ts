@@ -1,6 +1,7 @@
+import { dataUrlToBlob } from './page';
 import type { Created, Destinations, Me, SearchResults, WorkItem } from './types';
 
-/** Gets a valid token: from `auth.ts` in the background, via a message elsewhere. */
+/** Gets a valid token: `getAccessToken` from `auth.ts` — background only. */
 export type TokenProvider = (force?: boolean) => Promise<{ token: string; server: string }>;
 
 export class ApiError extends Error {
@@ -26,6 +27,8 @@ export function createApi(getToken: TokenProvider) {
                 ...(init.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
                 ...init.headers,
             },
+            // Never follow a redirect with the bearer token or a body (Codex CLI/extension review 5).
+            redirect: 'error',
         });
 
         if (response.status === 401 && retry) {
@@ -48,7 +51,7 @@ export function createApi(getToken: TokenProvider) {
         destinations: () => request<Destinations>('destinations'),
         search: (q: string) => request<SearchResults>(`search?q=${encodeURIComponent(q)}`),
         myWork: () => request<{ items: WorkItem[] }>('my-work'),
-        createIssue: (boardId: number, data: FormData) => post<Created & { item_key: string }>(`boards/${boardId}/items`, data),
+        createIssue: async (boardId: number, fields: IssueFields) => post<Created & { item_key: string }>(`boards/${boardId}/items`, await issueForm(fields)),
         saveBookmark: (bookmarkId: number, data: { type: 'link' | 'note'; title?: string; url?: string; content?: string }) =>
             post<Created>(`bookmarks/${bookmarkId}/items`, data),
         createPage: (projectId: number, data: { title: string; markdown: string; publish: boolean }) => post<Created>(`projects/${projectId}/pages`, data),
@@ -62,6 +65,29 @@ export function createApi(getToken: TokenProvider) {
 }
 
 export type Api = ReturnType<typeof createApi>;
+
+/** A new issue as an extension page sends it to the background (JSON: the screenshot is a data URL). */
+export interface IssueFields {
+    title: string;
+    description: string;
+    column_id?: number | null;
+    assign_to_me: boolean;
+    /** PNG as a `data:` URL. */
+    screenshot?: string | null;
+}
+
+async function issueForm(fields: IssueFields): Promise<FormData> {
+    const data = new FormData();
+    data.set('title', fields.title);
+    data.set('description', fields.description);
+    if (fields.column_id) data.set('column_id', String(fields.column_id));
+    data.set('assign_to_me', fields.assign_to_me ? '1' : '0');
+    if (fields.screenshot) {
+        if (!fields.screenshot.startsWith('data:image/')) throw new Error('The screenshot isn’t an image.');
+        data.set('screenshot', await dataUrlToBlob(fields.screenshot), 'screenshot.png');
+    }
+    return data;
+}
 
 function errorMessage(status: number, body: { message?: string; errors?: Record<string, string[]> }): string {
     if (status === 403) return 'You don’t have permission to add things there.';

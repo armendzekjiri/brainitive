@@ -6,6 +6,7 @@ use App\Models\Capture;
 use App\Support\Captures\CaptureConversion;
 use App\Support\Captures\CaptureDestinations;
 use App\Support\Captures\CaptureFields;
+use App\Support\Captures\CaptureInbox;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,24 +30,14 @@ class CaptureInboxController extends Controller
         $q = $request->query('q');
         $search = is_string($q) ? mb_substr(trim($q), 0, 255) : '';
 
-        $page = Capture::ownedBy($user)
-            ->inState($state)
-            ->when($search !== '', function ($query) use ($search) {
-                $like = '%'.$search.'%';
-                $query->where(fn ($q) => $q->whereLike('text', $like)->orWhereLike('url', $like)->orWhereLike('source', $like));
-            })
-            ->orderByDesc('captured_at')
-            ->orderByDesc('id')
+        $page = CaptureInbox::query($user, $state, $search)
             ->simplePaginate(self::PER_PAGE)
             ->withQueryString();
 
         $captures = collect($page->items());
         $locations = CaptureConversion::locations($captures, $user);
 
-        $counts = [];
-        foreach (Capture::STATES as $s) {
-            $counts[$s] = Capture::ownedBy($user)->inState($s)->count();
-        }
+        $counts = CaptureInbox::counts($user);
 
         return Inertia::render('Captures/Index', [
             'captures' => $captures->map(fn (Capture $c) => $this->present($c, $locations[$c->id] ?? null))->values(),
@@ -65,7 +56,7 @@ class CaptureInboxController extends Controller
     {
         $validated = $request->validate(Capture::rules());
 
-        Capture::create(['user_id' => $request->user()->id] + $validated);
+        CaptureInbox::create($request->user(), $validated);
 
         return back()->with('success', 'Saved to your captures.');
     }
@@ -83,7 +74,7 @@ class CaptureInboxController extends Controller
     {
         $this->authorize('update', $capture);
 
-        $capture->update(['archived_at' => $capture->archived_at ?? now()]);
+        CaptureInbox::archive($capture);
 
         return back()->with('success', 'Capture archived.');
     }
@@ -92,7 +83,7 @@ class CaptureInboxController extends Controller
     {
         $this->authorize('update', $capture);
 
-        $capture->update(['archived_at' => null]);
+        CaptureInbox::restore($capture);
 
         return back()->with('success', $capture->processed_at ? 'Capture restored to Processed.' : 'Capture restored to your inbox.');
     }

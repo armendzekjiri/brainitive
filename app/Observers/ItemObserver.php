@@ -10,8 +10,10 @@ use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Release;
 use App\Models\Sprint;
+use App\Models\SyncTombstone;
 use App\Models\User;
 use App\Support\Events\ItemEvents;
+use App\Support\MyWork\WorkRef;
 use App\Support\Notifications\Assignments;
 use Carbon\CarbonInterface;
 
@@ -61,6 +63,8 @@ class ItemObserver
         // BRAI-103: the ONE place "assigned you" is sent for issues (every update path, bulk edit too)
         if ($item->wasChanged('assigned_to')) {
             Assignments::item($item);
+            // App API offline sync (BRAI-425): the issue leaves the previous assignee's My Work
+            SyncTombstone::record((int) $item->getOriginal('assigned_to') ?: null, SyncTombstone::WORK, WorkRef::of($item), SyncTombstone::UNASSIGNED);
         }
 
         $changes = [];

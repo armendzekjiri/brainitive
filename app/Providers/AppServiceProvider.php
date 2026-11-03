@@ -44,6 +44,7 @@ use App\Policies\SnippetPolicy;
 use App\Policies\WorkloadPolicy;
 use App\Policies\WorkspacePolicy;
 use App\Support\Admin\InstanceMailConfig;
+use App\Support\Admin\ProductionConfigWarnings;
 use App\Support\Billing\ReportBuilder;
 use App\Support\Helpdesks\Mail\FakeMailboxConnector;
 use App\Support\Helpdesks\Mail\ImapMailboxConnector;
@@ -56,6 +57,7 @@ use App\Support\Push\WebPushClient;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
@@ -92,6 +94,11 @@ class AppServiceProvider extends ServiceProvider
     {
         InstanceSettings::flushCache();
 
+        // Production with a development .env (APP_DEBUG=true, http APP_URL, mail to the log): a
+        // warning in the log, at most hourly; mail is checked when it is sent (admin SMTP wins).
+        ProductionConfigWarnings::reportAtBoot();
+        Event::listen(MessageSending::class, [ProductionConfigWarnings::class, 'onMessageSending']);
+
         // Reset links carry a secret token: build them from APP_URL, never from the request's
         // Host / X-Forwarded-Host (host-header poisoning would send the token elsewhere).
         ResetPassword::createUrlUsing(fn ($user, string $token) => rtrim((string) (config('app.url') ?: url('/')), '/')
@@ -101,6 +108,13 @@ class AppServiceProvider extends ServiceProvider
         BrandedMail::register();
 
         Vite::prefetch(concurrency: 3);
+
+        // e2e runs from the same checkout as `npm run dev`, whose public/hot would point every page at the
+        // Vite dev server: no /build assets (offline shell), and loads from another host (legal.spec.ts).
+        // e2e always serves the build.
+        if ($this->app->environment('e2e')) {
+            Vite::useHotFile(storage_path('e2e/vite.hot'));
+        }
 
         // Web push (BRAI-154): one WebPush client for real notifications and the Profile test push
         // (faked in e2e), and a report handler that records each push service answer on the
@@ -120,8 +134,11 @@ class AppServiceProvider extends ServiceProvider
         // /mcp or the CLI API (RejectCaptureTokens).
         Passport::tokensCan([
             'mcp:use' => 'Use MCP server',
+            'cli' => 'Use the Brainitive CLI (task lists)',
             'capture' => 'Save pages, links, notes and screenshots to your workspaces and search them',
         ]);
+        // an OAuth client that asks for no scope (an MCP connector) gets `mcp:use`: MCP refuses scope-less tokens
+        Passport::defaultScopes(['mcp:use']);
 
         // Queue workers are long-lived: re-read instance settings (mail, verification) per job.
         Queue::before(function () {

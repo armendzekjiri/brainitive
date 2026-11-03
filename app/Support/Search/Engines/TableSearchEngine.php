@@ -3,7 +3,9 @@
 namespace App\Support\Search\Engines;
 
 use App\Support\Search\SearchEngine;
+use App\Support\Search\SearchHighlight;
 use App\Support\Search\SearchQuery;
+use App\Support\Search\SearchResults;
 use App\Support\Search\SearchTypes;
 use App\Support\Search\SearchViewer;
 use Illuminate\Database\Query\Builder;
@@ -70,11 +72,54 @@ abstract class TableSearchEngine implements SearchEngine
                     ->whereNull('e.project_id')
                     ->where('e.owner_id', $viewer->userId)))
             ->when($query->projectIds !== [], fn (Builder $q) => $q->whereIn('e.project_id', $query->projectIds))
+            // project content by the project's current workspace (an entry's own workspace_id isn't
+            // rewritten when a project moves); workspace-level content (snippets, bookmarks) by its own
+            ->when($query->workspaceIds !== [], fn (Builder $q) => $q->where(fn (Builder $in) => $in
+                ->whereIn('e.project_id', DB::table('projects')->whereIn('workspace_id', $query->workspaceIds)->select('id'))
+                ->orWhere(fn (Builder $own) => $own->whereNull('e.project_id')->whereIn('e.workspace_id', $query->workspaceIds))))
             ->when($query->status !== null, fn (Builder $q) => $q->where('e.status', $query->status))
             ->when($query->assigneeId !== null, fn (Builder $q) => $q->where('e.assignee_id', $query->assigneeId))
             ->when($query->updatedFrom !== null, fn (Builder $q) => $q->where('e.source_updated_at', '>=', $query->updatedFrom))
             ->when($query->updatedTo !== null, fn (Builder $q) => $q->where('e.source_updated_at', '<=', $query->updatedTo));
     }
+
+    /**
+     * The "recent" list (App API `GET /search` without words): the newest content the viewer may see,
+     * from the same visible entries as a search (so the same visibility). Comments, files and captures
+     * are left out; no counts, one page.
+     */
+    public function recent(SearchQuery $query, SearchViewer $viewer): SearchResults
+    {
+        $types = $query->types !== [] ? $query->types : self::RECENT_TYPES;
+        $rows = $this->visibleEntries($query, $viewer)
+            ->whereIn('e.type', $types)
+            ->select([...self::HIT_COLUMNS, 'e.title'])
+            ->orderByDesc('e.source_updated_at')
+            ->orderByDesc('e.id')
+            ->limit($query->perPage)
+            ->get();
+
+        $hits = $rows->map(fn (object $row) => [
+            'type' => $row->type,
+            'source_id' => (int) $row->source_id,
+            'project_id' => $row->project_id === null ? null : (int) $row->project_id,
+            'workspace_id' => $row->workspace_id === null ? null : (int) $row->workspace_id,
+            'container_id' => $row->container_id === null ? null : (int) $row->container_id,
+            'subtype' => $row->subtype,
+            'key' => $row->key,
+            'status' => $row->status,
+            'is_draft' => (bool) $row->is_draft,
+            'updated_at' => $row->source_updated_at,
+            'score' => 0.0,
+            'title_html' => SearchHighlight::toHtml((string) $row->title),
+            'snippet_html' => '',
+        ])->all();
+
+        return new SearchResults($hits, count($hits), []);
+    }
+
+    /** What "recent" lists: things people open, not comments, files or captures. */
+    public const RECENT_TYPES = [SearchTypes::ITEM, SearchTypes::PAGE, SearchTypes::TICKET, SearchTypes::PLAN, SearchTypes::TASK, SearchTypes::SNIPPET, SearchTypes::BOOKMARK];
 
     /**
      * Matches per type.

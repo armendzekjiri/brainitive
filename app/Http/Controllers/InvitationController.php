@@ -3,8 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\WorkspaceInvitation;
-use App\Support\Entitlements\LimitGate;
-use App\Support\Notifications\WorkspaceNotifications;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -46,7 +44,7 @@ class InvitationController extends Controller
         }
 
         // Authenticated user with matching email can accept
-        $canAccept = $user && strtolower($user->email) === strtolower($invitation->email);
+        $canAccept = $user && $invitation->emailMatches($user);
 
         return Inertia::render('Invitations/Show', [
             'invitation' => [
@@ -94,17 +92,13 @@ class InvitationController extends Controller
                 ->with('info', 'You have already accepted this invitation.');
         }
 
-        if (strtolower($user->email) !== strtolower($invitation->email)) {
+        if (! $invitation->emailMatches($user)) {
             return redirect()->back()
                 ->with('error', 'This invitation was sent to a different email address. Please sign in with the account that received the invitation.');
         }
 
-        // The open invitation is already counted: blocked only when the workspace is over its limit
-        app(LimitGate::class)->ensureCanAddMembers($invitation->workspace, 0);
-
-        $invitation->markAsAccepted();
-        $invitation->workspace->addUser($user, $invitation->role, $invitation->inviter ?? null);
-        WorkspaceNotifications::invitationAccepted($invitation, $user);
+        // limit gate (over the limit only), membership, notification — shared with the App API
+        $invitation->acceptBy($user);
 
         return redirect()->route('workspaces.show', $invitation->workspace->slug)
             ->with('success', "You've joined {$invitation->workspace->name}.");

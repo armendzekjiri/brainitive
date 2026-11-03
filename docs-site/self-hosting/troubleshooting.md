@@ -55,7 +55,7 @@ Run `php artisan` commands as `sudo -u www-data php artisan …` to avoid this.
 If forms keep failing with **Your session expired. Please try again.**, you get sent back to the login page, or links and redirects use `http://` although the site runs on HTTPS:
 
 1. Set `APP_URL` to the exact address people use, with `https://`.
-2. Set `TRUSTED_PROXIES` to your reverse proxy's IP address or network, so Brainitive trusts its `X-Forwarded-Proto` header. The Docker template trusts localhost and private networks by default.
+2. Set `TRUSTED_PROXIES` to your reverse proxy's IP address as Brainitive sees it, so Brainitive trusts its `X-Forwarded-Proto` header. Since v1.49.0 the Docker template trusts no proxy by default; for a proxy on the Docker host see [Docker, option B](./docker#option-b-behind-your-own-reverse-proxy).
 3. Make sure the proxy sends `X-Forwarded-For` and `X-Forwarded-Proto` (see the nginx example in [Docker](./docker#option-b-behind-your-own-reverse-proxy)).
 4. Leave `SESSION_DOMAIN` empty unless you know you need it.
 5. Apply the change: `docker compose up -d`, or `php artisan optimize` on a manual install.

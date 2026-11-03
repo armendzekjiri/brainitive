@@ -17,12 +17,58 @@ export async function getSession(): Promise<Session | null> {
     return (session as Session | undefined) ?? null;
 }
 
+/**
+ * The session (with its tokens) is read by the background only. `account` mirrors the
+ * non-secret part — which server you're signed in to — for the extension pages (Codex
+ * CLI/extension review 8).
+ */
 export async function setSession(session: Session | null): Promise<void> {
     if (session) {
-        await browser.storage.local.set({ session });
+        await browser.storage.local.set({ session, account: { server: session.server } satisfies Account });
     } else {
-        await browser.storage.local.remove('session');
+        await browser.storage.local.remove(['session', 'account']);
     }
+}
+
+export interface Account {
+    server: string;
+}
+
+export async function getAccount(): Promise<Account | null> {
+    const { account } = await browser.storage.local.get('account');
+    return (account as Account | undefined) ?? null;
+}
+
+/** Sessions stored before Brainitive v1.49.0 (extension 1.1.x) have no `account` yet. */
+export async function syncAccount(): Promise<void> {
+    const session = await getSession();
+    if (session && !(await getAccount())) {
+        await browser.storage.local.set({ account: { server: session.server } satisfies Account });
+    }
+}
+
+/**
+ * Keep storage.local (the session's tokens) away from content scripts where the browser
+ * supports it (`setAccessLevel`; Chrome restricts only some areas). Content scripts of this
+ * extension don't read it anyway; this is defense in depth.
+ */
+export async function restrictStorageToExtensionPages(): Promise<void> {
+    const area = browser.storage.local as { setAccessLevel?: (options: { accessLevel: string }) => Promise<void> };
+    try {
+        await area.setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' });
+    } catch {
+        // not supported for this area / browser
+    }
+}
+
+/** Session generation: changes on every sign-in and sign-out (see `auth.ts`). */
+export async function getGeneration(): Promise<number> {
+    const { sessionGeneration } = await browser.storage.local.get('sessionGeneration');
+    return (sessionGeneration as number | undefined) ?? 0;
+}
+
+export async function bumpGeneration(): Promise<void> {
+    await browser.storage.local.set({ sessionGeneration: (await getGeneration()) + 1 });
 }
 
 export async function getClient(server: string): Promise<RegisteredClient | null> {

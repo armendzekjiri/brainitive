@@ -152,6 +152,70 @@ class Example extends Model
 - Extension endpoints resolve models by numeric id and authorize with the same policies as the
   app — never a new permission rule.
 
+### App API v1 (desktop + mobile apps, v1.49.0)
+Full conventions and the endpoint registry: [`API.md`](./API.md); recipe:
+[skills/add-app-api-endpoint.md](./skills/add-app-api-endpoint.md).
+- `/api/v1` lives in `routes/app-api.php` only (names `app.v1.*`, group `app-api`, signed-in routes
+  `auth:app`). It is **not** MCP / CLI / extension: Passport tokens get 401 there, app tokens get 401
+  on `/mcp`, `/api/cli`, `/api/ext` — tests assert both.
+- Thin controllers in `App\Http\Controllers\AppApi` → the web's Support services and policies. Form
+  Request in, API Resource out with **explicit fields**; dates ISO-8601 UTC.
+- Responses wrapped `{data: ...}` (lists `{data: [...], next_cursor}`, cursor pagination, max 100,
+  `updated_since`: `ListRequest` + a `CursorCollection` subclass); **DELETE → 204**. Only the token
+  responses of `/auth/exchange` and `/auth/refresh` are unwrapped.
+- Workspace / project resolution through `ResolvesVisible` (404 for what the user can't open); a Form
+  Request that could leak via 422 does that 404 check in `authorize()`. Workspace content routes go in
+  the `verified` group. No route `where()` on non-GET routes (web.php's GET fallback turns a mismatch
+  into 405) — reject malformed ids in the controller.
+- Errors only through the central renderer (`AppApiErrors`): `{message, code, errors?}`. 404 instead of
+  403 when existence must stay secret. A plan limit is 402 `limit_reached` — declare
+  `@throws LimitReached` on the controller method so the spec shows it.
+- Every endpoint: `#[Group('<API.md module>', weight: n)]` on the controller, tests (incl. Passport
+  token → 401, cross-workspace 404, 422), `composer openapi` (commits `docs/api/openapi.json`; the
+  drift test fails otherwise), a row in `API.md`, and the `## API (ready)` section on its Mobile app card.
+- Sign-in per client (`config/app-api.php` → `clients.*.grant`): desktop / mobile use PKCE
+  (`/app/authorize`), the TV uses the device code (`/auth/device` + `/app/device`). A new client gets a
+  grant and its platforms there, never a branch in a controller.
+- Work (issues + list tasks) is addressed as `issue:<id>` / `task:<id>` (`WorkRef`) everywhere in the
+  App API, and listed with one resource (`WorkItemResource`). An endpoint a wallboard polls answers an
+  `ETag` and 304 on `If-None-Match` (`TodayController`), and runs a fixed number of queries (test it).
+- Creates take an optional `request_id` (uuid) through `Concerns\CreatesOnce`: the first call answers 201, a
+  retry with the same id and input 200 with the same record, the same id with other input 409. Write the two
+  answers as two `return (new XResource(...))->response()` statements (201 + 200) so the spec shows both.
+- Content is addressed by id (`/task-lists/{id}`, `/snippet-collections/{id}`, `/bookmarks/{id}`), captures by uuid;
+  resolve it through `ResolvesVisible` (`visibleTaskList`, `visibleSnippetCollection`, `visibleSnippet`,
+  `visibleBookmarkGroup`) or, in a Form Request, in `authorize()` so 404 comes before 422.
+- Rich text the web stores as editor HTML (issue descriptions, comments, task notes) is **Markdown** in the App API; a mention
+  is `@[Name](user:<id>)` (`IssueMarkdown`), resolved only for people who can open the project. Issues / boards / sprints are
+  addressed by id (`/items/{id}`, `/boards/{id}`, `/sprints/{id}`); `GET /items/by-key/{KEY}` for keys.
+- An update that can collide with someone else's takes the `updated_at` the client last read and answers 409 when the row
+  changed since (`PATCH /items/{id}`).
+- Live documents (docs, Yjs): an App API text change is a save from outside the live document — it goes through the editor's draft
+  path (`PageWrites::saveDraft`), needs the `revision` (`edit_revision`) the client read (required with `markdown`, 409 otherwise) and
+  resets the live epoch like the web's single-user save. Never write a doc's `content` directly from a new API path.
+- App API uploads always check the plan's file storage (`FileRoom::ensure`, inside the idempotent write) — the web's `file.room`
+  middleware doesn't run on `/api/v1`.
+- Filters mirror the web's own URL params instead of a second filter language: `GET /boards/{id}/items` takes the board URL /
+  saved-view params (`BoardFilters`), so a saved view's `params` work as they are.
+- Public-facing modules (helpdesk customers, lead forms, booking pages, feedback / client portals) expose **only the member /
+  agent side** in the App API, with exactly the web's role checks and customer-data rules; their public / guest routes never get
+  an `/api/v1` twin. External providers (calendars) are written through the web's provider layer (`CalendarProviders`); the API
+  never runs an OAuth connect flow.
+- When an endpoint returns what a web page computes (Insights, health, workload), call the page's Support class and pass its
+  arrays through a Resource that types the top level; don't re-derive numbers in the API.
+- Offline writes from the apps go through `POST /api/v1/sync` = the web's `OfflineSync` (one engine): a new offline-capable
+  write is a new mutation type + applier there (CONVENTIONS → Offline), never a second idempotency / conflict mechanism. Batch
+  results are per change (`status` + `http_status`); one bad change never fails the batch.
+- Content the apps keep offline must be visible to `ChangeFeed`: soft deletes, or a `SyncTombstone::record()` where a row
+  leaves a user's scope without a trace (hard delete, reassignment). Feed queries are the user's own or limited to
+  `accessibleProjectIds()`.
+- Realtime for the apps = the web's live channels (`POST /api/v1/realtime/token` → `LiveToken::grant` → `LiveChannels`). A new
+  live event or channel type gets a row in `API.md` → Realtime "Event catalog" in the same change; never a second channel rule
+  for app tokens.
+- The spec's `info.version` is the API version (`1.0.0`), not the app release; breaking changes → `/api/v2`.
+- Web ↔ desktop: call native features only through `resources/js/lib/desktop.ts` (feature-detected,
+  no-op in a browser); never import `@tauri-apps/api` into the web app.
+
 ### Migrations
 ```php
 $table->id();
@@ -306,7 +370,9 @@ Pages work like Confluence. Keep these rules when touching pages:
 - **Never write `content` of a published page directly from an editing flow.** Go through
   `Page::saveDraft()` (fills `draft_*` on published pages, `content` on unpublished ones),
   then `publishChanges()` to make it live. Anything that changes the live version of a
-  published page must record a version (`recordVersion()`), like the MCP `update-page` tool.
+  published page must record a version (`recordVersion()`). Writes from outside the editor (App API, MCP
+  `create-page` / `update-page`) go through `App\Support\Pages\PageWrites` (revision check on the locked row,
+  `publishChanges` for "publish changes") — never `update(['content' => …])` on a page.
 - **Every page listing uses `->visibleTo($user)`** — tree, sidebar (`HandleInertiaRequests`),
   project page, dashboards, search, MCP. Unpublished pages are author + admin only.
 - **Authorize with `PagePolicy`** (`view` / `update` / `delete`, `create` with
@@ -467,6 +533,9 @@ Pages work like Confluence. Keep these rules when touching pages:
   with Vite / @fontsource, copy assets into `public/build`), no CDN `<script>` / `<link>`; iframes or scripts
   from other services in content render inside `ExternalEmbedGate` (click to load). `LegalPagesTest` fails on
   known CDN hosts.
+- **Every `<script>` in a Blade view carries the CSP nonce** (`nonce="{{ Vite::cspNonce() }}"`, Ziggy:
+  `@routes(nonce: Vite::cspNonce())`); no inline `on…=` handlers. The script CSP is report-only today
+  (`SecurityHeaders`), but a script without the nonce is what would break once it is enforced.
 - **Every new processor / integration / outbound host, cookie or storage key → update
   `docs/legal/data-inventory.md`, the sub-processor list (`Pages/Legal/Subprocessors.tsx` /
   `LegalInfo::providers()`) and the privacy policy (`Pages/Privacy.tsx`, cookies / storage in

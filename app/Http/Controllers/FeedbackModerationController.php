@@ -26,7 +26,7 @@ use Inertia\Response;
  */
 class FeedbackModerationController extends Controller
 {
-    public const TABS = ['pending', 'published', 'rejected', 'merged'];
+    public const TABS = FeedbackModeration::TABS;
 
     public function index(Request $request, Workspace $workspace, Project $project): Response
     {
@@ -35,26 +35,11 @@ class FeedbackModerationController extends Controller
         $portal = FeedbackPortal::where('project_id', $project->id)->first();
         $user = $request->user();
 
-        $counts = $portal ? [
-            'pending' => $portal->posts()->where('moderation', 'pending')->whereNull('merged_into_id')->count(),
-            'published' => $portal->posts()->published()->count(),
-            'rejected' => $portal->posts()->where('moderation', 'rejected')->whereNull('merged_into_id')->count(),
-            'merged' => $portal->posts()->whereNotNull('merged_into_id')->count(),
-        ] : array_fill_keys(self::TABS, 0);
+        $counts = $portal ? FeedbackModeration::counts($portal) : array_fill_keys(self::TABS, 0);
 
         $tab = in_array($request->query('tab'), self::TABS, true) ? $request->query('tab') : ($counts['pending'] > 0 ? 'pending' : 'published');
 
-        $posts = collect();
-        if ($portal) {
-            $query = $portal->posts()->with(['author:id,name,email', 'item:id,key,title,board_id', 'item.board:id,slug', 'mergedInto:id,number,title']);
-            match ($tab) {
-                'pending' => $query->where('moderation', 'pending')->whereNull('merged_into_id')->orderBy('id'),
-                'published' => $query->published()->orderByDesc('votes_count')->orderByDesc('id'),
-                'rejected' => $query->where('moderation', 'rejected')->whereNull('merged_into_id')->orderByDesc('id'),
-                'merged' => $query->whereNotNull('merged_into_id')->orderByDesc('id'),
-            };
-            $posts = $query->limit(200)->get();
-        }
+        $posts = $portal ? FeedbackModeration::tabQuery($portal, $tab)->limit(200)->get() : collect();
 
         return Inertia::render('Projects/Feedback', [
             'workspace' => $workspace->only(['id', 'name', 'slug']),
@@ -69,7 +54,7 @@ class FeedbackModerationController extends Controller
             'suggestedSlug' => $portal ? null : FeedbackPortal::suggestSlug($project),
             'tab' => $tab,
             'counts' => $counts,
-            'posts' => $posts->map(fn (FeedbackPost $post) => $this->presentPost($workspace, $project, $portal, $post))->values(),
+            'posts' => $posts->map(fn (FeedbackPost $post) => FeedbackModeration::row($project->setRelation('workspace', $workspace), $portal, $post))->values(),
             'targets' => $portal ? $portal->posts()->published()->orderByDesc('votes_count')->limit(200)->get(['id', 'number', 'title'])
                 ->map(fn (FeedbackPost $p) => ['id' => $p->id, 'number' => $p->number, 'title' => $p->title])->values() : [],
             'boards' => Board::where('project_id', $project->id)->orderBy('name')->get(['id', 'name', 'slug', 'project_id'])
@@ -210,29 +195,5 @@ class FeedbackModerationController extends Controller
         return FeedbackPost::whereKey($id)
             ->whereHas('portal', fn ($q) => $q->where('project_id', $project->id))
             ->firstOrFail();
-    }
-
-    /** @return array<string, mixed> */
-    private function presentPost(Workspace $workspace, Project $project, FeedbackPortal $portal, FeedbackPost $post): array
-    {
-        return [
-            'id' => $post->id,
-            'number' => $post->number,
-            'title' => $post->title,
-            'body' => $post->body,
-            'moderation' => $post->moderation,
-            'status' => $post->status,
-            'status_note' => $post->status_note,
-            'votes_count' => $post->votes_count,
-            'author' => $post->author ? ['name' => $post->author->displayName(), 'email' => $post->author->email] : null,
-            'created_at' => $post->created_at?->toIso8601String(),
-            'public_url' => route('feedback.post', [$portal->slug, $post->number]),
-            'merged_into' => $post->mergedInto ? ['number' => $post->mergedInto->number, 'title' => $post->mergedInto->title] : null,
-            'item' => $post->item && $post->item->board ? [
-                'key' => $post->item->key,
-                'title' => $post->item->title,
-                'url' => route('boards.items.show', [$workspace->slug, $project->slug, $post->item->board->slug, $post->item->id]),
-            ] : null,
-        ];
     }
 }

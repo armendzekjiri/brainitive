@@ -1,9 +1,8 @@
-import { ApiError } from '@/lib/api';
 import { api } from '@/lib/client';
 import { extractArticle, htmlToMarkdown, quote, sourceLine } from '@/lib/markdown';
 import { detectLanguage, LANGUAGES } from '@/lib/languages';
 import { send } from '@/lib/messages';
-import { dataUrlToBlob, readDocument } from '@/lib/page';
+import { readDocument } from '@/lib/page';
 import { getLastDestination, setLastDestination } from '@/lib/storage';
 import type { Created, Destinations } from '@/lib/types';
 import { Camera, Crop, Loader2, X } from 'lucide-react';
@@ -134,7 +133,7 @@ function useSubmit() {
         try {
             await task();
         } catch (e) {
-            setError(e instanceof ApiError || e instanceof Error ? e.message : 'Something went wrong.');
+            setError(e instanceof Error ? e.message : 'Something went wrong.');
         } finally {
             setBusy(false);
         }
@@ -222,14 +221,14 @@ export function IssueForm({ page, destinations, onCreated }: FormProps) {
     const submit = () =>
         run(async () => {
             if (!board) return;
-            const data = new FormData();
-            data.set('title', title.trim());
-            data.set('description', description);
-            if (columnId) data.set('column_id', String(columnId));
-            data.set('assign_to_me', assignToMe ? '1' : '0');
-            if (screenshot) data.set('screenshot', await dataUrlToBlob(screenshot), 'screenshot.png');
-
-            const created = await api.createIssue(board.id, data);
+            // Plain fields: the background builds the upload (pages hold no token, messages are JSON).
+            const created = await api.createIssue(board.id, {
+                title: title.trim(),
+                description,
+                column_id: columnId,
+                assign_to_me: assignToMe,
+                screenshot,
+            });
             await setLastDestination('issue', { id: board.id, columnId, assignToMe });
             onCreated(created, `${created.item_key} created`);
         });

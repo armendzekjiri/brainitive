@@ -4,10 +4,12 @@ namespace App\Support\Offline\Appliers;
 
 use App\Models\TaskList;
 use App\Models\TaskListItem;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Offline\FieldMerge;
 use App\Support\Offline\MutationContext;
 use App\Support\Offline\SyncAbort;
 use App\Support\Offline\SyncOutcome;
+use App\Support\Work\WorkCompletion;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -28,6 +30,8 @@ final class ListTaskMutations
             'status' => 'nullable|in:todo,done',
         ]);
         $list = self::list($ctx, (int) $data['task_list_id']);
+        // content limit (Codex web review B): 402 limit_reached for this change, nothing stored
+        app(LimitGate::class)->ensureContentRoom($list->project->workspace);
 
         $task = $list->items()->create([
             'title' => $data['title'],
@@ -138,17 +142,6 @@ final class ListTaskMutations
      */
     private static function write(TaskListItem $task, array $apply): void
     {
-        $completing = ($apply['status'] ?? null) === 'done' && $task->status !== 'done';
-        if ($completing && $task->recurrence && $task->due_date) {
-            $next = $task->nextDueDate();
-            $task->update(array_merge($apply, [
-                'status' => 'todo',
-                'due_date' => $next ? $next->format('Y-m-d') : $task->getRawOriginal('due_date'),
-            ]));
-
-            return;
-        }
-
-        $task->update($apply);
+        WorkCompletion::updateTask($task, $apply);
     }
 }

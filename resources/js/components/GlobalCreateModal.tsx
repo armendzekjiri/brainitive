@@ -1,4 +1,4 @@
-import React, { FormEvent, Suspense, useEffect, useState } from 'react';
+import React, { FormEvent, Suspense, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { router, useForm, usePage } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
@@ -6,6 +6,7 @@ import {
     PageProps, Board, BoardColumn,
     ItemType, ItemPriority, Label as LabelType, User,
 } from '@/types';
+import { readRememberedCreate, rememberCreate } from '@/lib/createMemory';
 import { flattenPagesForParentSelect, FlattenedPageOption } from '@/lib/pageTree';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { ItemTypeIcon } from '@/components/ItemTypeIcon';
@@ -95,6 +96,8 @@ export function GlobalCreateModal({
     const [activeType, setActiveType] = useState<CreateType>(defaultType);
     const [selectedProjectId, setSelectedProjectId] = useState<string>(preSelectedProjectId?.toString() ?? '');
     const [selectedBoardId, setSelectedBoardId] = useState<string>(preSelectedBoardId?.toString() ?? '');
+    // Last project/board the modal created in (per workspace); only used when nothing else picks one
+    const wantedBoardRef = useRef<string>('');
     const [boards, setBoards] = useState<Board[]>([]);
     const [columns, setColumns] = useState<BoardColumn[]>([]);
     const [projectLabels, setProjectLabels] = useState<LabelType[]>([]);
@@ -128,8 +131,22 @@ export function GlobalCreateModal({
     useEffect(() => {
         if (!open) return;
         setActiveType(defaultType);
-        setSelectedProjectId(preSelectedProjectId?.toString() ?? '');
-        setSelectedBoardId(preSelectedBoardId?.toString() ?? '');
+        let projectId = preSelectedProjectId?.toString() ?? '';
+        let boardId = preSelectedBoardId?.toString() ?? '';
+        wantedBoardRef.current = '';
+        if (!projectId) {
+            const remembered = readRememberedCreate(currentWorkspace?.id);
+            const project = currentWorkspace?.projects?.find((p) => p.id === remembered.projectId);
+            if (project) {
+                projectId = project.id.toString();
+                if (project.boards?.some((b) => b.id === remembered.boardId)) {
+                    boardId = String(remembered.boardId);
+                    wantedBoardRef.current = boardId;
+                }
+            }
+        }
+        setSelectedProjectId(projectId);
+        setSelectedBoardId(boardId);
         resetTask();
         resetPage();
         setDescOpen(false);
@@ -153,7 +170,10 @@ export function GlobalCreateModal({
         const project = currentWorkspace.projects?.find((p) => p.id.toString() === selectedProjectId);
         const projectBoards = project?.boards ?? [];
         setBoards(projectBoards);
-        if (!preSelectedBoardId && projectBoards.length > 0) setSelectedBoardId(projectBoards[0].id.toString());
+        if (!preSelectedBoardId && projectBoards.length > 0) {
+            const wanted = wantedBoardRef.current;
+            setSelectedBoardId(wanted && projectBoards.some((b) => b.id.toString() === wanted) ? wanted : projectBoards[0].id.toString());
+        }
         if (project) {
             axios.get(route('projects.labels.index', [currentWorkspace.slug, project.slug]))
                 .then((res) => setProjectLabels(res.data))
@@ -243,7 +263,10 @@ export function GlobalCreateModal({
         const board    = boards.find((b) => b.id.toString() === selectedBoardId);
         if (!project || !board) return;
         postTask(route('boards.items.store', [currentWorkspace.slug, project.slug, board.slug]), {
-            onSuccess: () => { resetTask(); setDescOpen(false); onClose(); },
+            onSuccess: () => {
+                rememberCreate(currentWorkspace.id, { projectId: project.id, boardId: board.id, type: 'task' });
+                resetTask(); setDescOpen(false); onClose();
+            },
         });
     };
 
@@ -259,7 +282,12 @@ export function GlobalCreateModal({
         router.post(
             route('pages.store', [currentWorkspace.slug, project.slug]),
             { name: pageData.name, parent_id: pageData.parent_id || null, ...typeMap[activeType] },
-            { onSuccess: () => { resetPage(); onClose(); } }
+            {
+                onSuccess: () => {
+                    rememberCreate(currentWorkspace.id, { projectId: project.id, boardId: Number(selectedBoardId) || undefined, type: activeType });
+                    resetPage(); onClose();
+                },
+            }
         );
     };
 

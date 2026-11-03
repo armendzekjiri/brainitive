@@ -5,10 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Lead;
 use App\Models\LeadForm;
 use App\Models\LeadFormColumn;
-use App\Models\LeadFormEvent;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Files\WorkspaceFiles;
+use App\Support\LeadForms\LeadFormAnalytics;
 use App\Support\LeadForms\LeadFormDefinition;
 use App\Support\LeadForms\LeadFormOptions;
 use App\Support\LeadForms\LeadFormTemplates;
@@ -200,7 +201,7 @@ class LeadFormController extends Controller
 
         $request->validate(['file' => 'required|file|mimes:jpg,jpeg,png,gif,webp|max:4096']);
         $file = $request->file('file');
-        $path = $file->storeAs('lead-forms/'.$leadForm->uuid, Uploads::imageName($file), 'public');
+        $path = WorkspaceFiles::store($workspace, $file, 'lead-forms/'.$leadForm->uuid, Uploads::imageName($file), 'lead_form_image', $request->user()); // Codex web review C
 
         return response()->json(['url' => '/storage/'.$path]);
     }
@@ -229,55 +230,9 @@ class LeadFormController extends Controller
     {
         $this->authorize('view', $leadForm);
 
-        $days = in_array((int) $request->query('days'), [7, 30, 90], true) ? (int) $request->query('days') : 30;
-        $since = now()->subDays($days - 1)->startOfDay();
-        $events = LeadFormEvent::where('lead_form_id', $leadForm->id)->where('created_at', '>=', $since);
+        $days = in_array((int) $request->query('days'), LeadFormAnalytics::RANGES, true) ? (int) $request->query('days') : 30;
 
-        $totals = (clone $events)->select('type', DB::raw('count(distinct session_id) as sessions'))
-            ->groupBy('type')->pluck('sessions', 'type');
-
-        $daily = (clone $events)->whereIn('type', ['view', 'submit'])
-            ->select(DB::raw('date(created_at) as day'), 'type', DB::raw('count(distinct session_id) as sessions'))
-            ->groupBy('day', 'type')->get();
-
-        $series = [];
-        for ($d = $since->copy(); $d->lte(now()); $d->addDay()) {
-            $series[$d->toDateString()] = ['date' => $d->toDateString(), 'views' => 0, 'submits' => 0];
-        }
-        foreach ($daily as $row) {
-            $day = substr((string) $row->day, 0, 10);
-            if (isset($series[$day])) {
-                $series[$day][$row->type === 'view' ? 'views' : 'submits'] = (int) $row->sessions;
-            }
-        }
-
-        $reached = (clone $events)->where('type', 'step')
-            ->select('step', DB::raw('count(distinct session_id) as sessions'))
-            ->groupBy('step')->pluck('sessions', 'step');
-
-        $steps = [];
-        foreach ($leadForm->definition['steps'] ?? [] as $i => $step) {
-            $steps[] = [
-                'index' => $i,
-                'title' => $step['title'],
-                'conditional' => ! empty($step['visible_if']), // skipped by some visitors: not a drop-off
-                'sessions' => (int) ($reached[$i] ?? ($i === 0 ? ($totals['start'] ?? 0) : 0)),
-            ];
-        }
-
-        $views = (int) ($totals['view'] ?? 0);
-        $submits = (int) ($totals['submit'] ?? 0);
-
-        return response()->json([
-            'days' => $days,
-            'views' => $views,
-            'starts' => (int) ($totals['start'] ?? 0),
-            'submits' => $submits,
-            'conversion' => $views > 0 ? round($submits / $views * 100, 1) : null,
-            'leads' => $leadForm->leads()->where('created_at', '>=', $since)->count(),
-            'series' => array_values($series),
-            'steps' => $steps,
-        ]);
+        return response()->json(LeadFormAnalytics::summary($leadForm, $days));
     }
 
     // ── board columns ────────────────────────────────────────────────────────

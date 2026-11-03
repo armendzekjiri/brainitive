@@ -35,6 +35,7 @@ Point it at a local Brainitive by pre-granting the host:
 
 ```bash
 npm run typecheck
+npm test               # vitest + WXT's fake browser (tests/), also in CI
 npm run build          # dist/chrome-mv3   (Chrome, Edge)
 npm run build:firefox  # dist/firefox-mv3
 npm run zip            # store uploads in dist/*.zip
@@ -52,6 +53,34 @@ npm run zip:firefox    # also writes the sources zip AMO asks for
   there. The hosted app's origin is a host permission. A self-hosted origin is requested at
   sign-in (`optional_host_permissions`). No content scripts run on every site.
 - **API:** `lib/api.ts` ↔ `routes/api.php` (`ext.*`) → `app/Http/Controllers/Extension/`.
+
+## Security notes
+
+From the Codex CLI/extension review (v1.49.0). Tests in `tests/`.
+
+- **Tokens stay in the background worker.** Popup, side panel and options page never get a
+  token. They send `{type: 'api', method, args}` (`lib/client.ts`), and the background makes
+  the call and returns the result. There is no `get-token` message. The background answers
+  only this extension's own pages (`sender.id` plus the extension origin of `sender.url`,
+  `lib/background-messages.ts`): content scripts and other extensions get "Not allowed".
+  Pages read `account` (`{server}`) from storage, never `session`. Where the browser
+  supports it, `storage.local` is limited to trusted contexts.
+- **OAuth stays on the chosen origin.** The background checks the server itself (https, or
+  plain http only on `localhost` / `127.0.0.1` / `[::1]`). The authorization, token and
+  registration endpoints from discovery must be on exactly that origin (same scheme, host
+  and port, no credentials in the URL). Otherwise sign-in stops before anything is sent.
+  The stored token endpoint is checked again before every refresh.
+- **No redirects with credentials.** Every request to the server uses `redirect: 'error'`.
+  This covers discovery, registration, token, API and revoke requests, so a 307/308 can't
+  replay a code, refresh token or `Authorization` elsewhere.
+- **Sign-out revokes.** The session is cleared locally first, then
+  `DELETE /api/ext/v1/logout` revokes the access token and its refresh token. If the server
+  can't confirm (offline, or a server without that endpoint), the local sign-out still
+  stands, and the sign-in screen says to remove the extension under *Profile → Connected
+  apps*.
+- **Refresh can't undo a sign-out.** Each sign-in or sign-out starts a new stored session
+  generation, and session writes are serialized in the background. A refresh only stores
+  its result if its generation is still current. Tokens it received too late are revoked.
 
 ## Publishing
 

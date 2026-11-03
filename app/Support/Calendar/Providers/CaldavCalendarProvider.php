@@ -41,6 +41,8 @@ use Illuminate\Validation\ValidationException;
  */
 class CaldavCalendarProvider extends BaseCalendarProvider
 {
+    public const SERIES_REFUSED = 'This id is a whole recurring series. Delete one occurrence by its own id, or delete the whole series explicitly.';
+
     public const ICLOUD = 'https://caldav.icloud.com';
 
     public function key(): string
@@ -244,7 +246,7 @@ class CaldavCalendarProvider extends BaseCalendarProvider
         return $this->normalized($calendar, $url, $key, $input->timezone());
     }
 
-    public function deleteEvent(CalendarConnection $connection, string $eventId): void
+    public function deleteEvent(CalendarConnection $connection, string $eventId, bool $wholeSeries = false): void
     {
         $this->assertWritable($connection);
         [$url, $key] = $this->decodeId($connection, $eventId) ?? throw new CalendarSyncFailed('This event no longer exists.');
@@ -255,6 +257,10 @@ class CaldavCalendarProvider extends BaseCalendarProvider
             return; // already gone
         }
         if ($key === null) {
+            $master = $wholeSeries ? null : $this->master(IcsReader::parse($object['data']) ?? throw new CalendarSyncFailed('This event couldn’t be read.'));
+            if ($master?->first('RRULE') !== null) {
+                throw new CalendarSyncFailed(self::SERIES_REFUSED);
+            }
             $client->delete($url, $object['etag']);
 
             return;

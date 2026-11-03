@@ -4,13 +4,17 @@ namespace Tests\Feature\Billing;
 
 use App\Models\BillingFixedCharge;
 use App\Models\BillingReport;
+use App\Models\BillingSetting;
+use App\Models\Board;
 use App\Models\Client;
 use App\Models\Project;
 use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Billing\ReportBuilder;
+use App\Support\Billing\ReportFinalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -39,9 +43,18 @@ class BillingReportFlowTest extends TestCase
         return app(ReportBuilder::class)->compute($report->fresh())->entryIds;
     }
 
-    private function finalize(BillingReport $report, ?array $ids = null)
+    private function finalize(BillingReport $report, ?array $ids = null, ?string $revision = null)
     {
-        return $this->actingAs($this->admin)->post($this->url('billing.reports.finalize', $report), ['entry_ids' => $ids ?? $this->reviewedIds($report)]);
+        return $this->actingAs($this->admin)->post($this->url('billing.reports.finalize', $report), [
+            'entry_ids' => $ids ?? $this->reviewedIds($report),
+            'revision' => $revision ?? $this->revision($report),
+        ]);
+    }
+
+    /** What the preview page hands the browser to send back on finalize (Codex web review V). */
+    private function revision(BillingReport $report): string
+    {
+        return app(ReportBuilder::class)->compute($report->fresh())->revision();
     }
 
     /** @return list<int> ids of October entries in the client's projects */
@@ -161,6 +174,26 @@ class BillingReportFlowTest extends TestCase
         $this->assertNotNull($report->fresh());
     }
 
+    /** Codex web review R: an issue moved to another workspace shows its snapshot in the preview and the frozen document. */
+    public function test_a_moved_issue_shows_only_its_snapshot_in_preview_and_document(): void
+    {
+        $foreign = Workspace::factory()->create();
+        $foreignProject = Project::factory()->create(['workspace_id' => $foreign->id, 'key' => 'FOR']);
+        $foreignBoard = Board::factory()->create(['project_id' => $foreignProject->id]);
+        $this->items['WEB-1']->forceFill(['board_id' => $foreignBoard->id, 'key' => 'FOR-9', 'title' => 'FOREIGN PRIVATE UPDATED TITLE'])->save();
+        $this->items['WEB-2']->update(['title' => 'Pricing page (renamed)']); // still here: live
+
+        $report = $this->draft();
+        $preview = app(ReportBuilder::class)->compute($report->fresh());
+        $this->assertStringNotContainsString('FOREIGN', json_encode($preview));
+        $this->assertStringContainsString('Checkout bug', json_encode($preview));
+        $this->assertStringContainsString('Pricing page (renamed)', json_encode($preview));
+
+        $this->finalize($report)->assertSessionHasNoErrors();
+        $this->assertStringNotContainsString('FOREIGN', json_encode($report->fresh()->snapshot));
+        $this->assertStringNotContainsString('FOR-9', json_encode($report->fresh()->snapshot));
+    }
+
     public function test_a_second_report_does_not_see_billed_entries(): void
     {
         $this->finalize($this->draft());
@@ -203,6 +236,38 @@ class BillingReportFlowTest extends TestCase
         $this->assertSame(0, TimeEntry::whereNotNull('billing_report_id')->count());
 
         $this->finalize($report)->assertSessionHasNoErrors(); // after reviewing again
+        $this->assertSame('finalized', $report->fresh()->status);
+    }
+
+    /**
+     * Codex web review V: the reviewed preview's revision covers every value of the document — a changed entry
+     * (same ids), rate or option since the review refuses the finalize; nothing is locked and no number is used.
+     */
+    public function test_finalize_is_refused_when_values_changed_since_the_preview(): void
+    {
+        $this->settings(['invoice_mode' => true, 'next_number' => 7]);
+
+        $report = $this->draft();
+        [$ids, $revision] = [$this->reviewedIds($report), $this->revision($report)];
+        $this->entries['web1_ada']->forceFill(['minutes' => 200])->saveQuietly(); // same ids, other minutes
+        $this->finalize($report, $ids, $revision)->assertSessionHasErrors('report');
+
+        [$ids, $revision] = [$this->reviewedIds($report), $this->revision($report)];
+        $this->programming->update(['rate_cents' => 99900]); // a rate
+        $this->finalize($report, $ids, $revision)->assertSessionHasErrors('report');
+
+        [$ids, $revision] = [$this->reviewedIds($report), $this->revision($report)];
+        $report->update(['options' => ['show_notes' => true] + $report->options]); // an option
+        $this->finalize($report, $ids, $revision)->assertSessionHasErrors('report');
+
+        $this->actingAs($this->admin)->post($this->url('billing.reports.finalize', $report), ['entry_ids' => $this->reviewedIds($report)])
+            ->assertSessionHasErrors('revision'); // the page always sends it
+
+        $this->assertSame('draft', $report->fresh()->status);
+        $this->assertSame(0, TimeEntry::whereNotNull('billing_report_id')->count());
+        $this->assertSame(7, (int) BillingSetting::where('workspace_id', $this->workspace->id)->value('next_number'));
+
+        $this->finalize($report)->assertSessionHasNoErrors(); // reviewed again: fine
         $this->assertSame('finalized', $report->fresh()->status);
     }
 
@@ -281,6 +346,68 @@ class BillingReportFlowTest extends TestCase
         $this->assertSame('paid', $draft->fresh()->status);
         $this->actingAs($this->admin)->post($this->url('billing.reports.void', $draft), ['confirm' => true])->assertSessionHasNoErrors();
         $this->assertSame('void', $draft->fresh()->status);
+    }
+
+    /**
+     * Codex web review X: the "paid needs a confirm" check ran before the finalizer locked the row, so a report
+     * marked paid in between was voided without the confirmation. The finalizer checks it on the locked row now.
+     */
+    public function test_a_report_paid_meanwhile_is_not_voided_without_the_confirmation(): void
+    {
+        $report = $this->draft();
+        $this->finalize($report)->assertSessionHasNoErrors();
+        $locked = TimeEntry::where('billing_report_id', $report->id)->count();
+        $paid = false;
+        DB::listen(function ($query) use (&$paid, $report) {
+            if (! $paid && str_contains($query->sql, 'from "billing_reports"') && ! str_contains($query->sql, 'for update')) {
+                $paid = true; // right after the void request read the report: another admin marks it paid
+                app(ReportFinalizer::class)->markPaid(BillingReport::find($report->id));
+            }
+        });
+
+        $this->actingAs($this->admin)->post($this->url('billing.reports.void', $report))->assertSessionHasErrors('report');
+
+        $this->assertTrue($paid);
+        $this->assertSame('paid', $report->fresh()->status);
+        $this->assertSame($locked, TimeEntry::where('billing_report_id', $report->id)->count());
+
+        $this->actingAs($this->admin)->post($this->url('billing.reports.void', $report), ['confirm' => true])->assertSessionHasNoErrors();
+        $this->assertSame('void', $report->fresh()->status);
+    }
+
+    /** Codex web review Y: the one-year limit also holds for a period starting on 1970-01-01 (strtotime() = 0). */
+    public function test_a_period_from_the_epoch_is_limited_to_one_year_too(): void
+    {
+        $this->actingAs($this->admin)->post($this->url('billing.reports.store'), [
+            'client_id' => $this->client->id, 'period_from' => '1970-01-01', 'period_to' => '2099-12-31',
+        ])->assertSessionHasErrors('period_to');
+        $this->assertSame(0, BillingReport::count());
+
+        $report = $this->draft();
+        $update = ['group_by' => 'ticket', 'show_people' => true, 'show_notes' => false, 'excluded_entry_ids' => []];
+        $this->actingAs($this->admin)->patch($this->url('billing.reports.update', $report), $update + ['period_from' => '1970-01-01', 'period_to' => '2099-12-31'])
+            ->assertSessionHasErrors('period_to');
+        $this->assertSame('2026-10-01', $report->fresh()->period_from->format('Y-m-d'));
+
+        // the boundary: 366 days apart is fine, 367 is not
+        $this->actingAs($this->admin)->patch($this->url('billing.reports.update', $report), $update + ['period_from' => '2026-01-01', 'period_to' => '2027-01-02'])
+            ->assertSessionHasNoErrors();
+        $this->actingAs($this->admin)->patch($this->url('billing.reports.update', $report), $update + ['period_from' => '2026-01-01', 'period_to' => '2027-01-03'])
+            ->assertSessionHasErrors('period_to');
+    }
+
+    /** Codex web review Z: title and project_ids are optional on update — leaving them out is not a 500. */
+    public function test_an_update_without_the_optional_fields_keeps_the_defaults(): void
+    {
+        $report = $this->draft(['title' => 'Custom']);
+
+        $this->actingAs($this->admin)->patch($this->url('billing.reports.update', $report), [
+            'period_from' => '2026-10-01', 'period_to' => '2026-10-31', 'group_by' => 'ticket', 'show_people' => true, 'show_notes' => false, 'excluded_entry_ids' => [],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $report->refresh();
+        $this->assertNull($report->options['project_ids']); // all of the client's projects
+        $this->assertNotSame('', (string) $report->title);
     }
 
     public function test_a_draft_can_be_deleted(): void

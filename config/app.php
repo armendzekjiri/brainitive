@@ -53,7 +53,9 @@ return [
     |
     */
 
-    'debug' => (bool) env('APP_DEBUG', false),
+    // Without APP_DEBUG in .env: on only for APP_ENV=local, so a copied development template on a
+    // server (APP_ENV=production) never shows stack traces (Codex config review 9).
+    'debug' => (bool) env('APP_DEBUG', env('APP_ENV', 'production') === 'local'),
 
     /*
     |--------------------------------------------------------------------------

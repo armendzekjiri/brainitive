@@ -51,6 +51,8 @@ class Capture extends Model
             $capture->uuid ??= (string) Str::uuid();
             $capture->captured_at ??= now();
         });
+        // App API offline sync (BRAI-425): a deleted capture leaves no row, so the change feed needs this one
+        static::deleted(fn (Capture $capture) => SyncTombstone::record($capture->user_id, SyncTombstone::CAPTURE, (string) $capture->uuid, SyncTombstone::DELETED));
     }
 
     public function getRouteKeyName(): string

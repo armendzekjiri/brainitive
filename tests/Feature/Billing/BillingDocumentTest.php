@@ -11,9 +11,11 @@ use App\Models\Workspace;
 use App\Providers\BillingServiceProvider;
 use App\Support\Billing\BillingDocument;
 use App\Support\Billing\LiveReportData;
+use App\Support\Billing\ReportFinalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
@@ -347,6 +349,49 @@ class BillingDocumentTest extends TestCase
         $this->assertSame('sent', $report->status);
         $this->assertNotNull($report->sent_at);
         $this->assertSame('accounts@muster.example', $report->sent_to);
+    }
+
+    /**
+     * Codex web review W: a void between send's first read and its save used to be overwritten with "sent" (voided_at
+     * set, entries unlocked: billable twice). Send now changes the status on the locked row and only when the report
+     * is still sendable there; the mail is queued after the commit, and only then.
+     */
+    public function test_a_void_during_send_stays_void_and_nothing_is_mailed(): void
+    {
+        Mail::fake();
+        $report = $this->report();
+        $voided = false;
+        DB::listen(function ($query) use (&$voided, $report) {
+            if (! $voided && str_contains($query->sql, 'from "billing_reports"') && ! str_contains($query->sql, 'for update')) {
+                $voided = true; // right after send read the report: another admin voids it
+                app(ReportFinalizer::class)->void(BillingReport::find($report->id));
+            }
+        });
+
+        $this->actingAs($this->admin)->post($this->url('billing.reports.send', $report), ['to' => 'accounts@muster.example', 'subject' => 'Invoice'])
+            ->assertSessionHasErrors('status');
+
+        $this->assertTrue($voided);
+        $this->assertSame('void', $report->fresh()->status);
+        $this->assertNull($report->fresh()->sent_at);
+        Mail::assertNothingQueued();
+    }
+
+    /** A queued mail whose report was voided before the worker ran is dropped (Codex web review W). */
+    public function test_a_queued_mail_of_a_report_voided_meanwhile_is_not_sent(): void
+    {
+        $report = $this->report();
+        $mail = (new BillingReportMail($report, 'Invoice', null, $this->admin->email, $this->admin->name))->to('a@muster.example');
+        $report->forceFill(['status' => 'void', 'voided_at' => now()])->save();
+
+        config(['mail.default' => 'array']);
+        $this->assertNull($mail->send(app('mail.manager')));
+        $this->assertCount(0, app('mail.manager')->mailer('array')->getSymfonyTransport()->messages());
+
+        // a report that is still sent / paid goes out as before
+        $report->forceFill(['status' => 'sent', 'voided_at' => null])->save();
+        (new BillingReportMail($report->fresh(), 'Invoice', null, $this->admin->email, $this->admin->name))->to('a@muster.example')->send(app('mail.manager'));
+        $this->assertCount(1, app('mail.manager')->mailer('array')->getSymfonyTransport()->messages());
     }
 
     public function test_send_defaults_to_the_clients_email_and_keeps_paid_reports_paid(): void

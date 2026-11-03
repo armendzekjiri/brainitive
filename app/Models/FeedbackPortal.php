@@ -46,10 +46,10 @@ class FeedbackPortal extends Model
         return $this->hasMany(FeedbackEvent::class);
     }
 
-    /** Enabled portals of live (not deleted) projects — what the public routes may show. */
+    /** Enabled portals of live (not deleted) projects in live workspaces — what the public routes may show (Codex web review P). */
     public function scopePublic(Builder $query): Builder
     {
-        return $query->where('enabled', true)->whereHas('project');
+        return $query->where('enabled', true)->whereHas('project.workspace');
     }
 
     /** The public portal for a slug, or 404. */

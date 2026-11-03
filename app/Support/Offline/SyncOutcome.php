@@ -4,7 +4,7 @@ namespace App\Support\Offline;
 
 /**
  * The answer to one offline mutation (BRAI-82). Applied (200) and conflict (409) are final and
- * stored for replays; deleted (410) and waiting (424) wrote nothing.
+ * stored for replays; deleted / gone (410) and waiting (424) wrote nothing.
  */
 final class SyncOutcome
 {
@@ -30,7 +30,7 @@ final class SyncOutcome
      * @param  array<string, array{base: mixed, mine: mixed, theirs: mixed}>  $conflicts
      * @param  list<string>  $applied
      */
-    public static function conflict(string $entityType, array $entity, int $entityId, array $conflicts, array $applied): self
+    public static function conflict(string $entityType, array $entity, int $entityId, array $conflicts, array $applied, string $message = 'Someone changed this meanwhile.'): self
     {
         return new self(409, [
             'status' => 'conflict',
@@ -38,7 +38,7 @@ final class SyncOutcome
             'entity' => $entity,
             'conflicts' => $conflicts,
             'applied' => $applied,
-            'message' => 'Someone changed this meanwhile.',
+            'message' => $message,
         ], $entityType, $entityId);
     }
 
@@ -48,16 +48,30 @@ final class SyncOutcome
         return new self(410, ['status' => 'deleted', 'entity_type' => $entityType, 'message' => $message]);
     }
 
+    /**
+     * What the change is about is no longer there and nothing was written (App API sync: a timer stopped or
+     * discarded elsewhere, a notification that is gone). The device drops the change.
+     */
+    public static function gone(string $entityType, string $message): self
+    {
+        return new self(410, ['status' => 'gone', 'entity_type' => $entityType, 'message' => $message]);
+    }
+
     /** Refers to something created offline that hasn't reached the server yet: retry later. */
     public static function waiting(string $message): self
     {
         return new self(424, ['status' => 'waiting', 'message' => $message]);
     }
 
-    /** A stored outcome, answered again for a retried mutation. @param array<string, mixed> $body */
-    public static function replayed(int $status, array $body): self
+    /**
+     * A stored outcome, answered again for a retried mutation (with the stored entity type + id, so the
+     * App API can render the entity's current state).
+     *
+     * @param  array<string, mixed>  $body
+     */
+    public static function replayed(int $status, array $body, ?string $entityType = null, ?int $entityId = null): self
     {
-        return new self($status, $body);
+        return new self($status, $body, $entityType, $entityId);
     }
 
     public function isFinal(): bool

@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ReservesFileStorage;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TicketAttachment extends Model
 {
-    use HasFactory;
+    use HasFactory, ReservesFileStorage;
 
     protected $fillable = [
         'ticket_id',
@@ -66,5 +67,11 @@ class TicketAttachment extends Model
     public function isImage(): bool
     {
         return str_starts_with($this->mime_type ?? '', 'image/');
+    }
+
+    /** The workspace whose file storage this file counts against (Codex web review C). */
+    public function meteredWorkspace(): ?Workspace
+    {
+        return $this->ticket?->helpdesk?->project?->workspace;
     }
 }
