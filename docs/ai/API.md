@@ -190,7 +190,7 @@ rules in each module's section below; the typed spec is `docs/api/openapi.json`.
 | Issues | Issues | `POST /boards/{id}/items`, `GET\|PATCH\|DELETE /items/{id}`, `/items/by-key/{KEY}`, comments, watchers, attachments, activity, children, links, `GET /projects/{id}/items` (dated) |
 | Sprints | Sprints | `GET /boards/{id}/sprints`, `/sprints/{id}…`, `/boards/{id}/backlog…`, burndown, velocity |
 | Docs | Docs | `GET\|POST /projects/{id}/pages`, `GET\|PATCH /pages/{uuid}`, publish, move, collab, versions, reviews, links, `GET /links/resolve` |
-| Whiteboards | Whiteboards | `GET /whiteboards/{uuid}` |
+| Whiteboards | Whiteboards | `GET /whiteboards/{uuid}`, live drawing (`collab-token`, `collab/bootstrap`, `collab/scene`) |
 | Plans | Plans | `GET /projects/{id}/plans`, `GET /plans/{id}` |
 | Releases | Releases | `GET /projects/{id}/releases`, `GET /releases/{id}` |
 | Files | Files | `POST /uploads` |
@@ -810,19 +810,21 @@ set when a sprint starts / completes.
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
 | `GET /api/v1/projects/{id}/pages?parent=root\|<uuid>` | app + verified | The page tree (docs, whiteboards, folders), flat with `parent_id` / `parent_uuid`, in the web's order (docs + whiteboards before folders, then `position`), cursor-paginated, `updated_since`; `parent` = one level. Unpublished pages only for their author and admins | Read + light edit | BRAI-198 | ready (v1.49.0, BRAI-411) |
-| `GET /api/v1/pages/{uuid}` | app + verified | One page: `markdown` + sanitized `html` (docs), `revision`, `version`, breadcrumbs, `can`. Someone else's unpublished draft → 404 | Read + light edit | BRAI-198, BRAI-199 | ready (v1.49.0, BRAI-411) |
+| `GET /api/v1/pages/{uuid}` | app + verified | One page: `markdown` + sanitized `html` (docs), `revision`, `version`, breadcrumbs, `live` (docs: `PageCollab`, whiteboards: `WhiteboardCollab`), `can`. Someone else's unpublished draft → 404 | Read + light edit | BRAI-198, BRAI-199 | ready (v1.49.0, BRAI-411) |
 | `POST /api/v1/projects/{id}/pages` | app + verified, 60/min | `{name, kind?: doc\|whiteboard\|folder, parent_uuid?, icon? (emoji), markdown? (docs), publish?, request_id?}` → 201 `{data: page}`. 403 without `can.create`, 422 a parent the user can't see, 402 `limit_reached` (storage) | Read + light edit | BRAI-198 | ready (v1.49.0, BRAI-411) |
 | `PATCH /api/v1/pages/{uuid}` | app + verified, 120/min | `{name?, icon?, markdown?, revision}` → `{data: page}`; `revision` is required with `markdown` and → 409 `conflict` when the page was saved since. A published doc's changes become unpublished changes. Whiteboards / folders: `name`, `icon`. 403 without `can.update` | Read + light edit | BRAI-199 | ready (v1.49.0, BRAI-411) |
 | `POST /api/v1/pages/{uuid}/publish` | app + verified | `{message?, notify? (default true), revision?}` → `{data: page}`: publish a draft, or make a published doc's changes live as a new version (watchers notified). Nothing to publish → 200 unchanged; "review required" without an approved review → 422 `review`; folders → 422 | Read + light edit | BRAI-198 | ready (v1.49.0, BRAI-411) |
 | `POST /api/v1/pages/{uuid}/move` | app + verified | `{parent_uuid (null = top level), before_uuid?, after_uuid?}` → `{data: page}`; into itself / its subpages → 422 `parent_uuid` | Read + light edit | BRAI-198 | ready (v1.49.0, BRAI-411) |
-| `POST /api/v1/pages/{uuid}/collab-token` | app + verified, 60/min | Join a doc's live document (Yjs): `{data: {url, document, epoch, token, expires_at (unix s), edit, html_vector, user}}`. Ask for every (re)connect (~2 min). The token is bound to the device: once it is signed out the socket closes with **4410** (drop tokens, show sign-in — see Realtime). 403 when not offered (`live: null` on `GET /pages/{uuid}`: server without realtime, whiteboard / folder, archived, reader of a published doc) | Later (read-only fallback) | BRAI-200 | ready (v1.49.0, BRAI-412) |
+| `POST /api/v1/pages/{uuid}/collab-token` | app + verified, 60/min | Join a doc's live document (Yjs): `{data: {url, document, epoch, token, expires_at (unix s), edit, html_vector, user}}`. Ask for every (re)connect (~2 min). The token is bound to the device: once it is signed out the socket closes with **4410** (drop tokens, show sign-in — see Realtime). 403 when not offered (`live: null` on `GET /pages/{uuid}`: server without realtime, folder, archived, reader of a published doc; a whiteboard → its own `POST /whiteboards/{uuid}/collab-token`) | Later (read-only fallback) | BRAI-200 | ready (v1.49.0, BRAI-412) |
 | `POST /api/v1/pages/{uuid}/collab/bootstrap` | app + verified, 30/min | `{epoch, claim}` → `{data: {status: granted\|wait, html, name, icon}}`: the one client that loads the draft into an empty document. 409 `conflict` + `epoch`: replaced, reconnect | Later | BRAI-200 | ready (v1.49.0, BRAI-412) |
 | `PUT /api/v1/pages/{uuid}/collab/draft` | app + verified, 180/min | `{epoch, html, name, icon?, vector, baseline?}` → `{data: {status: saved\|unchanged\|covered\|baseline, revision, has_unpublished_changes}}`: the live document's HTML as the draft (what a leading browser sends). 409 + `epoch`: replaced | Later | BRAI-200 | ready (v1.49.0, BRAI-412) |
+| `GET /api/v1/polls/{page\|item}/{uuid\|id}/{pollId}` | app + verified | A poll's results in a doc (`page` + uuid) or issue description (`item` + id): `{data: {counts: {option_uid: n}, total, my_vote}}`. Can't view the doc / issue → 404 | Full | BRAI-200 | ready (v1.51.0) |
+| `POST /api/v1/polls/{page\|item}/{uuid\|id}/{pollId}` | app + verified, 60/min | `{option_uid: string\|null}` (null removes the vote) → the results. Anyone who can view may vote (voting doesn't edit the doc); one vote per person. A poll / option not in the saved doc → 422 | Full | BRAI-200 | ready (v1.51.0) |
 
 Page (tree): `{id, uuid, project_id, parent_id, parent_uuid, kind: doc|whiteboard|folder, name, icon (emoji|null), has_image_icon,
 status: draft|published|archived, position, url, created_at, updated_at}`. `GET /pages/{uuid}` adds `{icon_image (data: URL or
 URL)|null, markdown|null, html|null, revision, version, published_at, has_unpublished_changes, review_required, breadcrumbs: [{uuid,
-name, type}], creator, last_edited_by, watching, can: {update, delete, publish, create}}`.
+name, type}], creator, last_edited_by, watching, live: edit|view|null, can: {update, delete, publish, create}}`.
 - Same code and rules as the web: `PagePolicy` (unpublished pages are their author's and the project / workspace admins'),
   `Support\Pages\PageWrites` (create, the editor's draft save with the revision check on the locked row, publish through
   `ReviewGate` + watcher notifications; shared with `PageController` and the MCP's `create_page`) and `PageMover`.
@@ -839,8 +841,9 @@ name, type}], creator, last_edited_by, watching, can: {update, delete, publish, 
   `PageCollabController`): a token for the realtime server (`COLLAB_URL`; access = `PageCollab::access`, the rule the server checks
   through `internal/collab/access`: editors edit, readers of a never-published doc watch), the bootstrap claim, and the live draft
   save. A client that edits must also save (the leading client sends its HTML every few seconds; `covered` = another one holds
-  more), or its edits stay in the Y state only. `GET /pages/{uuid}` → `live: edit|view|null` says what is offered. Whiteboards and
-  issue descriptions: no app token (web / desktop webview).
+  more), or its edits stay in the Y state only. `GET /pages/{uuid}` → `live: edit|view|null` says what is offered (for a whiteboard: its live
+  drawing, `WhiteboardCollab::access` — readers watch). Whiteboards have their own three calls (`/whiteboards/{uuid}/collab-…`,
+  Whiteboards, v1.51.0); issue descriptions: no app token (web / desktop webview).
 - Icons from the app are emoji (`data:` / `http` / `/…` → 422); uploading image icons, duplicating, unpublishing, archiving,
   deleting, version restore, review requests: web only for now. Whiteboard scenes: Whiteboards.
 
@@ -874,7 +877,10 @@ suffix, outdated, resolved, resolved_at, resolved_by_name, comments: [{uuid, aut
 ### Whiteboards
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
-| `GET /api/v1/whiteboards/{uuid}` | app + verified | The scene, read-only: page fields + `revision`, `scene: {elements (deleted ones left out), app_state (viewBackgroundColor, grid, scroll, zoom), files (embedded images)}`, `preview_image_url`, `can.update`. `ETag` → 304 on `If-None-Match`. Not a whiteboard / not visible → 404 | View only | BRAI-206, BRAI-209 | ready (v1.49.0, BRAI-414) |
+| `GET /api/v1/whiteboards/{uuid}` | app + verified | The scene: page fields + `revision`, `scene: {elements (deleted ones left out), app_state (viewBackgroundColor, grid, scroll, zoom), files (embedded images)}`, `preview_image_url`, `live: edit\|view\|null` (v1.51.0: live drawing offered — `WhiteboardCollab::access`: editors draw, everyone who can open it watches; null while the server has no realtime / archived), `can.update`. `ETag` → 304 on `If-None-Match`. Not a whiteboard / not visible → 404 | View only (phone) / Edit (tablet) | BRAI-206, BRAI-209 | ready (v1.49.0, BRAI-414) |
+| `POST /api/v1/whiteboards/{uuid}/collab-token` | app + verified, 60/min | Join the whiteboard's live document (Yjs, the web's live format): `{view?: bool}` → `{data: {url, document (whiteboard.<uuid>.<epoch>), epoch, token, expires_at (unix s), edit, vector ({client: clock}\|null), user: {id, name}}}` — the web session's fields. `view: true` = read-only even for an editor. Ask for every (re)connect (~2 min). Bound to the device: signed out → socket closes with **4410**. 403 when not offered (`live: null`: no realtime, not a whiteboard, archived); not visible → 404 | Edit (tablet) | BRAI-208 | ready (v1.51.0) |
+| `POST /api/v1/whiteboards/{uuid}/collab/bootstrap` | app + verified, 30/min | `{epoch, claim}` → `{data: {status: granted\|wait, elements (granted; else null), reset: false}}`: the one client that writes the stored elements into an empty document (then saves once with `baseline`). 409 `{message, code: conflict, status: stale, reset: true, epoch}`: replaced, reconnect. Editors only (403) | Edit (tablet) | BRAI-208 | ready (v1.51.0) |
+| `PUT /api/v1/whiteboards/{uuid}/collab/scene` | app + verified, 120/min | `{epoch, scene (JSON string or object: {elements, appState, files, libraryItems?}; "{}" with baseline), vector (JSON string or object), baseline?, checkpoint?, image? (PNG, Save & exit)}` → `{data: {status: saved\|unchanged\|covered\|baseline, edit_revision, version (a checkpoint's number\|null)}}`: the live scene as the whiteboard (what a leading browser sends). Multipart (with `image`) as **POST + `_method=PUT`** (PHP doesn't read multipart PUT bodies). 409 as bootstrap; bad scene / vector → 422; editors only (403) | Edit (tablet) | BRAI-208 | ready (v1.51.0) |
 
 - Whiteboards are pages (`kind: whiteboard` in `GET /projects/{id}/pages`; same `PagePolicy`: an unpublished one is its author's and
   the admins'); create / rename / move / publish them through Docs (`POST /projects/{id}/pages {kind: whiteboard}`), history through
@@ -882,7 +888,15 @@ suffix, outdated, resolved, resolved_at, resolved_by_name, comments: [{uuid, aut
 - **No server-side image export:** the server never renders Excalidraw. `preview_image_url` is the PNG of the last "Save & exit" on
   the web (null when none; it can be older than the scene). Apps render `scene.elements` themselves (Excalidraw in a webview) for an
   exact picture. While people draw live, the scene is saved every few seconds — poll with the `ETag`.
-- Drawing, templates, sticky notes → issues, issue cards, live cursors: web / the desktop app's webview only (BRAI-207, 208, 210).
+- **Live drawing from a native client (v1.51.0)** = the browser's three calls (`Support\Collab\WhiteboardCollab`, the web's
+  `WhiteboardCollabController`, `resources/js/lib/whiteboard/live.ts`) with the web's field names, so a port of live.ts changes
+  only the URLs, reads `data` from the answers, and sends the scene save as PUT (or POST + `_method=PUT` for multipart).
+  Differences to the web: success bodies wrapped in `{data: …}`, errors carry `code` (409 `conflict` keeps the web's `reset` /
+  `epoch`), an invisible whiteboard is 404 (web: 403). The save logic is shared (`WhiteboardCollab::saveFromClient`). A client
+  that draws must also save (the leading client stores the scene every few seconds; `covered` = another one holds more).
+  Images: the browser uploads them through the web's `/upload/image` and shares the URL in the Y document (or inline as a data
+  URL up to the inline limit); an app uses `POST /uploads` or inline images.
+- Templates, sticky notes → issues, issue cards: web / the desktop app's webview only (BRAI-207, 210).
 
 ### Plans
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
@@ -1171,7 +1185,7 @@ tabs get (`LiveToken::grant`, shared with the web's `POST /live/token`). Access 
   `ready.channels` lists only the token's channels the user may join *now*, so a token issued before access was removed,
   or of a device whose sign-out push was missed, grants nothing (the device closes with 4410).
 - **4410 = this device was signed out** (sign-out, "revoke device" in Profile / another device, refresh-token reuse, password
-  change, suspension, "sign out everywhere"): live tokens **and live co-editing tokens** (`POST /pages/{uuid}/collab-token`,
+  change, suspension, "sign out everywhere"): live tokens **and live co-editing tokens** (`POST /pages/{uuid}/collab-token`, `POST /whiteboards/{uuid}/collab-token`,
   claim `dev`, BRAI-377) of the App API carry the device, and the realtime server closes its live-channel **and document**
   sockets within seconds (at most the minute re-check); a document socket of a revoked device that tries to connect is
   refused with 4410 (Hocuspocus reason `device-revoked`), not 4401. Don't reconnect: drop the stored tokens and show sign-in, as when `POST /auth/refresh` answers
@@ -1218,7 +1232,7 @@ that sent `X-Live-Client`):
 | `plan.{id}` | `plan.deleted` | `{}` | the plan was deleted |
 | `plan.{id}` | `issues.changed` | `{ids}` | issues linked to plan rows changed (dates, status, assignee …) |
 | `ticket.{id}` | `reply.created` · `reply.updated` · `reply.deleted` | `{id, reply_id}` (`id` = the ticket) | a reply / internal note (agents, customer mail, portal) → `GET /tickets/{id}` |
-| `page.{uuid}` | — | — | presence only (no events yet). Live doc / whiteboard editing is Yjs on the same server, not channels: `POST /pages/{uuid}/collab-token` (docs); whiteboards' live drawing is web only (BRAI-208) |
+| `page.{uuid}` | — | — | presence only (no events yet). Live doc / whiteboard editing is Yjs on the same server, not channels: `POST /pages/{uuid}/collab-token` (docs), `POST /whiteboards/{uuid}/collab-token` (whiteboards, v1.51.0) |
 
 Presence (`presence: true`) is used by the web on `board.{id}`, `item.{id}` and `plan.{id}` ("who's here" avatars). Not live:
 task lists, My Day, captures, calendar, notifications' content — poll those or use `GET /sync/changes`.
@@ -1230,7 +1244,7 @@ webview). Their `## API: web only — open in browser` texts are under "Mobile c
 | Card | Feature | Why web only | What the app does |
 |---|---|---|---|
 | BRAI-195 | Recurring issues, issue templates | Setup UI on the web | Created issues are ordinary issues (Issues) |
-| BRAI-207, 208, 210 | Whiteboard drawing, live cursors, stickies → issues | Excalidraw editor | View only: `GET /whiteboards/{uuid}` |
+| BRAI-207, 210 | Whiteboard templates, stickies → issues | Excalidraw editor | `GET /whiteboards/{uuid}`; live drawing on tablets through `/whiteboards/{uuid}/collab-…` (v1.51.0) |
 | BRAI-223, 224 | Connecting Google / Microsoft / CalDAV / ICS calendars | OAuth and app passwords stay on the web | Status `GET /calendar/connections`; events through Calendar |
 | BRAI-227 | Booking availability, buffers, rules | Booking page builder | Bookings + share links (Bookings) |
 | BRAI-234 | Helpdesk templates, widget, support page, customer portal | Public-facing setup | Work tickets (Helpdesk) |
@@ -1636,12 +1650,23 @@ Scope: app · OpenAPI: docs/api/openapi.json#/Whiteboards · Registry: docs/ai/A
 Built in: BRAI-414 (desktop) · Mobile scope: View only (autosave, duplicate, export: web / desktop)
 ```
 
-**BRAI-207** (shapes, text, stickies, images, templates) · **BRAI-208** (realtime collaboration with named cursors) · **BRAI-210** (sticky notes → issues, live cards)
+**BRAI-208** (realtime collaboration with named cursors)
+```
+## API (ready, v1.51.0) — live drawing on tablets
+- GET /api/v1/whiteboards/{uuid} → live: edit|view|null — whether live drawing is offered
+- POST /api/v1/whiteboards/{uuid}/collab-token {view?} — url, document, epoch, token, expires_at, edit, vector, user (the web session's fields; 4410 when the device is signed out)
+- POST /api/v1/whiteboards/{uuid}/collab/bootstrap {epoch, claim} — granted (elements) | wait; 409 reset → reconnect
+- PUT /api/v1/whiteboards/{uuid}/collab/scene {epoch, scene, vector, baseline?, checkpoint?} — saved | unchanged | covered | baseline (+ edit_revision, version); multipart with image = POST + _method=PUT
+The web's live.ts protocol (Yjs on the realtime server, named cursors through awareness).
+Scope: app · OpenAPI: docs/api/openapi.json#/Whiteboards · Registry: docs/ai/API.md#whiteboards
+Mobile scope: Edit (tablet)
+```
+
+**BRAI-207** (shapes, text, stickies, images, templates) · **BRAI-210** (sticky notes → issues, live cards)
 ```
 ## API: web only — open in browser
-Drawing, templates, live cursors and turning sticky notes into issues run in the web's whiteboard editor (the desktop app's webview).
-The apps show the scene read-only: GET /api/v1/whiteboards/{uuid}.
-Realtime (BRAI-426): live drawing and named cursors are the whiteboard's Yjs document (web only); the apps can show "who's here" on the page.{uuid} live channel (POST /api/v1/realtime/token) — no events there yet, reload the scene on open / pull-to-refresh.
+Templates and turning sticky notes into issues run in the web's whiteboard editor (the desktop app's webview).
+The apps show the scene (GET /api/v1/whiteboards/{uuid}) and draw live on tablets (BRAI-208).
 Registry: docs/ai/API.md#whiteboards · Decided in: BRAI-414
 ```
 
@@ -1919,7 +1944,7 @@ Built in: BRAI-426 (desktop) · Mobile scope: Full (foreground socket; refetch e
 - GET /api/v1/realtime · POST /api/v1/realtime/token — connection info + channel tokens (the web's channel rules; re-checked every minute, `revoked` when access ends)
 - Channels: user.{id} (notification.created, notifications.changed), board.{id} (cards, columns, sprints), item.{id} (item.updated, comment.*, typing signal, presence), plan.{id} (plan.updated|deleted, issues.changed), ticket.{id} (reply.*), page.{uuid} (presence only)
 - Presence: subscribe with presence: true → members [{id, name, avatar}]; reconnect = refetch (events while offline are lost)
-- Docs: live co-editing through POST /api/v1/pages/{uuid}/collab-token (BRAI-200); whiteboards' live drawing: web only (BRAI-208)
+- Docs: live co-editing through POST /api/v1/pages/{uuid}/collab-token (BRAI-200); whiteboards: POST /api/v1/whiteboards/{uuid}/collab-token (BRAI-208, v1.51.0)
 Scope: app · OpenAPI: docs/api/openapi.json#/Realtime · Registry: docs/ai/API.md#realtime (event catalog)
-Built in: BRAI-426 (desktop) · Mobile scope: Full (boards, issues, comments, Gantt, notifications); whiteboard drawing web only
+Built in: BRAI-426 (desktop) · Mobile scope: Full (boards, issues, comments, Gantt, notifications, live whiteboards on tablets)
 ```

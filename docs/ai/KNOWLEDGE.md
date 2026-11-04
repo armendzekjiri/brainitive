@@ -2308,6 +2308,11 @@ Never migrate devdb just to export the spec.
 - **No whiteboard image export on the server** (nothing renders Excalidraw server-side): `preview_image_url` is the last "Save & exit"
   PNG and can be older than the scene. **No file registry:** uploads return their public URL (as attachments do); no signed URLs or
   thumbnails.
+- **Native live whiteboards (v1.51.0) keep the web's field names** so a port of `lib/whiteboard/live.ts` only swaps URLs: `scene` /
+  `vector` stay JSON strings (objects accepted too), the session answers `vector` (docs: `html_vector`), 409 keeps `reset` /
+  `epoch` next to `code: conflict`. **PHP never parses a multipart PUT body** (`$_FILES` / `$_POST` are POST-only), so the
+  browser's FormData sent as PUT arrives empty → 422: a save with the preview `image` is POST + `_method=PUT` (Laravel's method
+  override), a JSON body can be a plain PUT.
 - **App API uploads skipped the storage limit** before phase 07 (issue attachments, bookmark files: `file.room` is web middleware). Now
   `FileRoom::ensure` inside the idempotent write, so a replayed `request_id` is never refused.
 
