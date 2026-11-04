@@ -9,6 +9,9 @@
 - `chore/mobile-foundation`: Brainitive Mobile scope and plan; `mobile/` is its own repo (gitignored). [plan](./chore-mobile-foundation.md)
 - `feat/mobile-push`: notifications with `push` on also go to mobile devices through the Expo push service. [plan](./feat-mobile-push.md)
 - `feat/sign-in-with-apple`: Sign in with Apple on the web login, Welcome and `/app/authorize`; `sign_in.apple` in `GET /api/v1/instance`. [plan](./feat-sign-in-with-apple.md)
+- `feat/apple-revoke-on-delete`: deleting an account revokes its Sign in with Apple authorization at Apple. [plan](./feat-apple-revoke-on-delete.md)
+- `feat/mobile-push-receipts`: Expo push receipts (dead tokens cleared) + `POST /api/v1/devices/current/test-push`. [plan](./feat-mobile-push-receipts.md)
+- `feat/mobile-store-pages`: public `/support` page, privacy policy "Mobile app" section, sub-processors (Expo, Apple). [plan](./feat-mobile-store-pages.md)
 
 ## Release content
 - HelpModal `CHANGELOG`: v1.50.0 entry.
