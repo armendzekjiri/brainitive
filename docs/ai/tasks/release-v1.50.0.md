@@ -12,6 +12,8 @@
 - `feat/apple-revoke-on-delete`: deleting an account revokes its Sign in with Apple authorization at Apple. [plan](./feat-apple-revoke-on-delete.md)
 - `feat/mobile-push-receipts`: Expo push receipts (dead tokens cleared) + `POST /api/v1/devices/current/test-push`. [plan](./feat-mobile-push-receipts.md)
 - `feat/mobile-store-pages`: public `/support` page, privacy policy "Mobile app" section, sub-processors (Expo, Apple). [plan](./feat-mobile-store-pages.md)
+- `fix/live-editor-own-caret`: live editing no longer shows your own caret / name (the Lexical bridge hands only other people's awareness states).
+- `chore/remove-tiptap`: the unused TipTap editor and its 27 packages removed (docs use Lexical).
 
 ## Release content
 - HelpModal `CHANGELOG`: v1.50.0 entry.
