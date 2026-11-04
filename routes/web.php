@@ -115,6 +115,9 @@ Route::get('/cookies', [LegalController::class, 'cookies'])->name('cookies');
 Route::get('/imprint', [LegalController::class, 'imprint'])->name('imprint');
 Route::get('/legal/subprocessors', [LegalController::class, 'subprocessors'])->name('legal.subprocessors');
 Route::get('/legal/dpa', [LegalController::class, 'dpa'])->name('legal.dpa');
+// Mobile app help (App Store / Play support URL). Only the bare path: a helpdesk's public page is
+// /support/{publicSlug} (below), which always has a second segment.
+Route::get('/support', [LegalController::class, 'support'])->name('support');
 
 Route::get('/refund', function () {
     abort_unless(LegalInfo::isCloud(), 404);

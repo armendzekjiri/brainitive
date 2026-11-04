@@ -21,12 +21,14 @@ class LegalInfo
      * the terms version is stored with each new account (users.terms_version).
      */
     public const DOCUMENTS = [
-        'privacy' => ['version' => '2.3', 'updated' => '2026-10-30'], // v1.46.0: paid plans (Paddle)
+        'privacy' => ['version' => '2.4', 'updated' => '2026-11-04'], // mobile app (Expo push, Sign in with Apple, device storage)
         'terms' => ['version' => '3.0', 'updated' => '2026-10-30'], // v1.46.0: paid plans via Paddle, BSL 1.1 licence
         'cookies' => ['version' => '2.1', 'updated' => '2026-10-27'],
         'imprint' => ['version' => '1.0', 'updated' => '2026-10-26'],
-        'subprocessors' => ['version' => '1.0', 'updated' => '2026-10-26'],
+        'subprocessors' => ['version' => '1.1', 'updated' => '2026-11-04'], // Expo push service, Apple (mobile app)
         'dpa' => ['version' => '1.0', 'updated' => '2026-10-26'],
+        // not a legal document: the public help page of the mobile app (App Store / Play support URL)
+        'support' => ['version' => '1.0', 'updated' => '2026-11-04'],
     ];
 
     /** Facts about Brainitive Cloud given by its operator (2026-10-26); see docs/legal/README.md. */
@@ -155,6 +157,7 @@ class LegalInfo
             'subprocessors' => $cloud ? route('legal.subprocessors') : null,
             'dpa' => $cloud ? route('legal.dpa') : null,
             'refund' => $cloud ? route('refund') : null,
+            'support' => route('support'),
         ];
     }
 

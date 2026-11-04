@@ -3068,6 +3068,7 @@ export interface LegalLinks {
     subprocessors: string | null;
     dpa: string | null;
     refund: string | null;
+    support: string;
 }
 
 /** `legal` prop of the legal pages (LegalInfo::pageProps). Empty operator values are null. */

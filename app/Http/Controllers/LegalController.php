@@ -44,6 +44,16 @@ class LegalController extends Controller
         return Inertia::render('Legal/Imprint', LegalInfo::pageProps('imprint'));
     }
 
+    /**
+     * Help for the mobile app (contact + FAQ): the support URL of the App Store / Google Play listing.
+     * Shares the legal pages' layout and footer; on a self-hosted install it names the installation's
+     * operator as the contact. Not to be confused with a helpdesk's /support/{publicSlug}.
+     */
+    public function support(): Response
+    {
+        return Inertia::render('Support', LegalInfo::pageProps('support'));
+    }
+
     public function subprocessors(): Response
     {
         abort_unless(LegalInfo::isCloud(), 404);
