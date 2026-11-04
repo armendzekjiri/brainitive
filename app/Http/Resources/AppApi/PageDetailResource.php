@@ -6,6 +6,7 @@ use App\Models\Page;
 use App\Support\Boards\IssueMarkdown;
 use App\Support\Collab\CollabConfig;
 use App\Support\Collab\PageCollab;
+use App\Support\Collab\WhiteboardCollab;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\SafeHtml;
 use Illuminate\Http\Request;
@@ -55,11 +56,14 @@ class PageDetailResource extends PageResource
             'last_edited_by' => $page->lastEditor ? new PersonResource($page->lastEditor) : null,
             'watching' => $page->watchers()->whereKey($user->id)->exists(),
             /**
-             * live co-editing offered to this user: edit, view (watch a never-published doc), or null (`POST /pages/{uuid}/collab-token`)
+             * live editing offered to this user: edit, view (watch a never-published doc; any reader of a whiteboard), or null.
+             * Docs: `POST /pages/{uuid}/collab-token`; whiteboards: `POST /whiteboards/{uuid}/collab-token`
              *
              * @var 'edit'|'view'|null
              */
-            'live' => CollabConfig::enabled($request) ? PageCollab::access($page, $user, $canUpdate) : null,
+            'live' => CollabConfig::enabled($request)
+                ? ($kind === 'whiteboard' ? WhiteboardCollab::access($page, $user, $canUpdate) : PageCollab::access($page, $user, $canUpdate))
+                : null,
             'can' => [
                 // rename, change the text (docs), move
                 'update' => $canUpdate,

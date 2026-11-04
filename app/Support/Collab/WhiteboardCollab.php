@@ -6,7 +6,11 @@ use App\Models\Page;
 use App\Models\PageCollabState;
 use App\Models\PageVersion;
 use App\Models\User;
+use App\Support\Files\WorkspaceFiles;
+use App\Support\Uploads;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Live whiteboards (BRAI-153): several people draw on one Excalidraw scene through the same realtime
@@ -63,15 +67,16 @@ final class WhiteboardCollab
      * an editor gets a read-only connection there.
      *
      * @param  'edit'|'view'  $access
+     * @param  int|null  $device  the App API client's device (token claim `dev`: its sockets close once it is revoked)
      * @return array<string, mixed>
      */
-    public static function session(Page $page, User $user, string $access, bool $viewOnly = false): array
+    public static function session(Page $page, User $user, string $access, bool $viewOnly = false, ?int $device = null): array
     {
         PageCollab::ensureState($page);
         $state = PageCollabState::where('page_id', $page->id)->firstOrFail(['id', 'epoch', 'html_vector']);
         $document = CollabDocument::name($page->uuid, $state->epoch, CollabDocument::WHITEBOARD);
         $edit = $access === 'edit' && ! $viewOnly;
-        $token = CollabToken::issue($user, $document, $edit);
+        $token = CollabToken::issue($user, $document, $edit, device: $device);
 
         return [
             'url' => CollabConfig::url(),
@@ -98,6 +103,44 @@ final class WhiteboardCollab
 
             return ['elements' => $elements];
         });
+    }
+
+    /**
+     * A live client's save request as the browser sends it (web + App API): `scene` and `vector` as JSON
+     * (strings, or already decoded), the flags, and the "Save & exit" preview PNG. `invalid` when the scene or
+     * vector isn't one; the preview is stored only for a save that isn't stale.
+     *
+     * @return array{status: 'invalid'}|array{status: 'saved'|'unchanged'|'covered'|'baseline', page: Page, version: PageVersion|null}|array{status: 'stale', page: Page, epoch: int}
+     */
+    public static function saveFromClient(Page $page, User $user, int $epoch, mixed $scene, mixed $vector, bool $baseline = false, bool $checkpoint = false, ?UploadedFile $image = null): array
+    {
+        $decode = fn (mixed $value) => is_string($value) ? json_decode($value, true) : $value;
+        $scene = $baseline ? null : self::normalizeScene($decode($scene));
+        $vector = StateVector::normalize($decode($vector));
+        if ((! $baseline && $scene === null) || $vector === null) {
+            return ['status' => 'invalid'];
+        }
+
+        // "Save & exit" sends a preview, like the single-user editor
+        $stored = $image ? WorkspaceFiles::store($page->project->workspace, $image, 'excalidraw-previews', Uploads::imageName($image), 'whiteboard_image', $user) : null;
+        $preview = is_string($stored) ? asset('storage/'.$stored) : null;
+
+        $result = self::save(
+            $page,
+            $user,
+            $epoch,
+            $scene ?? ['elements' => [], 'appState' => [], 'files' => [], 'libraryItems' => null],
+            $vector,
+            $baseline,
+            $checkpoint,
+            $preview,
+        );
+
+        if ($result['status'] === 'stale' && $preview !== null) {
+            Storage::disk('public')->delete($stored); // nothing points to it
+        }
+
+        return $result;
     }
 
     /**

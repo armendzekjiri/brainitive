@@ -159,6 +159,9 @@ class AppClientAbilitiesTest extends TestCase
             ['POST', "/api/v1/items/{$item->id}/comments", ['body' => 'x']],
             ['POST', "/api/v1/task-lists/{$list->id}/items", ['title' => 'x']],
             ['POST', "/api/v1/pages/{$page->uuid}/collab-token", []],
+            ['POST', "/api/v1/whiteboards/{$page->uuid}/collab-token", []],
+            ['POST', "/api/v1/whiteboards/{$page->uuid}/collab/bootstrap", ['epoch' => 0, 'claim' => str_repeat('a', 20)]],
+            ['PUT', "/api/v1/whiteboards/{$page->uuid}/collab/scene", ['epoch' => 0, 'scene' => '{}', 'vector' => '{}']],
             ['POST', '/api/v1/sync', ['changes' => []]],
             ['POST', '/api/v1/me/timer/start', []],
             // and an id that doesn't exist: still 403, never a 404 that says whether it does

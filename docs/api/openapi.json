@@ -10635,8 +10635,8 @@
         "/whiteboards/{uuid}": {
             "get": {
                 "operationId": "app.v1.whiteboards.show",
-                "description": "Render `scene.elements` with Excalidraw (or as a picture: `preview_image_url`, the last \"Save & exit\" \u2014\nit can be older than the scene). Answers an `ETag`; send it back as `If-None-Match` to get 304 while nothing\nchanged (live drawing saves every few seconds). The tree and other pages: `GET /projects/{id}/pages`\n(`kind: whiteboard`). Its history: `GET /pages/{uuid}/versions`.",
-                "summary": "A whiteboard's scene (Excalidraw elements, canvas settings, images) to show it read-only",
+                "description": "Render `scene.elements` with Excalidraw (or as a picture: `preview_image_url`, the last \"Save & exit\" \u2014\nit can be older than the scene). Answers an `ETag`; send it back as `If-None-Match` to get 304 while nothing\nchanged (live drawing saves every few seconds). The tree and other pages: `GET /projects/{id}/pages`\n(`kind: whiteboard`). Its history: `GET /pages/{uuid}/versions`. `live: edit|view` \u2192 draw or watch live\n(`POST /whiteboards/{uuid}/collab-token`).",
+                "summary": "A whiteboard's scene (Excalidraw elements, canvas settings, images) to show it",
                 "tags": [
                     "Whiteboards"
                 ],
@@ -10677,6 +10677,304 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/whiteboards/{uuid}/collab-token": {
+            "post": {
+                "operationId": "app.v1.whiteboards.collab.token",
+                "description": "Connect to `url` with `token` and open `document` (Yjs over WebSocket, the web's live whiteboard format).\n`edit: false` = watch only; send `view: true` for a read-only connection even as an editor (a preview).\nThe token lasts about two minutes: ask again for every (re)connect. `live` on `GET /whiteboards/{uuid}`\nsays beforehand whether this is offered (403 when not: live editing switched off on the server, not a\nwhiteboard, archived). The token is bound to this device: once it is signed out, the socket closes with\n4410. After a 409 on bootstrap / scene the document was replaced: ask for a new token.",
+                "summary": "A short-lived token to join a whiteboard's live document",
+                "tags": [
+                    "Whiteboards"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "view": {
+                                        "type": "boolean",
+                                        "description": "a read-only connection (e.g. a preview), even for an editor"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`WhiteboardCollabSessionResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WhiteboardCollabSessionResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "An error\n\nAccess denied",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Human-readable, safe to show."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "description": "Machine-readable: switch on this, not on the message.",
+                                            "enum": [
+                                                "forbidden"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/whiteboards/{uuid}/collab/bootstrap": {
+            "post": {
+                "operationId": "app.v1.whiteboards.collab.bootstrap",
+                "description": "Call it when the synced document has no scene yet: `granted` \u2192 write `elements` into it and save once\nwith `baseline: true`; `wait` \u2192 another client loads them. 409 `conflict` (+ `epoch`, `reset: true`): the\ndocument was replaced \u2014 reconnect with a new token. Editors only (403).",
+                "summary": "Claim the first load of an empty live whiteboard",
+                "tags": [
+                    "Whiteboards"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CollabBootstrapRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`WhiteboardBootstrapResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WhiteboardBootstrapResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "This whiteboard was replaced. Connect again with a new token."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "const": "conflict"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "const": "stale"
+                                        },
+                                        "reset": {
+                                            "type": "boolean"
+                                        },
+                                        "epoch": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code",
+                                        "status",
+                                        "reset",
+                                        "epoch"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/whiteboards/{uuid}/collab/scene": {
+            "put": {
+                "operationId": "app.v1.whiteboards.collab.scene",
+                "description": "What a browser sends every few seconds while it leads the document (and on Save / Save & exit with\n`checkpoint`): the scene (elements in order, canvas settings, the images the server hasn't confirmed) and\nthe Yjs state vector it was made from \u2014 as JSON strings, like the browser's form, or as objects. An older or\nconcurrent snapshot is `covered` (nothing written). With a preview `image` (PNG) send multipart as POST with\n`_method=PUT`. 409 `conflict` (+ `epoch`, `reset: true`): the document was replaced \u2014 reconnect. Editors only\n(403).",
+                "summary": "Store the live scene as the whiteboard",
+                "tags": [
+                    "Whiteboards"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WhiteboardSceneRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`WhiteboardSceneSaveResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WhiteboardSceneSaveResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "This whiteboard was replaced. Connect again with a new token."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "const": "conflict"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "const": "stale"
+                                        },
+                                        "reset": {
+                                            "type": "boolean"
+                                        },
+                                        "epoch": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code",
+                                        "status",
+                                        "reset",
+                                        "epoch"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
                     },
                     "429": {
                         "$ref": "#/components/responses/RateLimited"
@@ -15454,7 +15752,7 @@
             },
             "CollabBootstrapRequest": {
                 "type": "object",
-                "description": "`POST /pages/{uuid}/collab/bootstrap`: an editor's client synced an empty live document.",
+                "description": "`POST /pages/{uuid}/collab/bootstrap` and `POST /whiteboards/{uuid}/collab/bootstrap`: an editor's client synced an empty live document.",
                 "properties": {
                     "epoch": {
                         "type": "integer",
@@ -19268,7 +19566,7 @@
                             "string",
                             "null"
                         ],
-                        "description": "live co-editing offered to this user: edit, view (watch a never-published doc), or null (`POST /pages/{uuid}/collab-token`)",
+                        "description": "live editing offered to this user: edit, view (watch a never-published doc; any reader of a whiteboard), or null.\nDocs: `POST /pages/{uuid}/collab-token`; whiteboards: `POST /whiteboards/{uuid}/collab-token`",
                         "enum": [
                             "edit",
                             "view",
@@ -26257,6 +26555,102 @@
                 ],
                 "title": "WebSessionResource"
             },
+            "WhiteboardBootstrapResource": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "granted",
+                            "wait"
+                        ]
+                    },
+                    "elements": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "description": "the stored Excalidraw elements to load (granted only; null otherwise)",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {}
+                        }
+                    },
+                    "reset": {
+                        "type": "boolean",
+                        "description": "always false here (a replaced document answers 409 with `reset: true`)"
+                    }
+                },
+                "required": [
+                    "status",
+                    "elements",
+                    "reset"
+                ],
+                "title": "WhiteboardBootstrapResource"
+            },
+            "WhiteboardCollabSessionResource": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "the realtime server (wss:\u2026/collab)"
+                    },
+                    "document": {
+                        "type": "string",
+                        "description": "the Y document to open (`whiteboard.<uuid>.<epoch>`)"
+                    },
+                    "epoch": {
+                        "type": "integer"
+                    },
+                    "token": {
+                        "type": "string",
+                        "description": "the connection token for the realtime server (never sent anywhere else)"
+                    },
+                    "expires_at": {
+                        "type": "integer",
+                        "description": "unix seconds"
+                    },
+                    "edit": {
+                        "type": "boolean"
+                    },
+                    "vector": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "the state vector of the last stored scene ({client id: clock}); null before the first live save",
+                        "additionalProperties": {
+                            "type": "integer"
+                        }
+                    },
+                    "user": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name"
+                        ]
+                    }
+                },
+                "required": [
+                    "url",
+                    "document",
+                    "epoch",
+                    "token",
+                    "expires_at",
+                    "edit",
+                    "vector",
+                    "user"
+                ],
+                "title": "WhiteboardCollabSessionResource"
+            },
             "WhiteboardResource": {
                 "type": "object",
                 "properties": {
@@ -26361,12 +26755,24 @@
                     "preview_image_url": {
                         "description": "PNG of the last \"Save & exit\" on the web; null when there is none"
                     },
+                    "live": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "live drawing offered to this user: edit (draw), view (watch), or null (live editing off on the server,\narchived) \u2014 `POST /whiteboards/{uuid}/collab-token`",
+                        "enum": [
+                            "edit",
+                            "view",
+                            null
+                        ]
+                    },
                     "can": {
                         "type": "object",
                         "properties": {
                             "update": {
                                 "type": "boolean",
-                                "description": "drawing: the web / desktop webview"
+                                "description": "drawing: live (`live: edit`), or the web / desktop webview"
                             }
                         },
                         "required": [
@@ -26392,9 +26798,84 @@
                     "revision",
                     "scene",
                     "preview_image_url",
+                    "live",
                     "can"
                 ],
                 "title": "WhiteboardResource"
+            },
+            "WhiteboardSceneRequest": {
+                "type": "object",
+                "description": "`PUT /whiteboards/{uuid}/collab/scene`: the scene of the live whiteboard, stored as its content \u2014 the web's\n`pages.whiteboard.collab.save` body. `scene` and `vector` are JSON strings (the browser's FormData) or the\nsame JSON as objects.",
+                "properties": {
+                    "epoch": {
+                        "type": "integer",
+                        "description": "the epoch of the session the client is connected to",
+                        "minimum": 0
+                    },
+                    "scene": {
+                        "type": "string",
+                        "description": "the live document's scene as JSON: {elements, appState, files, libraryItems?}; `{}` with `baseline`",
+                        "maxLength": 52428800
+                    },
+                    "vector": {
+                        "type": "string",
+                        "description": "the Yjs state vector the scene was made from, as JSON ({client id: clock})",
+                        "maxLength": 200000
+                    },
+                    "baseline": {
+                        "type": "boolean",
+                        "description": "true once, from the client that loaded the stored elements into an empty document: records the vector, writes nothing"
+                    },
+                    "checkpoint": {
+                        "type": "boolean",
+                        "description": "Save / Save & exit: record a version even when nothing changed"
+                    },
+                    "image": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "binary",
+                        "contentMediaType": "application/octet-stream",
+                        "description": "the preview PNG of \"Save & exit\" (multipart: POST with `_method=PUT`)"
+                    }
+                },
+                "required": [
+                    "epoch",
+                    "scene",
+                    "vector"
+                ],
+                "title": "WhiteboardSceneRequest"
+            },
+            "WhiteboardSceneSaveResource": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "saved",
+                            "unchanged",
+                            "covered",
+                            "baseline"
+                        ]
+                    },
+                    "edit_revision": {
+                        "type": "integer"
+                    },
+                    "version": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the version number this save recorded (a checkpoint: Save, or every few minutes of drawing); null when none"
+                    }
+                },
+                "required": [
+                    "status",
+                    "edit_revision",
+                    "version"
+                ],
+                "title": "WhiteboardSceneSaveResource"
             },
             "WorkDoneRequest": {
                 "type": "object",
