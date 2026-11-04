@@ -102,6 +102,9 @@ test.describe('live co-editing of documents', () => {
         await expect(page.locator('.collab-cursors').getByText(USERS.member.name, { exact: true })).toBeVisible();
         await docEditor(page).click();
         await expect(memberPage.locator('.collab-cursors').getByText(USERS.owner.name, { exact: true })).toBeVisible();
+        // never your own caret / name (the editor runs on a mirror doc with another client id)
+        await expect(page.locator('.collab-cursors').getByText(USERS.owner.name, { exact: true })).toHaveCount(0);
+        await expect(memberPage.locator('.collab-cursors').getByText(USERS.member.name, { exact: true })).toHaveCount(0);
 
         // a live title change shows up on the other side
         const title = `${name} (live)`;
