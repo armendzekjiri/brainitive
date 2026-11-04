@@ -2,13 +2,16 @@
 
 namespace App\Support\Admin;
 
+use App\Jobs\RevokeAppleToken;
 use App\Models\DataExport;
 use App\Models\InstanceAdmin;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Entitlements\WorkspaceMembershipChanged;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * Deletes a user from the admin console without taking other people's data with them.
@@ -18,7 +21,8 @@ use Illuminate\Support\Facades\DB;
  * in workspaces they don't own. Before deleting, that content is handed to the owner of
  * the workspace it lives in, and other people's replies to the user's comments are kept as
  * top-level comments. The user's own comments and personal data (memberships, watchers,
- * calendar connections, sticky notes) are removed.
+ * calendar connections, sticky notes) are removed. A Sign in with Apple authorization is revoked
+ * at Apple afterwards (RevokeAppleToken, queued — never blocks the deletion).
  */
 class UserDeletion
 {
@@ -72,6 +76,11 @@ class UserDeletion
     {
         // Workspaces the user leaves (owned ones go with the account): their seat count changes
         $leaves = DB::table('workspace_user')->where('user_id', $user->id)->pluck('workspace_id');
+        try {
+            $appleToken = $user->apple_refresh_token;
+        } catch (DecryptException) {
+            $appleToken = null; // encrypted with an older APP_KEY: can't be revoked, mustn't block the deletion
+        }
 
         DB::transaction(function () use ($user) {
             foreach (static::ownedContent($user) as $table => $query) {
@@ -95,6 +104,16 @@ class UserDeletion
         });
 
         Workspace::whereIn('id', $leaves)->get()->each(fn (Workspace $workspace) => WorkspaceMembershipChanged::dispatch($workspace));
+
+        // App Store guideline 5.1.1(v): revoke Sign in with Apple. No token stored (signed in
+        // before we kept it, or never with Apple) → nothing to revoke.
+        if (is_string($appleToken) && $appleToken !== '') {
+            try {
+                RevokeAppleToken::dispatch($user->id, $appleToken);
+            } catch (Throwable $e) {
+                report($e); // a queue hiccup must not turn a completed deletion into an error page
+            }
+        }
     }
 
     /**

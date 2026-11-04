@@ -548,6 +548,15 @@ the allowlist renaming only.
   only in the FIRST callback's `user` field (never in the id_token); without it a new account is named after
   the email's local part, or "Apple user" for a relay address. `users.apple_id` = `sub`. Relay addresses only
   receive mail from senders registered at Apple (docs-site `integrations/apple.md` step 5).
+- **Sign in with Apple — revoke on account deletion (App Store 5.1.1(v)).** Apple's revoke endpoint needs a
+  token, and the id_token's `sub` isn't one, so the **refresh token** of the code exchange is kept
+  (`users.apple_refresh_token`, `encrypted` cast, `$hidden`, overwritten on every Apple sign-in; a missing one
+  keeps the stored token). `UserDeletion::delete` (Profile and Admin deletion) reads it before deleting and,
+  after the row is gone, dispatches `RevokeAppleToken` with the token **in the payload** — the job can't load
+  a deleted user, hence `ShouldBeEncrypted`. Accounts that signed in with Apple before this change have no
+  token: nothing is revoked (users can remove the app under Apple ID → Sign in with Apple). A token encrypted
+  with an old `APP_KEY` (DecryptException) is skipped, never blocks deletion. If the mobile app ever does
+  *native* Sign in with Apple, its tokens belong to the bundle id: store them and revoke with that `client_id`.
 - `App\Http\Middleware\GuardOAuthFlows` runs globally (for `/oauth/register`, which has no group)
   AND in the web group — the `/oauth/authorize` verification check needs the session, and global
   middleware runs before StartSession (`$request->user()` is null there). `POST /oauth/register` is throttled and https
