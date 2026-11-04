@@ -4,6 +4,7 @@ namespace App\Notifications\Concerns;
 
 use App\Models\User;
 use App\Notifications\Channels\DigestMailChannel;
+use App\Notifications\Channels\MobilePushChannel;
 use App\Notifications\Contracts\DigestibleMail;
 use App\Notifications\Messages\BrandedMailMessage;
 use App\Notifications\NotificationCatalog;
@@ -12,7 +13,8 @@ use NotificationChannels\WebPush\WebPushChannel;
 
 /**
  * via() for catalog notifications (v1.39.0): the user's channel choice for the type's category,
- * limited to the channels this class can actually render (toMail / toWebPush).
+ * limited to the channels this class can actually render (toMail / toWebPush — the mobile push
+ * reuses toWebPush's title, body and url).
  *
  *     public function via(object $notifiable): array
  *     {
@@ -27,7 +29,7 @@ trait RespectsPreferences
             NotificationCatalog::channels($notifiable, $type),
             fn (string $channel) => match ($channel) {
                 'mail' => method_exists($this, 'toMail'),
-                WebPushChannel::class => method_exists($this, 'toWebPush'),
+                WebPushChannel::class, MobilePushChannel::class => method_exists($this, 'toWebPush'),
                 default => true,
             },
         ));

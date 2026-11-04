@@ -261,7 +261,7 @@ calls answer with the same object.
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
 | `GET /api/v1/devices` | app | Settings → signed-in devices: the user's active installs (`client` desktop / mobile / tv; `platform` macos / windows / linux / ios / android / android_tv), most recently used first → `{data: [{id, client, platform, name, app_version, os_version, has_push_token, current, last_used_at, created_at}]}` (≤ `max_devices`, not paginated). Never token hashes, IP or the push token. | Full | BRAI-173, BRAI-266 | ready |
-| `PATCH /api/v1/devices/current` | app | After start / update / rename: `{name?, app_version?, os_version?, push_token?}` (only sent fields change; `push_token: null` removes it; stored encrypted, APNs / FCM delivery later) → `{data: device}`. The card said `POST /devices`: the row already exists after `/auth/exchange`, so it's an update of the calling device. | Full | BRAI-177, BRAI-266 | ready |
+| `PATCH /api/v1/devices/current` | app | After start / update / rename: `{name?, app_version?, os_version?, push_token?}` (only sent fields change; `push_token: null` removes it; stored encrypted. Send the **Expo** push token `ExponentPushToken[…]` (other formats are stored but not pushed to); pushes are delivered through the Expo push service, see Notifications → "Push to the mobile app". A token Expo reports as `DeviceNotRegistered` is cleared (`has_push_token` false): register again on the next start) → `{data: device}`. The card said `POST /devices`: the row already exists after `/auth/exchange`, so it's an update of the calling device. | Full | BRAI-177, BRAI-266 | ready |
 | `DELETE /api/v1/devices/{id}` | app | Remote sign-out of one of the user's own active devices → 204 (its tokens die at once; the calling device = sign out). Another user's / revoked / unknown id → 404. | Full | BRAI-173, BRAI-266 | ready |
 
 Web: Profile → Notifications → "Desktop & mobile apps" lists the same devices (prop `appDevices`, same
@@ -419,8 +419,27 @@ types, `NotificationText` + `NotificationLinks`.
  "read": false, "read_at": null, "archived_at": null, "created_at": "2026-11-02T09:16:04Z"}
 ```
  Every read / archive is announced on the user's live
-channel, so the web bell follows at once. `push` in the preferences is browser push today and the
-apps' push once it ships (APNs / FCM via the device's `push_token`).
+channel, so the web bell follows at once. `push` in the preferences is browser push **and** the mobile app's push.
+
+#### Push to the mobile app (BRAI-448)
+Every notification whose category has `push` on (the same choice as browser push) is sent through the **Expo push
+service** to each of the user's signed-in `client: mobile` devices with a `push_token` (not desktop / TV, not revoked
+devices). Server: `MobilePushChannel` → queued `SendMobilePush` (never in the request; retried with backoff). Off when
+the instance sets `MOBILE_PUSH_ENABLED=false`. The Expo message:
+
+```json
+{"to": "ExponentPushToken[…]", "title": "Ada mentioned you", "body": "In item: Fix login",
+ "sound": "default", "badge": 3, "priority": "high",
+ "data": {"url": "/workspaces/acme/projects/web/boards/main/items/412", "notification_id": "9b2c…"}}
+```
+
+- `title` / `body`: the browser push's text (≤ 100 / 240 characters); `body` may be missing.
+- `badge`: the unread inbox count (`GET /notifications/unread-count`) when it was sent.
+- **`data.url`** (tap routing): the page as a **path on this server** (`/workspaces/…`, with query / fragment),
+  resolved against the signed-in instance; `null` when there is nothing to open on this server. The app maps it to
+  its own screen or opens it in the webview, like the inbox row's `url`. Access is checked again when the page loads.
+- **`data.notification_id`**: the inbox row's `id` (`POST /notifications/{id}/read` on tap). A push-only type
+  (calendar reminders) or a user with in-app off has no inbox row for it: a 404 there is expected, ignore it.
 
 ### Connected apps
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
