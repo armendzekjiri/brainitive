@@ -535,6 +535,19 @@ the allowlist renaming only.
   id_token signature isn't verified (token endpoint over TLS + secret + PKCE, OIDC Core 3.1.3.7); its
   claims are (`aud`, `iss`, `exp`, `nonce`, GUID `tid` / `oid`, tenant pin). Entra setup:
   [`tasks/feat-microsoft-login.md`](./tasks/feat-microsoft-login.md).
+- **Sign in with Apple (BRAI-449) — the form_post callback has no session.** Apple must use
+  `response_mode=form_post` when asking for name / email: a **cross-site POST**. The SameSite=Lax session
+  cookie isn't sent with it, and a session started there would *replace* the browser's cookie (losing state,
+  nonce and `url.intended` — the native apps' `/app/authorize` return). So `POST /login/apple/callback` drops
+  the whole `web` group (`withoutMiddleware('web')`: no session, no CSRF; also in the CSRF `except` list),
+  stashes `{code, state, error, name}` in the cache under a random one-time key and 303s to
+  `GET /login/apple/finish?key=…` (same-site again), which checks the state and signs in. Don't "fix" this
+  with `SESSION_SAME_SITE=none`. The id_token **is** signature-checked (Apple JWKS, cached 1 h, refetched for
+  an unknown `kid` at most once a minute) plus iss / aud / exp / nonce. Email trusted only with
+  `email_verified`; private relay addresses (`@privaterelay.appleid.com`) count as verified. The name comes
+  only in the FIRST callback's `user` field (never in the id_token); without it a new account is named after
+  the email's local part, or "Apple user" for a relay address. `users.apple_id` = `sub`. Relay addresses only
+  receive mail from senders registered at Apple (docs-site `integrations/apple.md` step 5).
 - `App\Http\Middleware\GuardOAuthFlows` runs globally (for `/oauth/register`, which has no group)
   AND in the web group — the `/oauth/authorize` verification check needs the session, and global
   middleware runs before StartSession (`$request->user()` is null there). `POST /oauth/register` is throttled and https
@@ -573,8 +586,8 @@ the allowlist renaming only.
 - **Consent page is Inertia, not Blade:** a password login is an Inertia XHR that follows
   `url.intended`; a Blade page would land in Inertia's error modal. The decision answers with
   `Inertia::location()` (409 + `X-Inertia-Location`), so the browser itself navigates to
-  `brainitive://…` — a 302 to a custom scheme inside an XHR goes nowhere. Password, Google, GitHub and
-  Microsoft logins all return through `redirect()->intended()` (tests in `AppSignInTest`).
+  `brainitive://…` — a 302 to a custom scheme inside an XHR goes nowhere. Password, Google, GitHub,
+  Microsoft and Apple logins all return through `redirect()->intended()` (tests in `AppSignInTest`).
 - **Revocation:** `SignOutEverywhere::run($user, $keepSessionId, $appReason)` ends browser sessions, the
   remember token, Passport tokens **and** every app device (`AppTokens::revokeAllFor`, since BRAI-377 — before,
   the social-login takeover paths left the squatter's apps signed in). Reasons: `suspended`, `deleted`,

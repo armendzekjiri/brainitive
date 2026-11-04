@@ -186,7 +186,7 @@ Search runs on PostgreSQL and has no settings. See [Search](./search).
 
 ## Social logins and calendars
 
-Each login button appears only when its client ID and secret are set. Setup guides: [Google](/integrations/google), [Microsoft](/integrations/microsoft), [GitHub](/integrations/github).
+Each login button appears only when its client ID and secret are set (for Apple: all four `APPLE_*` values below). Setup guides: [Google](/integrations/google), [Microsoft](/integrations/microsoft), [Apple](/integrations/apple), [GitHub](/integrations/github).
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -198,6 +198,11 @@ Each login button appears only when its client ID and secret are set. Setup guid
 | `MICROSOFT_TENANT` | `common` | `common` allows personal and work/school accounts |
 | `MICROSOFT_REDIRECT_URI` | `APP_URL/calendar/connections/outlook/callback` | Calendar callback URL |
 | `MICROSOFT_LOGIN_REDIRECT_URI` | `APP_URL/login/microsoft/callback` | Login callback URL |
+| `APPLE_CLIENT_ID` | – | Apple **Services ID** for "Sign in with Apple" (e.g. `com.example.brainitive.web`) |
+| `APPLE_TEAM_ID` | – | Apple developer Team ID |
+| `APPLE_KEY_ID` | – | Key ID of the Sign in with Apple key |
+| `APPLE_PRIVATE_KEY` | – | The `.p8` key itself (`\n` escapes allowed) or a path to the file |
+| `APPLE_REDIRECT_URI` | `APP_URL/login/apple/callback` | Return URL registered on the Services ID |
 | `GITHUB_CLIENT_ID` | – | GitHub OAuth app for "Continue with GitHub" |
 | `GITHUB_CLIENT_SECRET` | – | |
 | `GITHUB_REDIRECT_URI` | `APP_URL/login/github/callback` | Login callback URL |

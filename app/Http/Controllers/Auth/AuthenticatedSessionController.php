@@ -25,6 +25,7 @@ class AuthenticatedSessionController extends Controller
             'canLoginWithGoogle' => SignInMethods::google(),
             'canLoginWithGitHub' => SignInMethods::github(),
             'canLoginWithMicrosoft' => SignInMethods::microsoft(),
+            'canLoginWithApple' => SignInMethods::apple(),
             'status' => session('status'),
         ]);
     }

@@ -1,6 +1,6 @@
 ---
 title: Integrations
-description: Everything Brainitive connects to — Google, Microsoft, GitHub, calendars, Meet and Teams, web push, MCP for Claude and ChatGPT, webhooks and imports.
+description: Everything Brainitive connects to — Google, Microsoft, Apple, GitHub, calendars, Meet and Teams, web push, MCP for Claude and ChatGPT, webhooks and imports.
 ---
 
 # Integrations
@@ -13,6 +13,7 @@ page explains both.
 |---|---|---|---|
 | [Google](./google) | Sign in, Google Calendar, Google Tasks, Google Meet | Ready | Google OAuth client: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (+ Calendar and Tasks APIs) |
 | [Microsoft](./microsoft) | Sign in, Outlook / Microsoft 365 calendar, Teams | Ready | Entra app: `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT` |
+| [Apple](./apple) | Sign in with Apple | Ready | Services ID + key: `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` |
 | [GitHub](./github) | Sign in, and branches / commits / PRs / deployments on issues | Ready | OAuth app: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`. GitHub App: **Admin → GitHub App** or `GITHUB_APP_*` |
 | [Calendars](./calendars) | Google, Outlook, iCloud / CalDAV, ICS links, plus a feed for other apps | Ready | Google / Microsoft as above. CalDAV and ICS: nothing (optional `CALENDAR_*`) |
 | [Meetings](./meetings) | Google Meet and Teams links from issues, docs, the calendar and booking pages | Connect a calendar | Google / Microsoft as above |

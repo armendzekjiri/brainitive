@@ -16625,13 +16625,17 @@
                             },
                             "microsoft": {
                                 "type": "boolean"
+                            },
+                            "apple": {
+                                "type": "boolean"
                             }
                         },
                         "required": [
                             "password",
                             "google",
                             "github",
-                            "microsoft"
+                            "microsoft",
+                            "apple"
                         ]
                     },
                     "sign_up_open": {
