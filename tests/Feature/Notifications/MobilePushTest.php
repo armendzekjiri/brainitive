@@ -210,5 +210,8 @@ class MobilePushTest extends TestCase
         $this->assertNull(MobilePushChannel::webPath('https://evil.example/workspaces'));
         $this->assertNull(MobilePushChannel::webPath('mailto:a@b.c'));
         $this->assertNull(MobilePushChannel::webPath(null));
+        $this->assertNull(MobilePushChannel::webPath('//evil.example/x'));
+        $this->assertNull(MobilePushChannel::webPath('/\\evil.example/x'));
+        $this->assertNull(MobilePushChannel::webPath('/workspaces\\acme'));
     }
 }
