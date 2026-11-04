@@ -9,7 +9,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * One signed-in desktop / mobile / TV app install (App API v1, BRAI-385 / BRAI-428) and its current
  * token pair. Revoking the device clears the pair, so its tokens stop working at once.
- * Tokens are issued and checked by App\Support\AppApi\AppTokens only.
+ * Tokens are issued and checked by App\Support\AppApi\AppTokens only. `push_token_hash` (SHA-256 of
+ * the push token, to find one token across rows) follows `push_token` on every save — never set it.
  */
 class AppDevice extends Model
 {
@@ -23,7 +24,7 @@ class AppDevice extends Model
     ];
 
     protected $hidden = [
-        'push_token', 'access_token_hash', 'refresh_token_hash', 'previous_refresh_hash',
+        'push_token', 'push_token_hash', 'access_token_hash', 'refresh_token_hash', 'previous_refresh_hash',
     ];
 
     protected function casts(): array
@@ -35,6 +36,21 @@ class AppDevice extends Model
             'last_used_at' => 'datetime',
             'revoked_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (AppDevice $device) {
+            if ($device->isDirty('push_token') || ! $device->exists) {
+                $device->push_token_hash = self::pushTokenHash($device->push_token);
+            }
+        });
+    }
+
+    /** SHA-256 (hex) of a push token — the lookup column and the receipt check's token id. */
+    public static function pushTokenHash(?string $token): ?string
+    {
+        return is_string($token) && $token !== '' ? hash('sha256', $token) : null;
     }
 
     public function user(): BelongsTo

@@ -156,6 +156,8 @@ class MobilePushTest extends TestCase
 
         $this->assertSame(self::IPHONE, $iphone->fresh()->push_token);
         $this->assertNull($pixel->fresh()->push_token);
+        $this->assertNull($pixel->fresh()->push_token_hash);
+        $this->assertSame(hash('sha256', self::IPHONE), $iphone->fresh()->push_token_hash);
         $this->assertNotEmpty($this->logged);
         $this->assertNoTokenLogged();
     }

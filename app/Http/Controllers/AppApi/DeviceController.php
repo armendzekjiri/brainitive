@@ -34,8 +34,8 @@ class DeviceController extends Controller
     /**
      * The calling device updates its name, versions or push token.
      *
-     * A push token belongs to one install: the user's other mobile devices holding the same one (an
-     * earlier sign-in on this phone) lose it, so the phone isn't notified twice.
+     * A push token belongs to one install: any other device holding the same one (an earlier sign-in
+     * on this phone, also in another account) loses it, so the phone only gets this account's pushes.
      */
     public function updateCurrent(UpdateDeviceRequest $request): DeviceResource
     {
@@ -45,16 +45,13 @@ class DeviceController extends Controller
         $data = $request->validated();
         $device->fill($data)->save();
 
-        $token = $data['push_token'] ?? null;
-        if (is_string($token) && $token !== '') {
-            // encrypted at rest (no lookup column): compare in PHP — a user has a handful of devices
-            $request->user()->appDevices()
+        // an Expo token belongs to one install: any other row with it (an earlier sign-in on this
+        // phone, in this account or another) stops getting this phone's pushes
+        if (array_key_exists('push_token', $data) && $device->push_token_hash !== null) {
+            AppDevice::query()
+                ->where('push_token_hash', $device->push_token_hash)
                 ->whereKeyNot($device->id)
-                ->where('client', 'mobile')
-                ->whereNotNull('push_token')
-                ->get()
-                ->filter(fn (AppDevice $other) => $other->push_token === $token)
-                ->each(fn (AppDevice $other) => $other->forceFill(['push_token' => null])->save());
+                ->update(['push_token' => null, 'push_token_hash' => null]);
         }
 
         return new DeviceResource($device);

@@ -169,7 +169,7 @@ class SendMobilePush implements ShouldQueue
     /** Identifies the token a receipt belongs to without keeping the token (a secret) in the queue. */
     public static function tokenHash(string $token): string
     {
-        return hash('sha256', $token);
+        return (string) AppDevice::pushTokenHash($token);
     }
 
     /** Expo's push API with the access token when one is set (send and receipts). */

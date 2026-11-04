@@ -146,6 +146,7 @@ class MobilePushReceiptsTest extends TestCase
         ])->handle();
 
         $this->assertNull($iphone->fresh()->push_token);
+        $this->assertNull($iphone->fresh()->push_token_hash);
         $this->assertSame('ExponentPushToken[pixel-new]', $pixel->fresh()->push_token);
         Http::assertSent(fn (Request $request) => $request->url() === self::RECEIPTS
             && $request->method() === 'POST'
