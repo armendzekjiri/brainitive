@@ -375,12 +375,12 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                         the offline copy, waiting changes and drafts are deleted when you sign out or remove the server from the app.
                     </li>
                     <li>
-                        <strong>Camera and photos</strong> are used only when you choose to add a picture (for example to an issue, a doc or your
-                        profile); only the picture you pick is uploaded. Content you share into the app from other apps is only sent when you save it.
+                        <strong>Photos</strong> are used only when you choose to add a picture (for example to an issue, a doc or your profile),
+                        through the phone’s photo picker; only the picture you pick is uploaded. The app doesn’t use the camera. Content you share into the app from other apps is only sent when you save it.
                     </li>
                     <li>
                         <strong>No tracking:</strong> the app contains no analytics, advertising, attribution or crash-reporting tools, does not track
-                        you across apps or websites and does not use your advertising ID, location, contacts or microphone.
+                        you across apps or websites and does not use your advertising ID, location, contacts, camera or microphone.
                     </li>
                     <li>
                         <strong>Deleting your account:</strong> in the app under Account → Delete account (this opens the web page where you confirm),
@@ -389,7 +389,7 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                     </li>
                 </ul>
                 <p>
-                    Legal basis: Art. 6 (1) (b) GDPR (providing the app and the notifications you asked for). Access to the camera, photos and
+                    Legal basis: Art. 6 (1) (b) GDPR (providing the app and the notifications you asked for). Access to your photos (on iPhone) and
                     notifications always needs your permission in the phone’s settings, which you can withdraw there.
                 </p>
             </LegalSection>

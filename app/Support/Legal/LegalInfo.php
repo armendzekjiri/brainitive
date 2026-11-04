@@ -21,7 +21,7 @@ class LegalInfo
      * the terms version is stored with each new account (users.terms_version).
      */
     public const DOCUMENTS = [
-        'privacy' => ['version' => '2.4', 'updated' => '2026-11-04'], // mobile app (Expo push, Sign in with Apple, device storage)
+        'privacy' => ['version' => '2.5', 'updated' => '2026-11-05'], // mobile app: photos only, no camera (2.4: Expo push, Sign in with Apple, device storage)
         'terms' => ['version' => '3.0', 'updated' => '2026-10-30'], // v1.46.0: paid plans via Paddle, BSL 1.1 licence
         'cookies' => ['version' => '2.1', 'updated' => '2026-10-27'],
         'imprint' => ['version' => '1.0', 'updated' => '2026-10-26'],
