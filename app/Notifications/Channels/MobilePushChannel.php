@@ -79,6 +79,11 @@ class MobilePushChannel
             return null;
         }
 
+        // a backslash is a slash to URL parsers (`/\evil.example` → `//evil.example`, another host)
+        if (str_contains($url, '\\')) {
+            return null;
+        }
+
         return '/'.ltrim($parts['path'] ?? '', '/')
             .(isset($parts['query']) ? '?'.$parts['query'] : '')
             .(isset($parts['fragment']) ? '#'.$parts['fragment'] : '');
