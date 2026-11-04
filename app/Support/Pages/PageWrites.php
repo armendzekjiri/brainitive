@@ -105,6 +105,46 @@ final class PageWrites
     }
 
     /**
+     * A maintenance repair of the stored editor HTML (pages:repair-markdown-tables): `$repair` maps the HTML of the
+     * published content and of the draft, each in place — so a fix never publishes someone's unpublished draft, nor
+     * turns a published page's fix into a draft only its readers wait for. Not an edit: no version, no
+     * last editor / updated_at, no mention or watcher notification. On the locked row; edit_revision moves on, so an
+     * editor still holding the broken text gets a conflict instead of saving it back, and Page::saved resets the live
+     * document when the draft changed (open editors reload, BRAI-54). False when nothing changed.
+     *
+     * @param  callable(string): string  $repair
+     */
+    public static function repairHtml(Page $page, callable $repair): bool
+    {
+        return DB::transaction(function () use ($page, $repair) {
+            $locked = Page::whereKey($page->id)->lockForUpdate()->firstOrFail();
+            $changed = false;
+            foreach (['content', 'draft_content'] as $column) {
+                $value = $locked->{$column};
+                if (! is_array($value) || ($value['type'] ?? null) !== 'lexical' || ! is_string($value['html'] ?? null)) {
+                    continue;
+                }
+                $html = $repair($value['html']);
+                if ($html !== $value['html']) {
+                    $value['html'] = $html;
+                    $locked->{$column} = $value;
+                    $changed = true;
+                }
+            }
+            if (! $changed) {
+                return false;
+            }
+
+            $locked->edit_revision = $locked->edit_revision + 1;
+            $locked->timestamps = false;
+            $locked->save();
+            $page->setRawAttributes($locked->getAttributes(), true);
+
+            return true;
+        });
+    }
+
+    /**
      * First publish (or again after "unpublish"), through the review gate (BRAI-80).
      *
      * @return PageVersion|string the new version, 'published' when it already was, or ReviewGate::REFUSAL

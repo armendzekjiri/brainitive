@@ -18,7 +18,7 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('Create a new page/document in a project. Provide the body as Markdown (headings, lists, bold, links, code blocks are supported) — it is converted to the editor format automatically. Optionally nest it under a parent page/folder by uuid. New pages are drafts visible only to their author (and admins) until published — pass publish=true to make it visible to the project right away. Returns the new page uuid, its status and its location (breadcrumb + URL).')]
+#[Description('Create a new page/document in a project. Provide the body as Markdown (headings, lists, bold, links, code blocks and GitHub-style tables are supported) — it is converted to the editor format automatically. Optionally nest it under a parent page/folder by uuid. New pages are drafts visible only to their author (and admins) until published — pass publish=true to make it visible to the project right away. Returns the new page uuid, its status and its location (breadcrumb + URL).')]
 class CreatePageTool extends Tool
 {
     use InteractsWithBrainitive;

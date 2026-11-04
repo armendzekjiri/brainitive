@@ -10,6 +10,7 @@
   - security review fixes: malformed doc id → 404, votes stored under the record's own id, TV refusal covers polls.
 - `feat/push-origin`: `data.origin` in mobile pushes (the app opens a push on the server that sent it; mobile security review).
 - `fix/privacy-no-camera`: privacy policy 2.5 — photos via the picker only, no camera (the app blocks CAMERA).
+- `fix/markdown-tables`: GFM tables in the MCP / App API Markdown converter (both directions) + `pages:repair-markdown-tables` for the docs (and `--items` issues) that stored them as text. [plan](./fix-markdown-tables.md)
 - `fix/docs-site-vite`: docs-site vite 6.4.5 (Dependabot #256).
 
 ## Release content
