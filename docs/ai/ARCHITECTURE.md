@@ -322,6 +322,12 @@ Plan [`tasks/feat-push-test.md`](./tasks/feat-push-test.md). Profile → Notific
 - **UI:** `Pages/Profile/Partials/NotificationSettingsForm.tsx` + `Pages/Profile/Partials/PushDevices.tsx` ("This device" row, device list, results with per-platform next steps), `lib/push.ts` (`endpointHash()` via `crypto.subtle`, `getRegistration()` gives up after 10 s), types `PushDevice`, `PushTestResult`. `public/sw.js` default icon `/android-chrome-192x192.png`.
 - **Tests:** `tests/Feature/Notifications/PushDevicesTest.php`, e2e `e2e/tests/push-devices.spec.ts` (test-only VAPID pair in `e2e/env.ts` `PUSH_E2E`).
 
+### Mobile app push (BRAI-448)
+Plan [`tasks/feat-mobile-push.md`](./tasks/feat-mobile-push.md). The category's `push` choice now means browser push **and** the mobile app.
+- **Channel:** `NotificationCatalog::PUSH_CHANNELS` = `WebPushChannel` + `App\Notifications\Channels\MobilePushChannel`; `channels()` adds both when `push` is on, `RespectsPreferences` keeps them for classes with `toWebPush()` (the mobile message reuses its title / body / url). The channel finds the user's active `client = mobile` `AppDevice`s with a `push_token` and dispatches `App\Jobs\SendMobilePush` with their **ids** (≤ `batch_size` 100 per job; after the response on a sync queue). `MobilePushChannel::webPath()` turns the url into a path on this server (foreign host → null).
+- **Job:** `SendMobilePush` POSTs to the Expo push service (`config('app-api.push')`: `MOBILE_PUSH_ENABLED`, `EXPO_ACCESS_TOKEN`, `EXPO_PUSH_URL`; 10 s timeout) — `{to, title, body, sound, badge = NotificationInbox::unread, priority, data: {url, notification_id}}`. 429 / 5xx / network → released 30 s / 2 min / 10 min (4 tries; sync: one attempt, never throws). Ticket `DeviceNotRegistered` → the device's `push_token` cleared; other errors logged with `device_id` + Expo's code, tokens redacted (`SendMobilePush::redact`). Only `ExponentPushToken[…]` tokens are sent.
+- **Tests:** `tests/Feature/Notifications/MobilePushTest.php` (Http::fake).
+
 ### Branded email (v1.44.0, BRAI-155)
 Plan + inventory of every email path [`tasks/feat-email-templates.md`](./tasks/feat-email-templates.md). Every email renders on one Brainitive layout (card, logo, dark mode, phone rules, "why you got this" footer).
 - **Templates:** Laravel's mail components published and restyled in `resources/views/vendor/mail/{html,text}` + the notification template `resources/views/vendor/notifications/email.blade.php`; theme `resources/views/vendor/mail/html/themes/brainitive.css` (`mail.markdown.theme = brainitive`); components `mail::headline`, `mail::eyebrow`, `mail::quote` (escaped, never Markdown-parsed). Logos `public/images/email/logo.png` + `logo-dark.png` (RGBA, shown 220 px; dark one swapped by `prefers-color-scheme` / Outlook `[data-ogsc]`).
@@ -461,7 +467,7 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   `EndRevokedAppDeviceSessions` (logs the session out once the device is revoked).
 - **Model:** `AppDevice` (`app_devices`, `User::appDevices()`): one row per signed-in install, holding its
   one token pair as sha256 hashes + expiries, `previous_refresh_hash` (reuse detection), `revoked_at` /
-  `revoked_reason` (the audit trail). No token / code tables.
+  `revoked_reason` (the audit trail), `push_token` (encrypted; Expo token, used by `SendMobilePush`, BRAI-448). No token / code tables.
 - **Support (`app/Support/AppApi/`):** `AppTokens` (issue / resolve / revoke / revokeAllFor, guard
   resolver, `currentDevice($request)`), `AppAuthCodes` (single-use sign-in codes in the cache, PKCE
   S256), `AppApiErrors` (the one error shape `{message, code, errors?}`, rendered for `api/v1/*` in

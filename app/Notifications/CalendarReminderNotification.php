@@ -7,7 +7,6 @@ use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
-use NotificationChannels\WebPush\WebPushChannel;
 
 /**
  * A browser-push reminder that an upcoming Google Calendar event or Google Task
@@ -27,7 +26,7 @@ class CalendarReminderNotification extends Notification implements ShouldQueue
     public function via(object $notifiable): array
     {
         // push-only on purpose (time-sensitive, would clutter the bell); the user can still turn push off
-        return array_values(array_intersect($this->channelsFor($notifiable, 'calendar_reminder'), [WebPushChannel::class]));
+        return array_values(array_intersect($this->channelsFor($notifiable, 'calendar_reminder'), NotificationCatalog::PUSH_CHANNELS));
     }
 
     public function toWebPush(object $notifiable, $notification)

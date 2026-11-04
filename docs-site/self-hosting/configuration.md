@@ -246,6 +246,9 @@ The Brainitive apps talk to your server's App API under `/api/v1`. See [Desktop 
 |---|---|---|
 | `APP_API_MIN_DESKTOP_VERSION` | `0.1.0` | Oldest desktop app version your server works with. Older apps ask the user to update |
 | `APP_API_MIN_MOBILE_VERSION` | `0.1.0` | The same for the mobile app |
+| `MOBILE_PUSH_ENABLED` | `true` | Push notifications to the mobile app, through the Expo push service (`exp.host`). They follow each person's "Push" choice per category, like browser push. Needs outgoing HTTPS to `exp.host`; `false` turns them off |
+| `EXPO_ACCESS_TOKEN` | – | Only when "Enhanced push security" is on for the app's Expo project: an Expo access token sent with every push |
+| `EXPO_PUSH_URL` | `https://exp.host/--/api/v2/push/send` | Where pushes are sent. Leave as is |
 
 ## Legal pages
 
