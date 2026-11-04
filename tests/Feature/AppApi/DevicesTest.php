@@ -84,6 +84,24 @@ class DevicesTest extends TestCase
         $this->assertNull($device->fresh()->push_token);
     }
 
+    public function test_setting_a_push_token_takes_it_off_the_users_other_devices(): void
+    {
+        $user = User::factory()->create();
+        $old = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[same-phone]']);
+        $tablet = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[tablet]']);
+        $someoneElse = $this->appDevice(User::factory()->create(), ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[same-phone]']);
+        $new = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios']); // the app signed in again on that phone
+        $token = $this->appToken($user, $new);
+
+        $this->patchJson('/api/v1/devices/current', ['push_token' => 'ExponentPushToken[same-phone]'], $this->appHeaders($token))
+            ->assertOk()->assertJsonPath('data.has_push_token', true);
+
+        $this->assertSame('ExponentPushToken[same-phone]', $new->fresh()->push_token);
+        $this->assertNull($old->fresh()->push_token);
+        $this->assertSame('ExponentPushToken[tablet]', $tablet->fresh()->push_token);
+        $this->assertSame('ExponentPushToken[same-phone]', $someoneElse->fresh()->push_token); // another account: untouched
+    }
+
     public function test_update_validates(): void
     {
         $user = User::factory()->create();
@@ -197,6 +215,10 @@ class DevicesTest extends TestCase
         $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($macToken))
             ->assertStatus(409)->assertJsonPath('code', 'no_push_token');
         $phone->forceFill(['push_token' => 'not-an-expo-token'])->save();
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($phoneToken))
+            ->assertStatus(409)->assertJsonPath('code', 'no_push_token');
+        // a sign-in that can't be refreshed any more is never pushed to (AppDevice::eligibleForPush)
+        $phone->forceFill(['push_token' => 'ExponentPushToken[phone]', 'refresh_expires_at' => now()->subMinute()])->save();
         $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($phoneToken))
             ->assertStatus(409)->assertJsonPath('code', 'no_push_token');
 

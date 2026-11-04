@@ -47,6 +47,18 @@ class AppDevice extends Model
         $query->whereNull('revoked_at');
     }
 
+    /**
+     * Installs a push may go to: signed in (not revoked, refresh token not expired — an app that
+     * hasn't been opened for refresh_ttl is signed out in practice), the mobile app, with a push token.
+     */
+    public function scopeEligibleForPush(Builder $query): void
+    {
+        $query->active()
+            ->where('client', 'mobile')
+            ->whereNotNull('push_token')
+            ->where('refresh_expires_at', '>', now());
+    }
+
     /** Most recently used first (never used: by sign-in time) — the order of the device lists. */
     public function scopeRecentFirst(Builder $query): void
     {

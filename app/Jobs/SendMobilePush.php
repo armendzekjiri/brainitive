@@ -19,7 +19,8 @@ use Illuminate\Support\Facades\Log;
  * Dispatched by MobilePushChannel with device ids only — tokens stay encrypted in app_devices and are
  * NEVER logged (Expo's error messages quote them, so they are redacted).
  *
- * - The devices are loaded again (still active, `mobile`, with a token): a sign-out meanwhile wins.
+ * - The devices are loaded again (AppDevice::eligibleForPush): a sign-out meanwhile wins. Two rows
+ *   with the same token (reinstall, re-sign-in) get one message.
  * - Message: {to, title, body, sound: default, badge: unread inbox count, data: {url, notification_id}}.
  * - 429, 5xx and network errors: released with backoff (30 s, 2 min, 10 min) on a real queue; a sync
  *   job gets one attempt. Other HTTP errors are logged and dropped. Never throws.
@@ -64,14 +65,13 @@ class SendMobilePush implements ShouldQueue
             return;
         }
 
-        $devices = AppDevice::query()->active()
+        $devices = AppDevice::query()->eligibleForPush()
             ->where('user_id', $user->id)
-            ->where('client', 'mobile')
-            ->whereNotNull('push_token')
             ->whereIn('id', $this->deviceIds)
             ->orderBy('id')
             ->get()
             ->filter(fn (AppDevice $device) => self::isExpoToken($device->push_token))
+            ->unique('push_token') // a reinstall / re-sign-in can leave two rows with one Expo token
             ->values();
         if ($devices->isEmpty()) {
             return;
@@ -143,10 +143,10 @@ class SendMobilePush implements ShouldQueue
             $error = is_string($ticket['details']['error'] ?? null) ? $ticket['details']['error'] : null;
 
             if ($error === 'DeviceNotRegistered') {
-                $sent = $device->push_token;
-                $device->refresh();
-                if ($device->push_token === $sent) {
-                    $device->forceFill(['push_token' => null])->save();
+                // reloaded: the account may have been deleted, or the app set another token, meanwhile
+                $current = AppDevice::query()->find($device->id);
+                if ($current && $current->push_token === $device->push_token) {
+                    $current->forceFill(['push_token' => null])->save();
                 }
                 Log::info('Mobile push: device not registered any more, push token cleared', ['device_id' => $device->id]);
 

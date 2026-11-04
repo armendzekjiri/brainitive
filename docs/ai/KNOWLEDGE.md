@@ -553,7 +553,8 @@ the allowlist renaming only.
   (`users.apple_refresh_token`, `encrypted` cast, `$hidden`, overwritten on every Apple sign-in; a missing one
   keeps the stored token). `UserDeletion::delete` (Profile and Admin deletion) reads it before deleting and,
   after the row is gone, dispatches `RevokeAppleToken` with the token **in the payload** — the job can't load
-  a deleted user, hence `ShouldBeEncrypted`. Accounts that signed in with Apple before this change have no
+  a deleted user, hence `ShouldBeEncrypted`. On a sync queue in a web request it is dispatched
+  `->afterResponse()` (as `MobilePushChannel`), so DELETE /profile never waits for Apple. Accounts that signed in with Apple before this change have no
   token: nothing is revoked (users can remove the app under Apple ID → Sign in with Apple). A token encrypted
   with an old `APP_KEY` (DecryptException) is skipped, never blocks deletion. If the mobile app ever does
   *native* Sign in with Apple, its tokens belong to the bundle id: store them and revoke with that `client_id`.

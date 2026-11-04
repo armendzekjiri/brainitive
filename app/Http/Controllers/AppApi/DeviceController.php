@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\AppApi\UpdateDeviceRequest;
 use App\Http\Resources\AppApi\DeviceResource;
 use App\Jobs\SendMobilePush;
+use App\Models\AppDevice;
 use App\Support\AppApi\AppTokens;
 use App\Support\Webhooks\WebhookDispatcher;
 use Dedoc\Scramble\Attributes\Group;
@@ -30,13 +31,31 @@ class DeviceController extends Controller
         return response()->json(['data' => DeviceResource::collection($devices)->resolve($request)]);
     }
 
-    /** The calling device updates its name, versions or push token. */
+    /**
+     * The calling device updates its name, versions or push token.
+     *
+     * A push token belongs to one install: the user's other mobile devices holding the same one (an
+     * earlier sign-in on this phone) lose it, so the phone isn't notified twice.
+     */
     public function updateCurrent(UpdateDeviceRequest $request): DeviceResource
     {
         $device = AppTokens::currentDevice($request);
         abort_unless($device, 401);
 
-        $device->fill($request->validated())->save();
+        $data = $request->validated();
+        $device->fill($data)->save();
+
+        $token = $data['push_token'] ?? null;
+        if (is_string($token) && $token !== '') {
+            // encrypted at rest (no lookup column): compare in PHP — a user has a handful of devices
+            $request->user()->appDevices()
+                ->whereKeyNot($device->id)
+                ->where('client', 'mobile')
+                ->whereNotNull('push_token')
+                ->get()
+                ->filter(fn (AppDevice $other) => $other->push_token === $token)
+                ->each(fn (AppDevice $other) => $other->forceFill(['push_token' => null])->save());
+        }
 
         return new DeviceResource($device);
     }
@@ -58,7 +77,8 @@ class DeviceController extends Controller
         if (! config('app-api.push.enabled')) {
             return response()->json(['message' => 'Push notifications are turned off on this server.', 'code' => 'push_disabled'], 409);
         }
-        if ($device->client !== 'mobile' || ! SendMobilePush::isExpoToken($device->push_token)) {
+        if (! SendMobilePush::isExpoToken($device->push_token)
+            || ! AppDevice::query()->eligibleForPush()->whereKey($device->id)->exists()) {
             return response()->json(['message' => 'This device has no push token. Allow notifications in the app, then try again.', 'code' => 'no_push_token'], 409);
         }
 

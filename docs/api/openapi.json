@@ -741,6 +741,7 @@
         "/devices/current": {
             "patch": {
                 "operationId": "app.v1.devices.current.update",
+                "description": "A push token belongs to one install: the user's other mobile devices holding the same one (an\nearlier sign-in on this phone) lose it, so the phone isn't notified twice.",
                 "summary": "The calling device updates its name, versions or push token",
                 "tags": [
                     "Devices"

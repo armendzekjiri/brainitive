@@ -113,7 +113,7 @@ const CHANGELOG = [
             'Deleting your account now also removes Brainitive from “Sign in with Apple” in your Apple ID settings.',
             'New support page at /support with help for the mobile app: signing in, using your own server, notifications and deleting your account. The privacy policy has a new “Mobile app” section (push via Expo, what stays on your phone) and covers Sign in with Apple.',
             'Live editing: you no longer see your own caret and name in a doc or issue description, only the other people.',
-            'Self-hosted: add the new migration (php artisan migrate). To offer Sign in with Apple, set APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID and APPLE_PRIVATE_KEY (see docs.brainitive.app → Integrations → Apple). Mobile push goes through Expo’s push service (exp.host) and needs the queue worker for retries; MOBILE_PUSH_ENABLED=false turns it off.',
+            'Self-hosted: add the new migrations (php artisan migrate). To offer Sign in with Apple, set APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID and APPLE_PRIVATE_KEY (see docs.brainitive.app → Integrations → Apple). Mobile push goes through Expo’s push service (exp.host) and needs the queue worker for retries; MOBILE_PUSH_ENABLED=false turns it off.',
         ]
     },
     {

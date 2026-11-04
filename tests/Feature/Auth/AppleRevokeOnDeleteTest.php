@@ -10,9 +10,13 @@ use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
+use Illuminate\Foundation\Http\Events\RequestHandled;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
@@ -114,14 +118,51 @@ class AppleRevokeOnDeleteTest extends TestCase
 
     public function test_apple_being_down_does_not_block_the_deletion(): void
     {
-        Http::fake([AppleLogin::REVOKE_URL => Http::response('', 503)]);
-        $user = $this->appleUser();
+        // a web request on a sync queue (php-fpm / artisan serve): the revoke runs after the response
+        $handled = false;
+        $calledAfterResponse = null;
+        Event::listen(RequestHandled::class, function () use (&$handled) {
+            $handled = true;
+        });
+        Http::fake([AppleLogin::REVOKE_URL => function () use (&$handled, &$calledAfterResponse) {
+            $calledAfterResponse = $handled;
 
-        // sync queue in tests: the job runs right away, gets its one attempt and gives up quietly
-        $this->actingAs($user)->delete('/profile', ['password' => 'password'])->assertRedirect('/');
+            return Http::response('', 503);
+        }]);
+        $user = $this->appleUser();
+        $this->withoutMiddleware(ValidateCsrfToken::class); // only skipped for unit tests in the console
+        $console = new \ReflectionProperty($this->app, 'isRunningInConsole');
+        $console->setValue($this->app, false);
+
+        try {
+            // the job gets its one attempt once the response is out and gives up quietly
+            $this->actingAs($user)->delete('/profile', ['password' => 'password'])->assertRedirect('/');
+        } finally {
+            $console->setValue($this->app, true);
+        }
 
         $this->assertNull($user->fresh());
         Http::assertSentCount(1);
+        $this->assertTrue($calledAfterResponse, 'the deletion request waited for Apple');
+    }
+
+    public function test_on_a_sync_queue_a_web_request_revokes_after_the_response(): void
+    {
+        Bus::fake([RevokeAppleToken::class]);
+        $user = $this->appleUser();
+        $this->withoutMiddleware(ValidateCsrfToken::class); // only skipped for unit tests in the console
+        $console = new \ReflectionProperty($this->app, 'isRunningInConsole');
+        $console->setValue($this->app, false);
+
+        try {
+            $this->actingAs($user)->delete('/profile', ['password' => 'password'])->assertRedirect('/');
+        } finally {
+            $console->setValue($this->app, true);
+        }
+
+        $this->assertNull($user->fresh());
+        Bus::assertDispatchedAfterResponse(RevokeAppleToken::class);
+        Bus::assertNotDispatchedSync(RevokeAppleToken::class);
     }
 
     // ── the job ─────────────────────────────────────────────────────────────────────────────

@@ -48,7 +48,7 @@ class MobilePushTest extends TestCase
 
     private function device(array $attributes = []): AppDevice
     {
-        return AppDevice::create([
+        $device = AppDevice::create([
             'user_id' => $this->user->id,
             'client' => 'mobile',
             'platform' => 'ios',
@@ -56,6 +56,10 @@ class MobilePushTest extends TestCase
             'app_version' => '0.1.0',
             ...$attributes,
         ]);
+        // signed in: a refresh token that hasn't expired
+        $device->forceFill(['refresh_expires_at' => now()->addDays(30)])->save();
+
+        return $device;
     }
 
     private function mention(): MentionNotification
@@ -169,6 +173,56 @@ class MobilePushTest extends TestCase
         $this->assertCount(2, $this->logged);
         $this->assertSame('MessageTooBig', $this->logged[0]->context['error']);
         $this->assertStringContainsString('[push token]', $this->logged[0]->context['message']);
+        $this->assertNoTokenLogged();
+    }
+
+    public function test_a_device_whose_sign_in_expired_gets_no_push(): void
+    {
+        $iphone = $this->device(['push_token' => self::IPHONE]);
+        $stale = $this->device(['platform' => 'android', 'push_token' => self::PIXEL]);
+        $stale->forceFill(['refresh_expires_at' => now()->subMinute()])->save();
+        $this->device(['push_token' => 'ExponentPushToken[never-signed-in]'])->forceFill(['refresh_expires_at' => null])->save();
+        $this->fakeExpo([['status' => 'ok', 'id' => 'a']]);
+
+        $this->user->notify($this->mention());
+
+        Http::assertSentCount(1);
+        Http::assertSent(fn (Request $request) => array_column($request->data(), 'to') === [self::IPHONE]);
+
+        // the job checks again: a sign-in that expired after it was queued gets nothing
+        $iphone->forceFill(['refresh_expires_at' => now()->subSecond()])->save();
+        (new SendMobilePush($this->user->id, [$iphone->id], 'T', 'B', null, null))->handle();
+        Http::assertSentCount(1);
+    }
+
+    public function test_two_devices_with_the_same_token_get_one_message(): void
+    {
+        $this->device(['push_token' => self::IPHONE]); // the app was reinstalled / signed in again
+        $this->device(['push_token' => self::IPHONE]);
+        $this->device(['platform' => 'android', 'push_token' => self::PIXEL]);
+        $this->fakeExpo([['status' => 'ok', 'id' => 'a'], ['status' => 'ok', 'id' => 'b']]);
+
+        $this->user->notify($this->mention());
+
+        Http::assertSentCount(1);
+        Http::assertSent(fn (Request $request) => array_column($request->data(), 'to') === [self::IPHONE, self::PIXEL]);
+    }
+
+    public function test_device_not_registered_for_a_device_deleted_meanwhile_does_not_throw(): void
+    {
+        $iphone = $this->device(['push_token' => self::IPHONE]);
+        $pixel = $this->device(['platform' => 'android', 'push_token' => self::PIXEL]);
+        Http::fake([self::EXPO => function () use ($iphone, $pixel) {
+            $iphone->delete(); // e.g. the account was deleted while Expo answered
+            $pixel->forceFill(['push_token' => 'ExponentPushToken[pixel-new-cccc]'])->save(); // a new token meanwhile
+
+            return Http::response(['data' => array_fill(0, 2, ['status' => 'error', 'message' => 'gone', 'details' => ['error' => 'DeviceNotRegistered']])]);
+        }]);
+
+        (new SendMobilePush($this->user->id, [$iphone->id, $pixel->id], 'T', 'B', null, null))->handle();
+
+        $this->assertNull(AppDevice::find($iphone->id));
+        $this->assertSame('ExponentPushToken[pixel-new-cccc]', $pixel->fresh()->push_token); // not the token that was sent: kept
         $this->assertNoTokenLogged();
     }
 
