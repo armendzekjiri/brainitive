@@ -34,3 +34,7 @@ storage/e2e/
 # The desktop app (Tauri) is its own repo (armendzekjiri/brainitive-desktop), checked out here
 # so local agents share this project's docs and memory. Never commit it into this repo.
 /desktop/
+
+# The mobile app (Expo) is its own repo (armendzekjiri/brainitive-mobile), checked out here
+# like desktop/. Never commit it into this repo.
+/mobile/

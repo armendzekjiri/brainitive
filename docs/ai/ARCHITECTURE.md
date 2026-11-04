@@ -446,7 +446,8 @@ Plan [`tasks/feat-legal-compliance.md`](./tasks/feat-legal-compliance.md); human
 ### App API v1 — desktop + mobile apps (v1.49.0, BRAI-380)
 JSON API of the first-party **Brainitive Desktop** (Tauri, own repo `armendzekjiri/brainitive-desktop`,
 checked out at `desktop/`, gitignored), **Brainitive TV** (own folder `brainitive-tv/`, signs in with a
-device code) and later **Brainitive Mobile** (Expo). Separate from MCP / CLI /
+device code) and **Brainitive Mobile** (Expo SDK 58, own repo `armendzekjiri/brainitive-mobile`, checked out at
+`mobile/`, gitignored; a companion app for everyday users, scope in `tasks/chore-mobile-foundation.md`). Separate from MCP / CLI /
 extension: own tokens, guard, throttles; only Support services and policies are shared.
 **Registry of every endpoint + conventions: [`API.md`](./API.md); recipe:
 [skills/add-app-api-endpoint.md](./skills/add-app-api-endpoint.md).**
