@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\AppleAuthController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
@@ -13,6 +14,14 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
+
+// Apple's `response_mode=form_post` answer: a cross-site POST without the (SameSite=Lax) session
+// cookie. No web middleware at all — no session (one started here would replace the user's cookie),
+// no CSRF (also in the bootstrap/app.php CSRF except list); AppleAuthController hands over to a GET.
+Route::post('login/apple/callback', [AppleAuthController::class, 'callback'])
+    ->withoutMiddleware('web')
+    ->middleware('throttle:30,1,login.apple.callback')
+    ->name('login.apple.callback');
 
 Route::middleware('guest')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])
@@ -44,6 +53,15 @@ Route::middleware('guest')->group(function () {
     Route::get('login/microsoft/callback', [MicrosoftAuthController::class, 'callback'])
         ->middleware('throttle:30,1,login.microsoft.callback')
         ->name('login.microsoft.callback');
+
+    // Sign in with Apple (BRAI-449): Apple POSTs to login.apple.callback (below), which hands over to finish
+    Route::get('login/apple', [AppleAuthController::class, 'redirect'])
+        ->middleware('throttle:30,1,login.apple')
+        ->name('login.apple');
+
+    Route::get('login/apple/finish', [AppleAuthController::class, 'finish'])
+        ->middleware('throttle:30,1,login.apple.finish')
+        ->name('login.apple.finish');
 
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');

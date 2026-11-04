@@ -41,7 +41,7 @@ logic underneath (Support services, policies) is shared.
 App                                   System browser                      Server
  │ verifier + state, S256 challenge                                          │
  │── open /app/authorize?client=desktop&code_challenge=…&state=…&device_name=… ──▶│
- │                                     │ sign in (password / Google / Microsoft / GitHub)
+ │                                     │ sign in (password / Google / Microsoft / Apple / GitHub)
  │                                     │ consent "Sign in to Brainitive Desktop?" → Continue
  │◀── brainitive://auth/callback?code=…&state=… (code: 60 s, single use) ────│
  │── POST /api/v1/auth/exchange {code, code_verifier, device} ───────────────▶│ → device row + token pair
@@ -211,10 +211,10 @@ Columns of the module tables: **Mobile** = scope in the mobile app (Full / Read 
 |---|---|---|---|---|---|
 | `GET /api/v1/instance` | none (public) | first-run "connect a server" screen: check it's Brainitive, show its name + version, which sign-in buttons exist, refuse a too-old app (`min_versions`) | Full | BRAI-171 | ready (v1.49.0, BRAI-354) |
 
-`{data: {name, url, version, api_version: "1", sign_in: {password, google, github, microsoft},
+`{data: {name, url, version, api_version: "1", sign_in: {password, google, github, microsoft, apple},
 sign_up_open, email_verification_required, min_versions: {desktop, mobile}, authorize_path}}`.
 Only what the login page already shows; sign-in flags use the Login page's rule
-(`App\Support\Auth\SignInMethods`). `Cache-Control: public, max-age=300`. `version` is `null` when
+(`App\Support\Auth\SignInMethods`; `apple` since BRAI-449). `Cache-Control: public, max-age=300`. `version` is `null` when
 the server can't read its changelog (a stripped package).
 
 ### Auth

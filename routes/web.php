@@ -84,6 +84,7 @@ Route::get('/', function () {
         'canLoginWithGoogle' => SignInMethods::google(),
         'canLoginWithGitHub' => SignInMethods::github(),
         'canLoginWithMicrosoft' => SignInMethods::microsoft(),
+        'canLoginWithApple' => SignInMethods::apple(),
     ])->withViewData(['meta' => [
         // link previews of the homepage (Open Graph / X), see resources/views/partials/social-meta.blade.php
         'title' => 'Brainitive – Workspaces, Boards & Wiki',

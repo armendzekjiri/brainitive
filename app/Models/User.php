@@ -36,6 +36,7 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
         'google_id',
         'github_id',
         'microsoft_id',
+        'apple_id',
         'avatar',
         'bio',
         'phone',

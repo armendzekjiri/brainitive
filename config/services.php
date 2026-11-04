@@ -52,6 +52,17 @@ return [
         'login_redirect' => env('MICROSOFT_LOGIN_REDIRECT_URI', rtrim((string) env('APP_URL'), '/').'/login/microsoft/callback'),
     ],
 
+    // Sign in with Apple (BRAI-449): a Services ID + a Sign in with Apple key (.p8) of the Apple
+    // developer team. The client secret is an ES256 JWT signed with the key at runtime. The key may
+    // be the PEM itself (`\n` escapes allowed) or a path to the .p8 file. See App\Support\Auth\AppleLogin.
+    'apple' => [
+        'client_id' => env('APPLE_CLIENT_ID'), // the Services ID, e.g. com.example.brainitive.web
+        'team_id' => env('APPLE_TEAM_ID'),
+        'key_id' => env('APPLE_KEY_ID'),
+        'private_key' => env('APPLE_PRIVATE_KEY'),
+        'redirect' => env('APPLE_REDIRECT_URI', rtrim((string) env('APP_URL'), '/').'/login/apple/callback'),
+    ],
+
     'github' => [
         'client_id' => env('GITHUB_CLIENT_ID'),
         'client_secret' => env('GITHUB_CLIENT_SECRET'),

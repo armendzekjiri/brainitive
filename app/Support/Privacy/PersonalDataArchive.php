@@ -158,7 +158,7 @@ final class PersonalDataArchive
     {
         $u = DB::table('users')->where('id', $this->user->id)->first([
             'name', 'email', 'email_verified_at', 'avatar', 'bio', 'phone', 'timezone', 'calendar_view', 'task_digest',
-            'onboarding_state', 'sidebar_preferences', 'google_id', 'github_id', 'microsoft_id', 'terms_accepted_at',
+            'onboarding_state', 'sidebar_preferences', 'google_id', 'github_id', 'microsoft_id', 'apple_id', 'terms_accepted_at',
             'terms_version', 'last_login_at', 'suspended_at', 'created_at', 'updated_at',
         ]);
 
@@ -195,6 +195,7 @@ final class PersonalDataArchive
                 $u->google_id ? 'google' : null,
                 $u->github_id ? 'github' : null,
                 $u->microsoft_id ? 'microsoft' : null,
+                $u->apple_id ? 'apple' : null,
             ])),
             'terms' => ['accepted_at' => self::ts($u->terms_accepted_at), 'version' => $u->terms_version],
             'instance_admin' => $this->user->isInstanceAdmin(),

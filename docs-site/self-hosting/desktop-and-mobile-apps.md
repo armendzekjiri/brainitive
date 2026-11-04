@@ -17,7 +17,7 @@ The desktop app is in development. The server side ships with Brainitive v1.49.0
 | Path | What it is |
 |---|---|
 | `/api/v1/*` | The **App API**: a JSON API only for the first-party desktop and mobile apps. It has its own tokens and rate limits and is separate from the API that AI apps, the CLI and the browser extension use (`/mcp`, `/api/cli`, `/api/ext`) |
-| `/app/authorize` | Sign-in page the app opens in the system browser. People sign in the way they always do (password, Google, Microsoft or GitHub) and confirm "Sign in to Brainitive Desktop" |
+| `/app/authorize` | Sign-in page the app opens in the system browser. People sign in the way they always do (password, Google, Microsoft, Apple or GitHub) and confirm "Sign in to Brainitive Desktop" |
 | `/app/session/*` | One-time link that signs the app's window into the web app after the native sign-in |
 | `/app/device` | Where people confirm the code a **TV** shows (device-code sign-in). They open it on a phone or computer where they are signed in, or scan the TV's QR code, and click **Approve** |
 | `/collab` | Live updates, as for the browser (see [Realtime server](./realtime)) |
