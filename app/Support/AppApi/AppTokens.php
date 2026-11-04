@@ -121,6 +121,7 @@ final class AppTokens
             'access_expires_at' => null,
             'refresh_token_hash' => null,
             'refresh_expires_at' => null,
+            'push_token' => null, // signed out: never pushed to again (the hash follows on save)
         ])->save();
 
         // its used refresh tokens no longer matter: presenting one now is simply invalid

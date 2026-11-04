@@ -20,6 +20,7 @@ class InstanceTest extends TestCase
             'services.google.client_id' => null,
             'services.github.client_id' => null,
             'services.microsoft.client_id' => null,
+            'services.apple.client_id' => null,
         ]);
         InstanceSettings::instance()->update(['name' => 'Acme Brain']);
 
@@ -30,7 +31,7 @@ class InstanceTest extends TestCase
             'url' => 'https://brainitive.example',
             'version' => '1.49.0',
             'api_version' => '1',
-            'sign_in' => ['password' => true, 'google' => false, 'github' => false, 'microsoft' => false],
+            'sign_in' => ['password' => true, 'google' => false, 'github' => false, 'microsoft' => false, 'apple' => false],
             'sign_up_open' => true,
             'email_verification_required' => true,
             'min_versions' => ['desktop' => '0.2.0', 'mobile' => '0.3.0'],
@@ -50,14 +51,18 @@ class InstanceTest extends TestCase
             'services.github.client_secret' => 'github-secret-456',
             'services.microsoft.client_id' => 'ms-client-id-123',
             'services.microsoft.client_secret' => 'ms-secret-456',
+            'services.apple.client_id' => 'com.example.apple-web',
+            'services.apple.team_id' => 'TEAM123456',
+            'services.apple.key_id' => 'KEY1234567',
+            'services.apple.private_key' => '-----BEGIN PRIVATE KEY-----\\nnot-a-real-key\\n-----END PRIVATE KEY-----',
         ]);
 
         $response = $this->getJson('/api/v1/instance')
             ->assertOk()
-            ->assertJsonPath('data.sign_in', ['password' => true, 'google' => true, 'github' => true, 'microsoft' => true]);
+            ->assertJsonPath('data.sign_in', ['password' => true, 'google' => true, 'github' => true, 'microsoft' => true, 'apple' => true]);
 
         $body = $response->getContent();
-        foreach (['google-client-id-123', 'google-secret-456', 'github-secret-456', 'ms-client-id-123', 'ms-secret-456', (string) config('app.key')] as $secret) {
+        foreach (['google-client-id-123', 'google-secret-456', 'github-secret-456', 'ms-client-id-123', 'ms-secret-456', 'com.example.apple-web', 'TEAM123456', 'KEY1234567', 'not-a-real-key', (string) config('app.key')] as $secret) {
             $this->assertStringNotContainsString($secret, $body);
         }
 
@@ -65,11 +70,16 @@ class InstanceTest extends TestCase
         $this->get('/login')->assertInertia(fn ($page) => $page
             ->where('canLoginWithGoogle', true)
             ->where('canLoginWithGitHub', true)
-            ->where('canLoginWithMicrosoft', true));
+            ->where('canLoginWithMicrosoft', true)
+            ->where('canLoginWithApple', true));
 
         // Microsoft needs the secret too
         config(['services.microsoft.client_secret' => null]);
         $this->getJson('/api/v1/instance')->assertJsonPath('data.sign_in.microsoft', false);
+
+        // Apple needs the key too
+        config(['services.apple.private_key' => null]);
+        $this->getJson('/api/v1/instance')->assertJsonPath('data.sign_in.apple', false);
     }
 
     public function test_it_reflects_the_admin_settings(): void

@@ -82,6 +82,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'portal/*',
             'f/*', // public lead forms: submit + analytics events (stateless)
             'book/*', // public booking pages: book, cancel, reschedule (embeddable; throttled + honeypot)
+            'login/apple/callback', // Sign in with Apple's form_post (BRAI-449; the route also drops the web group)
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

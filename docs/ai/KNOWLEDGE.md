@@ -535,6 +535,29 @@ the allowlist renaming only.
   id_token signature isn't verified (token endpoint over TLS + secret + PKCE, OIDC Core 3.1.3.7); its
   claims are (`aud`, `iss`, `exp`, `nonce`, GUID `tid` / `oid`, tenant pin). Entra setup:
   [`tasks/feat-microsoft-login.md`](./tasks/feat-microsoft-login.md).
+- **Sign in with Apple (BRAI-449) — the form_post callback has no session.** Apple must use
+  `response_mode=form_post` when asking for name / email: a **cross-site POST**. The SameSite=Lax session
+  cookie isn't sent with it, and a session started there would *replace* the browser's cookie (losing state,
+  nonce and `url.intended` — the native apps' `/app/authorize` return). So `POST /login/apple/callback` drops
+  the whole `web` group (`withoutMiddleware('web')`: no session, no CSRF; also in the CSRF `except` list),
+  stashes `{code, state, error, name}` in the cache under a random one-time key and 303s to
+  `GET /login/apple/finish?key=…` (same-site again), which checks the state and signs in. Don't "fix" this
+  with `SESSION_SAME_SITE=none`. The id_token **is** signature-checked (Apple JWKS, cached 1 h, refetched for
+  an unknown `kid` at most once a minute) plus iss / aud / exp / nonce. Email trusted only with
+  `email_verified`; private relay addresses (`@privaterelay.appleid.com`) count as verified. The name comes
+  only in the FIRST callback's `user` field (never in the id_token); without it a new account is named after
+  the email's local part, or "Apple user" for a relay address. `users.apple_id` = `sub`. Relay addresses only
+  receive mail from senders registered at Apple (docs-site `integrations/apple.md` step 5).
+- **Sign in with Apple — revoke on account deletion (App Store 5.1.1(v)).** Apple's revoke endpoint needs a
+  token, and the id_token's `sub` isn't one, so the **refresh token** of the code exchange is kept
+  (`users.apple_refresh_token`, `encrypted` cast, `$hidden`, overwritten on every Apple sign-in; a missing one
+  keeps the stored token). `UserDeletion::delete` (Profile and Admin deletion) reads it before deleting and,
+  after the row is gone, dispatches `RevokeAppleToken` with the token **in the payload** — the job can't load
+  a deleted user, hence `ShouldBeEncrypted`. On a sync queue in a web request it is dispatched
+  `->afterResponse()` (as `MobilePushChannel`), so DELETE /profile never waits for Apple. Accounts that signed in with Apple before this change have no
+  token: nothing is revoked (users can remove the app under Apple ID → Sign in with Apple). A token encrypted
+  with an old `APP_KEY` (DecryptException) is skipped, never blocks deletion. If the mobile app ever does
+  *native* Sign in with Apple, its tokens belong to the bundle id: store them and revoke with that `client_id`.
 - `App\Http\Middleware\GuardOAuthFlows` runs globally (for `/oauth/register`, which has no group)
   AND in the web group — the `/oauth/authorize` verification check needs the session, and global
   middleware runs before StartSession (`$request->user()` is null there). `POST /oauth/register` is throttled and https
@@ -544,6 +567,12 @@ the allowlist renaming only.
 - Password change / reset → `SignOutEverywhere` (sessions, remember token, all OAuth + CLI tokens).
   Users revoke apps under Profile → Connected apps.
 - Web push endpoints must be a known push service (`PushSubscriptionController::PUSH_HOSTS`).
+- **Expo push receipts need a real queue.** A ticket `ok` only means Expo accepted the message;
+  `DeviceNotRegistered` for an uninstalled app usually shows up only in the *receipt*, ready ~15 min later.
+  `SendMobilePush` therefore dispatches `CheckMobilePushReceipts` with a 900 s delay — only when it runs on a
+  real queue: the sync driver ignores delays, so the check would run at once and find nothing (sync installs
+  rely on tickets alone). The receipt job carries device ids + a SHA-256 of the token sent, never the token,
+  and clears the token only while the hash still matches (the app may have registered a new one meanwhile).
 - `FrameProtection` (web): pages without their own CSP get `frame-ancestors 'self'`; embeds keep
   `frame-ancestors *`.
 
@@ -573,8 +602,8 @@ the allowlist renaming only.
 - **Consent page is Inertia, not Blade:** a password login is an Inertia XHR that follows
   `url.intended`; a Blade page would land in Inertia's error modal. The decision answers with
   `Inertia::location()` (409 + `X-Inertia-Location`), so the browser itself navigates to
-  `brainitive://…` — a 302 to a custom scheme inside an XHR goes nowhere. Password, Google, GitHub and
-  Microsoft logins all return through `redirect()->intended()` (tests in `AppSignInTest`).
+  `brainitive://…` — a 302 to a custom scheme inside an XHR goes nowhere. Password, Google, GitHub,
+  Microsoft and Apple logins all return through `redirect()->intended()` (tests in `AppSignInTest`).
 - **Revocation:** `SignOutEverywhere::run($user, $keepSessionId, $appReason)` ends browser sessions, the
   remember token, Passport tokens **and** every app device (`AppTokens::revokeAllFor`, since BRAI-377 — before,
   the social-login takeover paths left the squatter's apps signed in). Reasons: `suspended`, `deleted`,

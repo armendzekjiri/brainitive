@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Notifications;
 
+use App\Notifications\Channels\MobilePushChannel;
 use App\Notifications\ItemDueNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -94,7 +95,7 @@ class ItemDueNotificationsTest extends TestCase
         $item = $this->item(['assigned_to' => $this->editor->id, 'due_date' => '2026-11-06']);
         $notification = new ItemDueNotification($item, ItemDueNotification::DUE_TOMORROW, 'Due tomorrow');
 
-        $this->assertSame(['database', WebPushChannel::class], $notification->via($this->editor));
+        $this->assertSame(['database', WebPushChannel::class, MobilePushChannel::class], $notification->via($this->editor));
 
         $this->editor->update(['notification_preferences' => ['reminders' => ['in_app' => true, 'push' => false, 'email' => true]]]);
         $this->assertSame(['database', 'mail'], $notification->via($this->editor->fresh()));

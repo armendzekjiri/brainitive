@@ -186,7 +186,7 @@ Search runs on PostgreSQL and has no settings. See [Search](./search).
 
 ## Social logins and calendars
 
-Each login button appears only when its client ID and secret are set. Setup guides: [Google](/integrations/google), [Microsoft](/integrations/microsoft), [GitHub](/integrations/github).
+Each login button appears only when its client ID and secret are set (for Apple: all four `APPLE_*` values below). Setup guides: [Google](/integrations/google), [Microsoft](/integrations/microsoft), [Apple](/integrations/apple), [GitHub](/integrations/github).
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -198,6 +198,11 @@ Each login button appears only when its client ID and secret are set. Setup guid
 | `MICROSOFT_TENANT` | `common` | `common` allows personal and work/school accounts |
 | `MICROSOFT_REDIRECT_URI` | `APP_URL/calendar/connections/outlook/callback` | Calendar callback URL |
 | `MICROSOFT_LOGIN_REDIRECT_URI` | `APP_URL/login/microsoft/callback` | Login callback URL |
+| `APPLE_CLIENT_ID` | – | Apple **Services ID** for "Sign in with Apple" (e.g. `com.example.brainitive.web`) |
+| `APPLE_TEAM_ID` | – | Apple developer Team ID |
+| `APPLE_KEY_ID` | – | Key ID of the Sign in with Apple key |
+| `APPLE_PRIVATE_KEY` | – | The `.p8` key itself (`\n` escapes allowed) or a path to the file |
+| `APPLE_REDIRECT_URI` | `APP_URL/login/apple/callback` | Return URL registered on the Services ID |
 | `GITHUB_CLIENT_ID` | – | GitHub OAuth app for "Continue with GitHub" |
 | `GITHUB_CLIENT_SECRET` | – | |
 | `GITHUB_REDIRECT_URI` | `APP_URL/login/github/callback` | Login callback URL |
@@ -246,6 +251,10 @@ The Brainitive apps talk to your server's App API under `/api/v1`. See [Desktop 
 |---|---|---|
 | `APP_API_MIN_DESKTOP_VERSION` | `0.1.0` | Oldest desktop app version your server works with. Older apps ask the user to update |
 | `APP_API_MIN_MOBILE_VERSION` | `0.1.0` | The same for the mobile app |
+| `MOBILE_PUSH_ENABLED` | `true` | Push notifications to the mobile app, through the Expo push service (`exp.host`). They follow each person's "Push" choice per category, like browser push. Needs outgoing HTTPS to `exp.host`; `false` turns them off |
+| `EXPO_ACCESS_TOKEN` | – | Only when "Enhanced push security" is on for the app's Expo project: an Expo access token sent with every push |
+| `EXPO_PUSH_URL` | `https://exp.host/--/api/v2/push/send` | Where pushes are sent. Leave as is |
+| `EXPO_RECEIPTS_URL` | `https://exp.host/--/api/v2/push/getReceipts` | Where push receipts are fetched, about 15 minutes after sending, to forget the push tokens of uninstalled apps. Needs a queue worker (`QUEUE_CONNECTION` other than `sync`). Leave as is |
 
 ## Legal pages
 

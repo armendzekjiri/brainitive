@@ -52,6 +52,23 @@ return [
         ],
     ],
 
+    // Push to the mobile app (BRAI-448) through the Expo push service, which talks to APNs / FCM.
+    // Sent for every notification whose category has `push` on, next to browser push
+    // (App\Notifications\Channels\MobilePushChannel → App\Jobs\SendMobilePush). The access token is
+    // only needed when "Enhanced push security" is on for the Expo project.
+    'push' => [
+        'enabled' => (bool) env('MOBILE_PUSH_ENABLED', true),
+        'expo_url' => env('EXPO_PUSH_URL', 'https://exp.host/--/api/v2/push/send'),
+        // Push receipts (delivery to APNs / FCM, DeviceNotRegistered): fetched receipt_delay seconds after
+        // sending (App\Jobs\CheckMobilePushReceipts; real queue only — a sync queue has no delay)
+        'receipts_url' => env('EXPO_RECEIPTS_URL', 'https://exp.host/--/api/v2/push/getReceipts'),
+        'receipt_delay' => 900,
+        'expo_access_token' => env('EXPO_ACCESS_TOKEN'),
+        'timeout' => 10,
+        'connect_timeout' => 5,
+        'batch_size' => 100, // Expo's limit per request
+    ],
+
     // Oldest app versions this server works with; /api/v1/instance tells the apps.
     'min_versions' => [
         'desktop' => env('APP_API_MIN_DESKTOP_VERSION', '0.1.0'),

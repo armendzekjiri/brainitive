@@ -20,7 +20,7 @@ locations, log/backup/analytics retention: unknown → `config/legal.php` / `LEG
 | Data | Where | Retention / deletion |
 |---|---|---|
 | name, email, password (bcrypt, `hashed` cast), avatar, bio, phone, timezone, preferences, `email_verified_at`, `last_login_at`, `suspended_at`, `terms_accepted_at` + `terms_version` (new) | `users` | until account deletion (hard delete) |
-| provider ids `google_id`, `github_id`, `microsoft_id` (`{tid}:{oid}`) — no provider tokens or avatars | `users` | with the account |
+| provider ids `google_id`, `github_id`, `microsoft_id` (`{tid}:{oid}`), `apple_id` (+ encrypted Apple refresh token, only for revocation on deletion) — no other provider tokens or avatars | `users` | with the account |
 | session: `user_id`, `ip_address`, `user_agent`, payload, last activity | `sessions` (driver `database`; Docker: redis) | lifetime 120 min, GC lottery |
 | remember-me token | `users.remember_token`, cookie `remember_web_*` | framework default ≈ 400 days; social logins always "remember" |
 | password reset tokens | `password_reset_tokens` | 60 min; **new:** `auth:clear-resets` daily |
@@ -59,6 +59,17 @@ Recipients: Google / Microsoft / Apple (only when connected).
 `push_subscriptions`: endpoint, keys, `user_agent`, `device_label`, success/error timestamps.
 Allowed services: FCM (Google), Mozilla, Apple, Windows (WNS). Payloads encrypted (Web Push).
 Expired subscriptions pruned 30 days after `expired_at`.
+
+### 4a. Mobile app (Expo) — C, (b) (v1.50.0; privacy policy § "Mobile app", 2026-11-04)
+
+Source of truth for the app side: the mobile repo's `docs/store/privacy.md`.
+`app_devices` per sign-in: `client`, `platform`, `name`, `os_version`, `app_version`, `last_ip`,
+`last_used_at`, token hashes, `push_token` (encrypted, optional). Push goes through the **Expo push
+service** (650 Industries, Inc., USA) → APNs / FCM, which see the token, title, body and `data.url`
+(`SendMobilePush`; token cleared on `DeviceNotRegistered`). Device-only: refresh token in
+keychain / keystore, offline cache + outbox + drafts (deleted on sign-out). No analytics / ads /
+crash SDKs. Sign in with Apple: `users.apple_id`, encrypted `apple_refresh_token` (only to revoke on
+account deletion). Expo safeguard (DPF / SCC) still to be confirmed (`/legal/subprocessors`).
 
 ## 5. Email — C (service mails) / P (helpdesk, lead and portal mails)
 

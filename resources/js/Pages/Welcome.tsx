@@ -2,6 +2,7 @@ import { PageProps } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { useState, useEffect, useRef } from 'react';
 import ApplicationLogo from '@/components/ApplicationLogo';
+import AppleSignInButton from '@/components/AppleSignInButton';
 import {
     LayoutDashboard,
     FolderKanban,
@@ -855,12 +856,14 @@ export default function Welcome({
     canLoginWithGoogle,
     canLoginWithGitHub,
     canLoginWithMicrosoft,
+    canLoginWithApple,
 }: PageProps<{
     laravelVersion?: string;
     phpVersion?: string;
     canLoginWithGoogle?: boolean;
     canLoginWithGitHub?: boolean;
     canLoginWithMicrosoft?: boolean;
+    canLoginWithApple?: boolean;
 }>) {
     const [scrolled, setScrolled] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -1320,7 +1323,7 @@ export default function Welcome({
                     icon: KeyRound,
                     title: 'Social login',
                     description:
-                        'Sign in with email, Google, GitHub or Microsoft — whatever your team prefers.',
+                        'Sign in with email, Google, GitHub, Microsoft or Apple — whatever your team prefers.',
                     isNew: true,
                 },
                 {
@@ -1608,7 +1611,7 @@ export default function Welcome({
                                             Log in
                                         </Link>
                                     </div>
-                                    {(canLoginWithGoogle || canLoginWithGitHub || canLoginWithMicrosoft) && (
+                                    {(canLoginWithGoogle || canLoginWithGitHub || canLoginWithMicrosoft || canLoginWithApple) && (
                                         <>
                                             <div className="flex items-center gap-3 w-full max-w-xs">
                                                 <span className="flex-1 h-px bg-border" />
@@ -1682,8 +1685,9 @@ export default function Welcome({
                                                         Continue with Microsoft
                                                     </a>
                                                 )}
+                                                {canLoginWithApple && <AppleSignInButton size="lg" />}
                                             </div>
-                                            <TermsNotice action="continuing with Google, GitHub or Microsoft for the first time" className="mt-3 text-center" />
+                                            <TermsNotice action="continuing with Google, GitHub, Microsoft or Apple for the first time" className="mt-3 text-center" />
                                         </>
                                     )}
                                 </>

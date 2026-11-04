@@ -24,7 +24,12 @@ final class SignInMethods
         return MicrosoftLogin::available();
     }
 
-    /** @return array{password: bool, google: bool, github: bool, microsoft: bool} */
+    public static function apple(): bool
+    {
+        return AppleLogin::available();
+    }
+
+    /** @return array{password: bool, google: bool, github: bool, microsoft: bool, apple: bool} */
     public static function all(): array
     {
         return [
@@ -32,6 +37,7 @@ final class SignInMethods
             'google' => self::google(),
             'github' => self::github(),
             'microsoft' => self::microsoft(),
+            'apple' => self::apple(),
         ];
     }
 }
