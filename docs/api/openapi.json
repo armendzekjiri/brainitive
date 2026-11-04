@@ -10632,6 +10632,184 @@
                 }
             }
         },
+        "/polls/{scopeType}/{scopeId}/{pollId}": {
+            "get": {
+                "operationId": "app.v1.polls.show",
+                "description": "`{data: {counts: {option_uid: n}, total, my_vote}}`. A doc / issue the user can't view \u2192 404.",
+                "summary": "A poll's results",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "scopeType",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "scopeId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "pollId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "counts": {
+                                                    "type": "string"
+                                                },
+                                                "total": {
+                                                    "type": "integer"
+                                                },
+                                                "my_vote": {}
+                                            },
+                                            "required": [
+                                                "counts",
+                                                "total",
+                                                "my_vote"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.polls.vote",
+                "description": "`{option_uid: string|null}` (null removes the vote) \u2192 the results. An option or poll that isn't in\nthe saved doc / issue \u2192 422.",
+                "summary": "Vote, change or remove the vote",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "scopeType",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "scopeId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "pollId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "option_uid": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "pattern": "^[A-Za-z0-9_-]+$",
+                                        "maxLength": 40
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "counts": {
+                                                    "type": "string"
+                                                },
+                                                "total": {
+                                                    "type": "integer"
+                                                },
+                                                "my_vote": {}
+                                            },
+                                            "required": [
+                                                "counts",
+                                                "total",
+                                                "my_vote"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
         "/whiteboards/{uuid}": {
             "get": {
                 "operationId": "app.v1.whiteboards.show",
