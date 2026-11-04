@@ -3,7 +3,7 @@ import type { LegalLinks } from '@/types';
 import { cn } from '@/lib/utils';
 
 /**
- * Imprint · Privacy · Terms · Cookies · Sub-processors (BRAI-156), from the shared `legalLinks`
+ * Imprint · Privacy · Terms · Cookies · Sub-processors (BRAI-156) · Support (mobile app help), from the shared `legalLinks`
  * prop (LegalInfo::links). Documents an install doesn't have (self-hosted: imprint without operator
  * data, the Cloud-only sub-processor list / DPA / refund policy) are left out.
  */
@@ -26,6 +26,7 @@ export function LegalFooterLinks({
         ['Terms', links.terms],
         ['Cookies', links.cookies],
         ['Sub-processors', links.subprocessors],
+        ['Support', links.support],
         ...(extended ? ([['DPA', links.dpa], ['Refund policy', links.refund]] as [string, string | null][]) : []),
     ];
 

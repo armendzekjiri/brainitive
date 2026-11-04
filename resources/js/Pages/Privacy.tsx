@@ -24,6 +24,7 @@ const TOC = [
     { id: 'ai', title: 'AI features and AI connectors' },
     { id: 'public-pages', title: 'Customers’ public pages' },
     { id: 'extension', title: 'Browser extension' },
+    { id: 'mobile', title: 'Mobile app' },
     { id: 'device', title: 'Cookies and storage on your device' },
     { id: 'recipients', title: 'Recipients and processors' },
     { id: 'transfers', title: 'Transfers outside the EU/EEA' },
@@ -105,8 +106,8 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                         customers’ pages or on links that contain a secret.
                     </li>
                     <li>
-                        Google, Microsoft, GitHub, AI services and browser push services only receive data when you (or your workspace) choose to
-                        use the matching feature.
+                        Google, Microsoft, GitHub, Apple, AI services and push services only receive data when you (or your workspace) choose
+                        to use the matching feature.
                     </li>
                     <li>
                         Brainitive runs on servers of {p.hosting ?? 'OVHcloud'}; e-mails are delivered through {p.email ?? 'MXroute'}.
@@ -198,6 +199,12 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                     e-mail address — no access tokens of these providers. The providers’ own privacy policies apply on their side.
                 </p>
                 <p>
+                    <strong>Sign in with Apple:</strong> if you choose it, Apple confirms your identity and sends us a user ID, your e-mail address
+                    (or, if you choose “Hide My Email”, an Apple relay address that forwards to you) and — only the first time — your name
+                    (<em>name, email</em>). We store the ID, your name and e-mail address, and a token from Apple (encrypted) that we use only to
+                    revoke your Apple sign-in when you delete your account. Apple’s privacy policy applies on its side.
+                </p>
+                <p>
                     <strong>Security data:</strong> for each signed-in session we keep your IP address, browser and last activity, so that you stay
                     signed in and can sign out other devices; we also store when you last signed in. Sign-in attempts are rate-limited by e-mail
                     and IP address for a short time. Requests of AI connectors (see section {n('ai')}) are currently logged with IP address and
@@ -256,6 +263,9 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                     short description of the browser and device, and when messages last succeeded. Message contents are encrypted for your browser
                     as the Web Push standard requires; the push service only sees that a message is sent. You can switch push off per device at
                     any time.
+                </p>
+                <p>
+                    <strong>Push notifications in the mobile app</strong> (optional) work differently; see section {n('mobile')}.
                 </p>
                 <p>Legal basis: Art. 6 (1) (b) GDPR — the e-mails and notifications are part of the service you use.</p>
             </LegalSection>
@@ -337,6 +347,53 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                 </p>
             </LegalSection>
 
+            <LegalSection id="mobile" num={n('mobile')} title="Mobile app">
+                <p>
+                    The Brainitive app for iPhone and Android talks only to the Brainitive server you sign in to — Brainitive Cloud or a server you
+                    or your organisation run yourselves (then its operator is responsible for the data on it, not us). What you see and create in
+                    the app is processed as described in the rest of this policy.
+                </p>
+                <ul>
+                    <li>
+                        <strong>Signing in</strong> happens in your phone’s browser on the server’s sign-in page (with Apple, Google, e-mail and
+                        password or another method the server offers); the app never sees your password. When you sign in, the app tells the server
+                        the device name (or model), the platform, the system version and the app version, so you can recognise and sign out the
+                        device under your signed-in devices.
+                    </li>
+                    <li>
+                        <strong>Push notifications</strong> (optional, only if you turn them on under Account → Notifications and allow them): your
+                        phone gives the app a push token, which we store (encrypted) with the device. To deliver a notification we send the token,
+                        the notification’s title and text, and a link inside the app to <strong>Expo’s push service</strong> (650 Industries, Inc.,
+                        USA), which passes it on to <strong>Apple Push Notification service</strong> (iPhone) or{' '}
+                        <strong>Firebase Cloud Messaging</strong> by Google (Android). Turn notifications off in the app or in your phone’s settings
+                        at any time.
+                    </li>
+                    <li>
+                        <strong>On your device:</strong> the app keeps its sign-in tokens in the phone’s secure storage (iOS Keychain / Android
+                        Keystore), and a copy of recently viewed data, changes you made while offline that are waiting to be sent, unsaved drafts and
+                        your recent searches in its own storage, so it works with a weak connection. This stays on your device; the sign-in tokens,
+                        the offline copy, waiting changes and drafts are deleted when you sign out or remove the server from the app.
+                    </li>
+                    <li>
+                        <strong>Camera and photos</strong> are used only when you choose to add a picture (for example to an issue, a doc or your
+                        profile); only the picture you pick is uploaded. Content you share into the app from other apps is only sent when you save it.
+                    </li>
+                    <li>
+                        <strong>No tracking:</strong> the app contains no analytics, advertising, attribution or crash-reporting tools, does not track
+                        you across apps or websites and does not use your advertising ID, location, contacts or microphone.
+                    </li>
+                    <li>
+                        <strong>Deleting your account:</strong> in the app under Account → Delete account (this opens the web page where you confirm),
+                        or on the web under Profile settings → Delete account. See section {n('retention')}. Uninstalling the app or signing out does
+                        not delete your account.
+                    </li>
+                </ul>
+                <p>
+                    Legal basis: Art. 6 (1) (b) GDPR (providing the app and the notifications you asked for). Access to the camera, photos and
+                    notifications always needs your permission in the phone’s settings, which you can withdraw there.
+                </p>
+            </LegalSection>
+
             <LegalSection id="device" num={n('device')} title="Cookies and storage on your device">
                 <p>
                     We only use cookies and browser storage that are strictly necessary for the service you asked for (§ 25 (2) no. 2 TDDDG): the
@@ -355,6 +412,12 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                         [p.email ?? 'MXroute', 'Delivering e-mails', 'For e-mails we send'],
                         ['Google, Microsoft, GitHub', 'Sign-in, calendars, tasks, meetings, repositories', 'Only if you use the integration'],
                         ['The push service of your browser (Google, Mozilla, Apple, Microsoft)', 'Delivering push notifications', 'Only if you enable push'],
+                        [
+                            'Expo (650 Industries, Inc., USA), then Apple (APNs) or Google (Firebase Cloud Messaging)',
+                            'Delivering push notifications to the mobile app',
+                            'Only if you turn notifications on in the app',
+                        ],
+                        ['Apple', 'Sign in with Apple', 'Only if you sign in with Apple'],
                         ['The AI service chosen by your workspace', 'AI features', 'Only if your workspace enables them'],
                         ['Paddle.com Market Ltd (United Kingdom, merchant of record)', 'Selling and billing paid plans', 'Only for workspaces on a paid plan'],
                         ['Members of your workspace', 'Collaboration', 'According to their role'],
@@ -370,7 +433,7 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
             <LegalSection id="transfers" num={n('transfers')} title="Transfers outside the EU/EEA">
                 <p>
                     Where a recipient processes data in a country outside the EU/EEA — in particular the US providers of integrations you choose
-                    (Google, Microsoft, GitHub) and of browser push services — the transfer is based on an adequacy decision of the European
+                    (Google, Microsoft, GitHub, Apple) and of browser and mobile push services (including Expo) — the transfer is based on an adequacy decision of the European
                     Commission (for the USA: the EU-U.S. Data Privacy Framework, for certified companies) or on the EU Standard Contractual Clauses
                     (Art. 45, 46 GDPR). Paddle (paid plans) is in the United Kingdom, for which an adequacy decision applies. The safeguard for
                     each of our processors is listed on the sub-processors page.
@@ -390,6 +453,7 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                         ['Access tokens of AI connectors, the CLI and the extension', '30 days (renewal: 60 days); expired and revoked tokens are deleted'],
                         ['Notifications in your inbox', 'Archived ones after 90 days, all after 180 days'],
                         ['Push subscriptions', 'Until you switch push off; 30 days after the push service reports them invalid'],
+                        ['Push token of the mobile app', 'Until you turn notifications off in the app, or until the push service reports it invalid'],
                         ['Form statistics (view / start / step)', '91 days'],
                         ['Technical log of incoming support e-mails', '180 days'],
                         ['GitHub deliveries / outgoing webhook deliveries', '14 days / 30 days'],
