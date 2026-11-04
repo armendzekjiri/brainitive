@@ -43,7 +43,10 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Release v1.50.0: Sign in with Apple + mobile push delivery (server side)](./release-v1.50.0.md) | done |
+| [Sign in with Apple (BRAI-449)](./feat-sign-in-with-apple.md) | done |
 | [Push delivery to the mobile app: Expo push service (BRAI-448)](./feat-mobile-push.md) | done |
+| [Brainitive Mobile: scope, board restructure and foundation](./chore-mobile-foundation.md) | done |
 | [Release v1.49.0: App API v1 foundation + native sign-in (desktop phase 01–02, server side)](./release-v1.49.0.md) | in progress |
 | [Release v1.47.0: the Brainitive CLI (Go binary, one-line install, MCP client + stdio bridge) and MCP project setup / bulk import tools](./release-v1.47.0.md) | done |
 | [Release v1.38.0: time tracking & client billing (BRAI-99/100/101)](./release-v1.38.0-billing.md) | done |

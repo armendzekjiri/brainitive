@@ -101,6 +101,18 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.50.0',
+        title: 'Sign in with Apple and push notifications on your phone',
+        tag: 'Feature',
+        date: '2026-11-04',
+        items: [
+            'Sign in with Apple: next to email, Google, GitHub and Microsoft, on the login page, the homepage and the sign-in page of the Brainitive apps. Your first Apple sign-in creates your account (when sign-up is open) or links to the existing account with the same verified email, including Apple’s “Hide My Email” addresses.',
+            'Brainitive Mobile (coming soon): the server side of push notifications is ready. Every notification category with Push turned on in Profile → Notifications also reaches the phones you signed in to the app, just like browser push, with your unread count on the app icon. Each push carries the link to what it is about, so the app can open it.',
+            'Signed-out or uninstalled apps stop getting pushes automatically, and Profile → Notifications → Revoke on a phone stops them at once.',
+            'Self-hosted: add the new migration (php artisan migrate). To offer Sign in with Apple, set APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID and APPLE_PRIVATE_KEY (see docs.brainitive.app → Integrations → Apple). Mobile push goes through Expo’s push service (exp.host) and needs the queue worker for retries; MOBILE_PUSH_ENABLED=false turns it off.',
+        ]
+    },
+    {
         version: 'v1.49.0',
         title: 'Desktop app support, app sign-in and a public API',
         tag: 'Feature',
