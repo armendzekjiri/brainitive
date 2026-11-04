@@ -6,6 +6,7 @@ use App\Models\Item;
 use App\Models\Page;
 use App\Models\PollVote;
 use App\Models\User;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -19,7 +20,8 @@ class PollVotes
     public static function scope(User $user, string $scopeType, string $scopeId): Page|Item|null
     {
         $model = match ($scopeType) {
-            'page' => Page::where('uuid', $scopeId)->first(),
+            // a malformed uuid would be a PostgreSQL error (500), not the promised 404
+            'page' => Str::isUuid($scopeId) ? Page::where('uuid', $scopeId)->first() : null,
             'item' => ctype_digit($scopeId) ? Item::find((int) $scopeId) : null,
             default => null,
         };
@@ -27,9 +29,16 @@ class PollVotes
         return $model && $user->can('view', $model) ? $model : null;
     }
 
-    /** Set (or with null remove) the user's vote; only polls and options of the saved doc / issue. */
-    public static function vote(Page|Item $scope, User $user, string $scopeType, string $scopeId, string $pollId, ?string $optionUid): void
+    /** The scope's own id as votes are stored ("007" / an upper-case uuid → the record's id). */
+    public static function scopeId(Page|Item $scope): string
     {
+        return $scope instanceof Page ? (string) $scope->uuid : (string) $scope->id;
+    }
+
+    /** Set (or with null remove) the user's vote; only polls and options of the saved doc / issue. */
+    public static function vote(Page|Item $scope, User $user, string $scopeType, string $pollId, ?string $optionUid): void
+    {
+        $scopeId = self::scopeId($scope);
         // no made-up vote rows (Codex web review E)
         if ($optionUid !== null && $optionUid !== '' && ! PollDocuments::allows($scope, $user, $pollId, $optionUid)) {
             throw ValidationException::withMessages(['option_uid' => 'This poll or option doesn’t exist (any more). Reload the page.']);
@@ -46,8 +55,9 @@ class PollVotes
     /**
      * @return array{counts: object, total: int, my_vote: ?string}
      */
-    public static function results(User $user, string $scopeType, string $scopeId, string $pollId): array
+    public static function results(User $user, Page|Item $scope, string $scopeType, string $pollId): array
     {
+        $scopeId = self::scopeId($scope);
         $votes = PollVote::where(['scope_type' => $scopeType, 'scope_id' => $scopeId, 'poll_id' => $pollId]);
         $counts = (clone $votes)->selectRaw('option_uid, count(*) as total')->groupBy('option_uid')->pluck('total', 'option_uid')->map(fn ($n) => (int) $n);
 

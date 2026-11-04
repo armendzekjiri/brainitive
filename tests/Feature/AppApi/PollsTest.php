@@ -71,5 +71,21 @@ class PollsTest extends TestCase
         $this->postJson("/api/v1/polls/item/{$item->id}/p-xyz", ['option_uid' => 'yes'], $viewer)->assertOk()->assertJsonPath('data.my_vote', 'yes');
         $this->getJson("/api/v1/polls/item/{$item->id}/p-xyz", $this->appHeaders($this->appToken($this->outsider)))->assertNotFound();
         $this->getJson('/api/v1/polls/item/abc/p-xyz', $viewer)->assertNotFound();
+
+        // the record's own id, however the client spells it: one tally
+        $this->postJson("/api/v1/polls/item/00{$item->id}/p-xyz", ['option_uid' => 'no'], $viewer)->assertOk()
+            ->assertJson(['data' => ['total' => 1, 'my_vote' => 'no']]);
+        $this->assertSame([(string) $item->id], PollVote::pluck('scope_id')->all());
+    }
+
+    public function test_a_malformed_doc_id_is_a_404_not_a_server_error(): void
+    {
+        $viewer = $this->appHeaders($this->appToken($this->viewer));
+        $this->getJson('/api/v1/polls/page/not-a-uuid/p1', $viewer)->assertNotFound();
+        $this->postJson('/api/v1/polls/page/not-a-uuid/p1', ['option_uid' => 'a'], $viewer)->assertNotFound();
+
+        $page = $this->publishedPage(['content' => $this->html($this->poll('p-real', ['a', 'b']))]);
+        $this->postJson('/api/v1/polls/page/'.strtoupper($page->uuid).'/p-real', ['option_uid' => 'a'], $viewer)->assertOk();
+        $this->assertSame([(string) $page->uuid], PollVote::pluck('scope_id')->all());
     }
 }

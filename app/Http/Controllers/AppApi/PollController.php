@@ -22,9 +22,10 @@ class PollController extends Controller
      */
     public function show(Request $request, string $scopeType, string $scopeId, string $pollId): JsonResponse
     {
-        abort_unless(PollVotes::scope($request->user(), $scopeType, $scopeId) !== null, 404);
+        $scope = PollVotes::scope($request->user(), $scopeType, $scopeId);
+        abort_unless($scope !== null, 404);
 
-        return response()->json(['data' => PollVotes::results($request->user(), $scopeType, $scopeId, $pollId)]);
+        return response()->json(['data' => PollVotes::results($request->user(), $scope, $scopeType, $pollId)]);
     }
 
     /**
@@ -38,8 +39,8 @@ class PollController extends Controller
         $scope = PollVotes::scope($request->user(), $scopeType, $scopeId);
         abort_unless($scope !== null, 404);
         $validated = $request->validate(PollVotes::rules());
-        PollVotes::vote($scope, $request->user(), $scopeType, $scopeId, $pollId, $validated['option_uid'] ?? null);
+        PollVotes::vote($scope, $request->user(), $scopeType, $pollId, $validated['option_uid'] ?? null);
 
-        return response()->json(['data' => PollVotes::results($request->user(), $scopeType, $scopeId, $pollId)]);
+        return response()->json(['data' => PollVotes::results($request->user(), $scope, $scopeType, $pollId)]);
     }
 }

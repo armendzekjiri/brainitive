@@ -15,18 +15,18 @@ class PollVoteController extends Controller
 {
     public function show(Request $request, string $scopeType, string $scopeId, string $pollId): JsonResponse
     {
-        $this->authorizeScope($request, $scopeType, $scopeId);
+        $scope = $this->authorizeScope($request, $scopeType, $scopeId);
 
-        return response()->json(PollVotes::results($request->user(), $scopeType, $scopeId, $pollId));
+        return response()->json(PollVotes::results($request->user(), $scope, $scopeType, $pollId));
     }
 
     public function vote(Request $request, string $scopeType, string $scopeId, string $pollId): JsonResponse
     {
         $scope = $this->authorizeScope($request, $scopeType, $scopeId);
         $validated = $request->validate(PollVotes::rules());
-        PollVotes::vote($scope, $request->user(), $scopeType, $scopeId, $pollId, $validated['option_uid'] ?? null);
+        PollVotes::vote($scope, $request->user(), $scopeType, $pollId, $validated['option_uid'] ?? null);
 
-        return response()->json(PollVotes::results($request->user(), $scopeType, $scopeId, $pollId));
+        return response()->json(PollVotes::results($request->user(), $scope, $scopeType, $pollId));
     }
 
     private function authorizeScope(Request $request, string $scopeType, string $scopeId): Page|Item
