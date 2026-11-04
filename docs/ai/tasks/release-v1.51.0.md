@@ -8,6 +8,7 @@
 ## Ticket branches (merged into release/v1.51.0)
 - `feat/api-whiteboard-live`: App API live whiteboard drawing (`collab-token`, `collab/bootstrap`, `collab/scene`, `live` on whiteboards) + poll votes (`GET|POST /api/v1/polls/…`, shared `Support\Polls\PollVotes`). [plan](./feat-api-whiteboard-live.md)
   - security review fixes: malformed doc id → 404, votes stored under the record's own id, TV refusal covers polls.
+- `feat/push-origin`: `data.origin` in mobile pushes (the app opens a push on the server that sent it; mobile security review).
 - `fix/docs-site-vite`: docs-site vite 6.4.5 (Dependabot #256).
 
 ## Release content

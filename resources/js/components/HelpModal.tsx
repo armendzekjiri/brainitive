@@ -108,6 +108,7 @@ const CHANGELOG = [
         items: [
             'Brainitive Mobile (coming soon): draw on whiteboards live with your team from a tablet — the same live drawing as in the browser, signed in per device and stopped at once when the device is signed out.',
             'Brainitive Mobile: vote in polls inside docs and issue descriptions, like on the web.',
+            'Brainitive Mobile: a notification opens on the server that sent it, also when the app is signed in to several servers.',
             'Poll votes: a vote is always counted for the right doc or issue, however the address is written, and a malformed address answers “not found” instead of an error.',
             'Docs site: updated its build tool (security fix for the local preview server).',
         ]
