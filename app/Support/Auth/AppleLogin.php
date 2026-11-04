@@ -24,6 +24,8 @@ use Throwable;
  *  - id = `sub` (stable per developer team). The email is trusted only with `email_verified` —
  *    private relay addresses (@privaterelay.appleid.com) included: Apple verified and forwards them.
  *  - The name is never in the id_token: Apple sends it once, in the first callback's `user` field.
+ *  - The refresh token of the exchange is kept (encrypted) only to revoke the authorization when the
+ *    account is deleted (App Store guideline 5.1.1(v)) — see App\Jobs\RevokeAppleToken.
  */
 class AppleLogin
 {
@@ -34,6 +36,8 @@ class AppleLogin
     public const TOKEN_URL = 'https://appleid.apple.com/auth/token';
 
     public const KEYS_URL = 'https://appleid.apple.com/auth/keys';
+
+    public const REVOKE_URL = 'https://appleid.apple.com/auth/revoke';
 
     private const JWKS_CACHE = 'auth:apple:jwks';
 
@@ -77,7 +81,7 @@ class AppleLogin
     /**
      * Swap the code for tokens and read who signed in.
      *
-     * @return array{id: string, email: string|null, private_email: bool}
+     * @return array{id: string, email: string|null, private_email: bool, refresh_token: string|null}
      *
      * @throws AppleLoginFailed with a message for the user
      */
@@ -132,6 +136,7 @@ class AppleLogin
             'id' => $claims['sub'],
             'email' => $trusted ? strtolower($email) : null,
             'private_email' => self::isTrue($claims['is_private_email'] ?? null),
+            'refresh_token' => is_string($refresh = $response->json('refresh_token')) && $refresh !== '' && strlen($refresh) <= 2048 ? $refresh : null,
         ];
     }
 

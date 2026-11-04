@@ -26,6 +26,18 @@ How accounts are matched:
 - Apple shares your name only the first time you sign in with Apple. If you didn't share it, change it later in
   **Profile**.
 
+## Deleting your account
+
+When you delete your Brainitive account (or an admin deletes it), Brainitive also tells Apple to revoke its
+access to your Apple ID, so Brainitive disappears from **Settings → Apple ID → Sign in with Apple** on your
+devices. To do that, Brainitive keeps the refresh token Apple hands out at sign-in, encrypted, and uses it for
+nothing else.
+
+The revoke runs in the background and is retried for a few hours if Apple doesn't answer. It never stops the
+deletion. Accounts that last signed in with Apple before Brainitive kept this token can't be revoked
+automatically. Remove Brainitive under **Settings → Apple ID → Sign in with Apple** yourself, or sign in with
+Apple once more before deleting the account.
+
 ## Self-hosting: set up Sign in with Apple
 
 You need a paid [Apple Developer Program](https://developer.apple.com/programs/) membership, and Brainitive must

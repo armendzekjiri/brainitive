@@ -142,6 +142,11 @@ class AppleAuthController extends Controller
             return $this->fail(self::SUSPENDED);
         }
 
+        // the newest refresh token, only to revoke the authorization when the account is deleted
+        if ($identity['refresh_token'] !== null) {
+            $user->forceFill(['apple_refresh_token' => $identity['refresh_token']])->save();
+        }
+
         Auth::login($user, true);
         $request->session()->regenerate();
 

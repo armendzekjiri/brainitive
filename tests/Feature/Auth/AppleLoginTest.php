@@ -13,6 +13,7 @@ use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
@@ -40,6 +41,9 @@ class AppleLoginTest extends TestCase
 
     /** What the faked token endpoint answers: [json body, status]. */
     private array $tokenAnswer = [[], 200];
+
+    /** The refresh_token the faked token endpoint answers with (null: none). */
+    private ?string $refreshToken = null;
 
     protected function setUp(): void
     {
@@ -310,6 +314,32 @@ class AppleLoginTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_the_refresh_token_is_stored_encrypted_and_replaced_by_the_newest_one(): void
+    {
+        $this->signIn()->assertRedirect(route('dashboard', absolute: false));
+        $user = User::query()->where('apple_id', self::SUB)->firstOrFail();
+        $this->assertNull($user->apple_refresh_token); // Apple sent none
+
+        $this->post(route('logout'));
+        $this->refreshToken = 'r1.first-refresh-token';
+        $this->signIn()->assertRedirect(route('dashboard', absolute: false));
+        $this->assertSame('r1.first-refresh-token', $user->fresh()->apple_refresh_token);
+        $raw = DB::table('users')->where('id', $user->id)->value('apple_refresh_token');
+        $this->assertStringNotContainsString('first-refresh-token', $raw);
+        $this->assertArrayNotHasKey('apple_refresh_token', $user->fresh()->toArray());
+
+        $this->post(route('logout'));
+        $this->refreshToken = 'r1.second-refresh-token';
+        $this->signIn()->assertRedirect(route('dashboard', absolute: false));
+        $this->assertSame('r1.second-refresh-token', $user->fresh()->apple_refresh_token);
+
+        // a sign-in without one keeps the stored token
+        $this->post(route('logout'));
+        $this->refreshToken = null;
+        $this->signIn()->assertRedirect(route('dashboard', absolute: false));
+        $this->assertSame('r1.second-refresh-token', $user->fresh()->apple_refresh_token);
+    }
+
     public function test_the_name_field_is_read_defensively(): void
     {
         $this->assertSame('Ada Lovelace', AppleLogin::nameFromUserField('{"name":{"firstName":" Ada ","lastName":"Lovelace"}}'));
@@ -346,7 +376,12 @@ class AppleLoginTest extends TestCase
             'email' => 'person@example.com',
             'email_verified' => true,
         ], $claims), fn ($v) => $v !== null);
-        $this->tokenAnswer = [['access_token' => 'at', 'token_type' => 'Bearer', 'id_token' => JWT::encode($payload, $key ?? self::$appleKey, 'RS256', $kid ?? self::KID)], 200];
+        $this->tokenAnswer = [array_filter([
+            'access_token' => 'at',
+            'token_type' => 'Bearer',
+            'id_token' => JWT::encode($payload, $key ?? self::$appleKey, 'RS256', $kid ?? self::KID),
+            'refresh_token' => $this->refreshToken,
+        ], fn ($v) => $v !== null), 200];
 
         $form = ['code' => 'auth-code', 'state' => $flow['state']];
         if ($user !== null) {
