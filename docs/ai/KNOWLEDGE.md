@@ -557,6 +557,12 @@ the allowlist renaming only.
 - Password change / reset → `SignOutEverywhere` (sessions, remember token, all OAuth + CLI tokens).
   Users revoke apps under Profile → Connected apps.
 - Web push endpoints must be a known push service (`PushSubscriptionController::PUSH_HOSTS`).
+- **Expo push receipts need a real queue.** A ticket `ok` only means Expo accepted the message;
+  `DeviceNotRegistered` for an uninstalled app usually shows up only in the *receipt*, ready ~15 min later.
+  `SendMobilePush` therefore dispatches `CheckMobilePushReceipts` with a 900 s delay — only when it runs on a
+  real queue: the sync driver ignores delays, so the check would run at once and find nothing (sync installs
+  rely on tickets alone). The receipt job carries device ids + a SHA-256 of the token sent, never the token,
+  and clears the token only while the hash still matches (the app may have registered a new one meanwhile).
 - `FrameProtection` (web): pages without their own CSP get `frame-ancestors 'self'`; embeds keep
   `frame-ancestors *`.
 

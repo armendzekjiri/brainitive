@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Mobile push: Expo push receipts + "Send a test notification"](./feat-mobile-push-receipts.md) | done |
 | [Release v1.50.0: Sign in with Apple + mobile push delivery (server side)](./release-v1.50.0.md) | done |
 | [Sign in with Apple (BRAI-449)](./feat-sign-in-with-apple.md) | done |
 | [Push delivery to the mobile app: Expo push service (BRAI-448)](./feat-mobile-push.md) | done |
