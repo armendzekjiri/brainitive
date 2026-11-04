@@ -445,6 +445,9 @@ the instance sets `MOBILE_PUSH_ENABLED=false`. The Expo message:
   next start); other receipt errors are logged server-side. Only on a real queue (a sync queue can't delay).
 - **`data.notification_id`**: the inbox row's `id` (`POST /notifications/{id}/read` on tap). A push-only type
   (calendar reminders) or a user with in-app off has no inbox row for it: a 404 there is expected, ignore it.
+- **`data.origin`** (v1.51.0+): the sending server's origin (from `APP_URL`, scheme + host + port). One push token is
+  registered on every server the app is signed in to: open the push on that server (switch to it when it's a saved,
+  signed-in server; ignore it otherwise), never resolve its `url` against whichever server is current.
 
 ### Connected apps
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
