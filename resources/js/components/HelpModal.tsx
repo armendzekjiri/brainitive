@@ -110,6 +110,7 @@ const CHANGELOG = [
             'Brainitive Mobile: vote in polls inside docs and issue descriptions, like on the web.',
             'Brainitive Mobile: a notification opens on the server that sent it, also when the app is signed in to several servers.',
             'Poll votes: a vote is always counted for the right doc or issue, however the address is written, and a malformed address answers “not found” instead of an error.',
+            'Privacy policy 2.5: the mobile app only uses the photo picker, never the camera.',
             'Docs site: updated its build tool (security fix for the local preview server).',
         ]
     },
