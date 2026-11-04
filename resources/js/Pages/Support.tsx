@@ -2,7 +2,7 @@ import { usePage } from '@inertiajs/react';
 import { LifeBuoy } from 'lucide-react';
 import { ContactEmail, LegalLayout, LegalSection } from '@/components/legal/LegalLayout';
 import { DOCS_URL } from '@/lib/docs';
-import type { LegalPageData } from '@/types';
+import type { LegalPageData, PageProps } from '@/types';
 
 /*
  * Support (mobile app help): the public support URL of the Brainitive app in the App Store and on
@@ -23,7 +23,7 @@ const TOC = [
 ];
 
 export default function Support({ legal }: { legal: LegalPageData }) {
-    const githubRepo = (usePage().props as { githubRepo?: { url: string } }).githubRepo;
+    const { githubRepo } = usePage<PageProps>().props;
     const issuesUrl = githubRepo?.url ? `${githubRepo.url.replace(/\/$/, '')}/issues` : null;
     const n = (id: string) => TOC.findIndex((t) => t.id === id) + 1;
     const web = legal.cloud ? 'www.brainitive.app' : (legal.host ?? 'the web address of your server');
@@ -113,7 +113,7 @@ export default function Support({ legal }: { legal: LegalPageData }) {
                     go to <strong>Profile settings → Delete account</strong>{' '}
                     {legal.cloud ? (
                         <>
-                            (<a href="/profile">{web}/profile</a>)
+                            (<a href={route('profile.edit')}>{web}/profile</a>)
                         </>
                     ) : null}
                     .
