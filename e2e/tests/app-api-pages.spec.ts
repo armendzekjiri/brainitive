@@ -24,7 +24,7 @@ test.describe('app api: docs', () => {
         const doc = await create({ name, parent_uuid: folder.uuid, markdown: '## From the app\n\n- first point' });
         expect(doc).toMatchObject({ kind: 'doc', status: 'draft', parent_uuid: folder.uuid, version: 0 });
 
-        const edited = await ok(await page.request.patch(`/api/v1/pages/${doc.uuid}`, { headers: auth, data: { markdown: '## From the app\n\n- second point', revision: doc.revision } }));
+        const edited = await ok(await page.request.patch(`/api/v1/pages/${doc.uuid}`, { headers: auth, data: { markdown: '## From the app\n\n- second point\n\n| Fruit | Qty |\n| --- | ---: |\n| Kiwi | 7 |', revision: doc.revision } }));
         expect(edited.data.markdown).toContain('second point');
         const stale = await page.request.patch(`/api/v1/pages/${doc.uuid}`, { headers: auth, data: { markdown: 'lost', revision: doc.revision } });
         expect(stale.status()).toBe(409);
@@ -38,6 +38,9 @@ test.describe('app api: docs', () => {
         await page.goto(`${projectPath(SEED.project)}/pages/${doc.uuid}`);
         await expect(page.getByText('second point').first()).toBeVisible();
         await expect(page.getByText('first point')).toHaveCount(0);
+        // a Markdown table is the editor's table, not `| … |` text
+        await expect(page.locator('table td').filter({ hasText: 'Kiwi' })).toBeVisible();
+        await expect(page.getByText('| Fruit')).toHaveCount(0);
 
         await page.request.post('/api/v1/auth/logout', { headers: auth });
     });

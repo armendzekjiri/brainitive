@@ -66,6 +66,30 @@ class PageMcpToolsTest extends TestCase
         $this->assertDatabaseHas('page_versions', ['page_id' => $page->id, 'version' => 2, 'message' => 'Edited via MCP', 'created_by' => $this->editor->id]);
     }
 
+    public function test_create_page_writes_markdown_tables_as_editor_tables_and_get_page_reads_them_back(): void
+    {
+        $markdown = "## Prices\n\n| Item | Price |\n| :--- | ---: |\n| **Tea** | 3 |\n| Coffee | 4 |";
+
+        BrainitiveServer::actingAs($this->editor)
+            ->tool(CreatePageTool::class, $this->scope() + ['title' => 'Price list', 'markdown' => $markdown])
+            ->assertOk();
+
+        $page = Page::where('name', 'Price list')->firstOrFail();
+        $this->assertStringContainsString(
+            '<table><tbody><tr><th><p style="text-align: left;">Item</p></th><th><p style="text-align: right;">Price</p></th></tr>'
+            .'<tr><td><p style="text-align: left;"><strong>Tea</strong></p></td>',
+            $page->content['html'],
+        );
+        $this->assertStringNotContainsString('| Item |', $page->content['html']);
+
+        BrainitiveServer::actingAs($this->editor)
+            ->tool(GetPageTool::class, $this->scope() + ['page_uuid' => $page->uuid])
+            ->assertOk()
+            ->assertSee('| Item | Price |')
+            ->assertSee('| :--- | ---: |')
+            ->assertSee('| **Tea** | 3 |');
+    }
+
     public function test_viewers_cannot_update_or_create_through_mcp(): void
     {
         $page = $this->publishedPage();

@@ -65,6 +65,14 @@ class PageContentConverter
                 continue;
             }
 
+            // GFM table: a header row, then the |---|:--:| delimiter row with the same cell count.
+            if (self::tableStartsAt($lines, $i)) {
+                [$table, $i] = self::table($lines, $i, $count);
+                $html[] = $table;
+
+                continue;
+            }
+
             // Fenced code block.
             if (preg_match('/^```\s*([\w+-]*)\s*$/', $line, $m)) {
                 $code = [];
@@ -130,6 +138,7 @@ class PageContentConverter
             $i++;
             while ($i < $count
                 && trim($lines[$i]) !== ''
+                && ! self::tableStartsAt($lines, $i)
                 && ! preg_match('/^(#{1,6}\s|```|>\s?|\s*[-*+]\s+|\s*\d+[.)]\s+|(-{3,}|\*{3,}|_{3,})\s*$)/', $lines[$i])) {
                 $para[] = $lines[$i];
                 $i++;
@@ -138,6 +147,146 @@ class PageContentConverter
         }
 
         return implode('', $html);
+    }
+
+    /** One GFM delimiter cell: `---`, `:--`, `--:` or `:-:`. */
+    private const DELIMITER_CELL = '/^:?-+:?$/';
+
+    /**
+     * A GFM table starts here: this line has a pipe and the next one is a delimiter row with as many cells.
+     *
+     * @param  array<int, string>  $lines
+     */
+    private static function tableStartsAt(array $lines, int $i): bool
+    {
+        $header = $lines[$i] ?? null;
+        $delimiter = $lines[$i + 1] ?? null;
+        if ($header === null || $delimiter === null || ! self::hasPipe($header) || ! str_contains($delimiter, '|')) {
+            return false;
+        }
+        // indented 4+ spaces is code in CommonMark, not a table
+        if (preg_match('/^ {4,}/', $header)) {
+            return false;
+        }
+        $cells = self::tableCells($delimiter);
+        foreach ($cells as $cell) {
+            if (! preg_match(self::DELIMITER_CELL, $cell)) {
+                return false;
+            }
+        }
+
+        return $cells !== [] && count($cells) === count(self::tableCells($header));
+    }
+
+    /**
+     * The table starting at $i (tableStartsAt) → HTML in the shape the Lexical editor imports as its own table:
+     * every cell holds a paragraph, the header row uses <th>, a column's alignment is its paragraphs' text-align
+     * (Lexical keeps alignment on the paragraph, not the cell). Body rows run until a blank line or a line without
+     * a pipe; a short row is padded, a long one cut to the header's width, like GitHub does.
+     *
+     * @param  array<int, string>  $lines
+     * @return array{0: string, 1: int}
+     */
+    private static function table(array $lines, int $i, int $count): array
+    {
+        $header = self::tableCells($lines[$i]);
+        $aligns = array_map(fn (string $cell) => match (true) {
+            str_starts_with($cell, ':') && str_ends_with($cell, ':') => 'center',
+            str_ends_with($cell, ':') => 'right',
+            str_starts_with($cell, ':') => 'left',
+            default => null,
+        }, self::tableCells($lines[$i + 1]));
+        $end = self::tableEnd($lines, $i, $count);
+        $rows = array_map(fn (string $line) => self::tableCells($line), array_slice($lines, $i + 2, $end - $i - 2));
+        $i = $end;
+
+        $width = count($header);
+        $row = function (array $cells, string $tag) use ($width, $aligns): string {
+            $out = '<tr>';
+            for ($c = 0; $c < $width; $c++) {
+                $style = $aligns[$c] !== null ? ' style="text-align: '.$aligns[$c].';"' : '';
+                $text = str_replace('\|', '|', $cells[$c] ?? '');
+                $out .= "<{$tag}><p{$style}>".self::inline($text)."</p></{$tag}>";
+            }
+
+            return $out.'</tr>';
+        };
+
+        $html = '<table><tbody>'.$row($header, 'th');
+        foreach ($rows as $cells) {
+            $html .= $row($cells, 'td');
+        }
+
+        return [$html.'</tbody></table>', $i];
+    }
+
+    /**
+     * The line after the last body row of the table starting at $i.
+     *
+     * @param  array<int, string>  $lines
+     */
+    private static function tableEnd(array $lines, int $i, int $count): int
+    {
+        $i += 2;
+        while ($i < $count && trim($lines[$i]) !== '' && self::hasPipe($lines[$i])
+            && ! preg_match('/^(#{1,6}\s|```|>)/', $lines[$i])) {
+            $i++;
+        }
+
+        return $i;
+    }
+
+    /**
+     * Where markdownToHtml() would read GFM tables in these lines: [first line, line after the last row] each
+     * (MarkdownTableRepair uses it to find what to rebuild). Ignores fenced code like markdownToHtml does.
+     *
+     * @param  list<string>  $lines
+     * @return list<array{0: int, 1: int}>
+     */
+    public static function tableSpans(array $lines): array
+    {
+        $spans = [];
+        $count = count($lines);
+        $fenced = false;
+        for ($i = 0; $i < $count; $i++) {
+            if (preg_match('/^```/', $lines[$i])) {
+                $fenced = ! $fenced;
+
+                continue;
+            }
+            if (! $fenced && self::tableStartsAt($lines, $i)) {
+                $end = self::tableEnd($lines, $i, $count);
+                $spans[] = [$i, $end];
+                $i = $end - 1;
+            }
+        }
+
+        return $spans;
+    }
+
+    /** A pipe that isn't escaped (`\|` is a literal pipe). */
+    private static function hasPipe(string $line): bool
+    {
+        return (bool) preg_match('/(?<!\\\\)\|/', $line);
+    }
+
+    /**
+     * The trimmed cells of a table row: an optional leading / trailing pipe, split on unescaped pipes
+     * (escaped ones stay `\|` here, the cell text turns them into `|`).
+     *
+     * @return list<string>
+     */
+    private static function tableCells(string $line): array
+    {
+        $line = trim($line);
+        if (str_starts_with($line, '|')) {
+            $line = substr($line, 1);
+        }
+        if (preg_match('/(?<!\\\\)\|$/', $line)) {
+            $line = substr($line, 0, -1);
+        }
+
+        return array_map('trim', preg_split('/(?<!\\\\)\|/', $line) ?: []);
     }
 
     /**
@@ -250,8 +399,117 @@ class PageContentConverter
             'hr' => '---',
             'ul' => self::list($node, false),
             'ol' => self::list($node, true),
+            'table' => self::tableMarkdown($node),
             default => self::inlineText($node),
         };
+    }
+
+    /** Block elements a table cell may hold (the rest is inline content). */
+    private const BLOCKS = ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'blockquote', 'hr', 'ul', 'ol', 'table'];
+
+    /**
+     * A table → a GFM table: the first row is the header (GFM has no header-less table), cells are one line each
+     * (blocks and line breaks inside a cell joined by spaces, pipes escaped), a colspan repeats as empty cells, short
+     * rows are padded. Alignment comes from the header cells' paragraphs (the editor) or the cells (`align` / style).
+     */
+    private static function tableMarkdown(DOMNode $table): string
+    {
+        $rows = [];
+        $aligns = [];
+        foreach (self::tableRows($table) as $r => $tr) {
+            $cells = [];
+            foreach ($tr->childNodes as $cell) {
+                $tag = strtolower($cell->nodeName);
+                if ($tag !== 'td' && $tag !== 'th') {
+                    continue;
+                }
+                $parts = [];
+                foreach ($cell->childNodes as $child) {
+                    $parts[] = in_array(strtolower($child->nodeName), self::BLOCKS, true) ? self::block($child) : self::inlineNode($child);
+                }
+                $text = trim((string) preg_replace('/\s+/u', ' ', implode(' ', array_map('trim', $parts))));
+                $text = (string) preg_replace('/(?<!\\\\)\|/', '\\|', $text);
+                if ($r === 0) {
+                    $aligns[count($cells)] = self::cellAlign($cell);
+                }
+                $cells[] = $text;
+                $span = (int) ($cell->attributes?->getNamedItem('colspan')?->nodeValue ?? 1);
+                for ($extra = 1; $extra < min($span, 50); $extra++) {
+                    $cells[] = '';
+                }
+            }
+            $rows[] = $cells;
+        }
+        if ($rows === []) {
+            return '';
+        }
+
+        $width = max(1, ...array_map('count', $rows));
+        $line = fn (array $cells) => '| '.implode(' | ', array_pad($cells, $width, '')).' |';
+        $delimiter = [];
+        for ($c = 0; $c < $width; $c++) {
+            $delimiter[] = match ($aligns[$c] ?? null) {
+                'left' => ':---',
+                'center' => ':---:',
+                'right' => '---:',
+                default => '---',
+            };
+        }
+
+        $out = [$line($rows[0]), '| '.implode(' | ', $delimiter).' |'];
+        foreach (array_slice($rows, 1) as $cells) {
+            $out[] = $line($cells);
+        }
+
+        return implode("\n", $out);
+    }
+
+    /**
+     * The <tr> of a table, also inside <thead> / <tbody> / <tfoot>.
+     *
+     * @return list<DOMNode>
+     */
+    private static function tableRows(DOMNode $table): array
+    {
+        $rows = [];
+        foreach ($table->childNodes as $child) {
+            $tag = strtolower($child->nodeName);
+            if ($tag === 'tr') {
+                $rows[] = $child;
+            } elseif (in_array($tag, ['thead', 'tbody', 'tfoot'], true)) {
+                foreach ($child->childNodes as $tr) {
+                    if (strtolower($tr->nodeName) === 'tr') {
+                        $rows[] = $tr;
+                    }
+                }
+            }
+        }
+
+        return $rows;
+    }
+
+    /** left / center / right from a cell's `align`, its style or its first paragraph's style; null for the default
+     * (the editor writes `text-align: start` on every cell, which is the default). */
+    private static function cellAlign(DOMNode $cell): ?string
+    {
+        $candidates = [$cell];
+        foreach ($cell->childNodes as $child) {
+            if ($child->nodeType === XML_ELEMENT_NODE) {
+                $candidates[] = $child;
+                break;
+            }
+        }
+        foreach ($candidates as $node) {
+            $align = strtolower(trim((string) ($node->attributes?->getNamedItem('align')?->nodeValue ?? '')));
+            if ($align === '' && preg_match('/text-align\s*:\s*(\w+)/i', (string) ($node->attributes?->getNamedItem('style')?->nodeValue ?? ''), $m)) {
+                $align = strtolower($m[1]);
+            }
+            if (in_array($align, ['left', 'center', 'right'], true)) {
+                return $align;
+            }
+        }
+
+        return null;
     }
 
     private static function list(DOMNode $node, bool $ordered): string
@@ -269,31 +527,52 @@ class PageContentConverter
         return implode("\n", $out);
     }
 
-    /** Render inline children of a node to Markdown. */
-    private static function inlineText(DOMNode $node): string
+    /**
+     * Render inline children of a node to Markdown. `$active` are the marks an ancestor already wrote: the editor
+     * exports bold as <b><strong>…</strong></b> (italic <i><em>), which must read as **x**, not ****x****.
+     *
+     * @param  list<string>  $active
+     */
+    private static function inlineText(DOMNode $node, array $active = []): string
     {
         $out = '';
         foreach ($node->childNodes as $child) {
-            if ($child->nodeType === XML_TEXT_NODE) {
-                $out .= $child->textContent;
-
-                continue;
-            }
-
-            $name = strtolower($child->nodeName);
-            $inner = self::inlineText($child);
-            $out .= match ($name) {
-                'strong', 'b' => "**{$inner}**",
-                'em', 'i' => "*{$inner}*",
-                'code' => "`{$inner}`",
-                'a' => '['.$inner.']('.($child->attributes?->getNamedItem('href')?->nodeValue ?? '').')',
-                'img' => '!['.str_replace([']', "\n"], ['', ' '], (string) ($child->attributes?->getNamedItem('alt')?->nodeValue ?? '')).']('.($child->attributes?->getNamedItem('src')?->nodeValue ?? '').')',
-                'br' => "\n",
-                default => $inner,
-            };
+            $out .= self::inlineNode($child, $active);
         }
 
         return $out;
+    }
+
+    /** @param  list<string>  $active */
+    private static function inlineNode(DOMNode $child, array $active = []): string
+    {
+        if ($child->nodeType === XML_TEXT_NODE) {
+            return $child->textContent;
+        }
+
+        $name = strtolower($child->nodeName);
+        $mark = match ($name) {
+            'strong', 'b' => '**',
+            'em', 'i' => '*',
+            'code' => '`',
+            default => null,
+        };
+        if ($mark !== null) {
+            if (in_array($mark, $active, true)) {
+                return self::inlineText($child, $active);
+            }
+
+            return $mark.self::inlineText($child, [...$active, $mark]).$mark;
+        }
+
+        $inner = self::inlineText($child, $active);
+
+        return match ($name) {
+            'a' => '['.$inner.']('.($child->attributes?->getNamedItem('href')?->nodeValue ?? '').')',
+            'img' => '!['.str_replace([']', "\n"], ['', ' '], (string) ($child->attributes?->getNamedItem('alt')?->nodeValue ?? '')).']('.($child->attributes?->getNamedItem('src')?->nodeValue ?? '').')',
+            'br' => "\n",
+            default => $inner,
+        };
     }
 
     // ── Legacy TipTap doc → Markdown (pages created before Lexical) ───────────
