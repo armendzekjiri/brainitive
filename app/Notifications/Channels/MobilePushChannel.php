@@ -14,8 +14,8 @@ use Illuminate\Support\Str;
  * whenever the category's `push` is on, so it honours exactly the same preference as WebPushChannel.
  *
  * The message is the notification's toWebPush() (title, body, url) — the phone never shows more than
- * the browser push does. This channel only finds the eligible devices (active, client `mobile`, with
- * a push token) and hands their ids to SendMobilePush, ≤ batch_size per job; it never calls Expo
+ * the browser push does. This channel only finds the eligible devices (AppDevice::eligibleForPush:
+ * signed in, client `mobile`, with a push token) and hands their ids to SendMobilePush, ≤ batch_size per job; it never calls Expo
  * itself, so a request is never slowed down. On a sync queue in a web request the job runs after the
  * response. Tokens never leave the database row: the job carries device ids.
  */
@@ -27,10 +27,8 @@ class MobilePushChannel
             return;
         }
 
-        $deviceIds = AppDevice::query()->active()
+        $deviceIds = AppDevice::query()->eligibleForPush()
             ->where('user_id', $notifiable->id)
-            ->where('client', 'mobile')
-            ->whereNotNull('push_token')
             ->orderBy('id')
             ->pluck('id')
             ->all();

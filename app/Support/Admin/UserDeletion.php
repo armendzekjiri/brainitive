@@ -8,6 +8,7 @@ use App\Models\InstanceAdmin;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Entitlements\WorkspaceMembershipChanged;
+use App\Support\Webhooks\WebhookDispatcher;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -106,10 +107,16 @@ class UserDeletion
         Workspace::whereIn('id', $leaves)->get()->each(fn (Workspace $workspace) => WorkspaceMembershipChanged::dispatch($workspace));
 
         // App Store guideline 5.1.1(v): revoke Sign in with Apple. No token stored (signed in
-        // before we kept it, or never with Apple) → nothing to revoke.
+        // before we kept it, or never with Apple) → nothing to revoke. On a sync queue in a web
+        // request it runs after the response (as MobilePushChannel): the deletion never waits for Apple.
         if (is_string($appleToken) && $appleToken !== '') {
             try {
-                RevokeAppleToken::dispatch($user->id, $appleToken);
+                $job = new RevokeAppleToken($user->id, $appleToken);
+                if (WebhookDispatcher::syncQueue() && ! app()->runningInConsole()) {
+                    dispatch($job)->afterResponse();
+                } else {
+                    dispatch($job);
+                }
             } catch (Throwable $e) {
                 report($e); // a queue hiccup must not turn a completed deletion into an error page
             }

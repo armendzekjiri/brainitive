@@ -46,7 +46,7 @@ class MobilePushReceiptsTest extends TestCase
 
     private function device(string $token): AppDevice
     {
-        return AppDevice::create([
+        $device = AppDevice::create([
             'user_id' => $this->user->id,
             'client' => 'mobile',
             'platform' => 'ios',
@@ -54,6 +54,10 @@ class MobilePushReceiptsTest extends TestCase
             'app_version' => '0.1.0',
             'push_token' => $token,
         ]);
+        // signed in: a refresh token that hasn't expired
+        $device->forceFill(['refresh_expires_at' => now()->addDays(30)])->save();
+
+        return $device;
     }
 
     /** A SendMobilePush that runs as on a real queue (attempt $attempt). */
@@ -142,6 +146,7 @@ class MobilePushReceiptsTest extends TestCase
         ])->handle();
 
         $this->assertNull($iphone->fresh()->push_token);
+        $this->assertNull($iphone->fresh()->push_token_hash);
         $this->assertSame('ExponentPushToken[pixel-new]', $pixel->fresh()->push_token);
         Http::assertSent(fn (Request $request) => $request->url() === self::RECEIPTS
             && $request->method() === 'POST'

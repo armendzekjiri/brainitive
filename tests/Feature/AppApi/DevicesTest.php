@@ -84,6 +84,54 @@ class DevicesTest extends TestCase
         $this->assertNull($device->fresh()->push_token);
     }
 
+    public function test_setting_a_push_token_takes_it_off_every_other_device(): void
+    {
+        $user = User::factory()->create();
+        $old = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[same-phone]']);
+        $tablet = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[tablet]']);
+        $someoneElse = $this->appDevice(User::factory()->create(), ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[same-phone]']);
+        $new = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios']); // the app signed in again on that phone
+        $token = $this->appToken($user, $new);
+
+        $this->patchJson('/api/v1/devices/current', ['push_token' => 'ExponentPushToken[same-phone]'], $this->appHeaders($token))
+            ->assertOk()->assertJsonPath('data.has_push_token', true);
+
+        $this->assertSame('ExponentPushToken[same-phone]', $new->fresh()->push_token);
+        $this->assertNull($old->fresh()->push_token);
+        $this->assertSame('ExponentPushToken[tablet]', $tablet->fresh()->push_token);
+        // the phone signed into another account before: that account isn't pushed to this phone any more
+        $this->assertNull($someoneElse->fresh()->push_token);
+        $this->assertNull($someoneElse->fresh()->push_token_hash);
+        $this->assertNull($old->fresh()->push_token_hash);
+        $this->assertSame(hash('sha256', 'ExponentPushToken[same-phone]'), $new->fresh()->push_token_hash);
+        $this->assertSame(hash('sha256', 'ExponentPushToken[tablet]'), $tablet->fresh()->push_token_hash);
+
+        // the hash follows the token (changed, removed) and never leaves the server
+        $this->patchJson('/api/v1/devices/current', ['push_token' => 'ExponentPushToken[rotated]'], $this->appHeaders($token))
+            ->assertOk()->assertJsonMissingPath('data.push_token_hash');
+        $this->assertSame(hash('sha256', 'ExponentPushToken[rotated]'), $new->fresh()->push_token_hash);
+        $this->patchJson('/api/v1/devices/current', ['push_token' => null], $this->appHeaders($token))->assertOk();
+        $this->assertNull($new->fresh()->push_token_hash);
+        $this->assertSame('ExponentPushToken[tablet]', $tablet->fresh()->push_token);
+    }
+
+    public function test_the_push_token_hash_migration_backfills_existing_rows(): void
+    {
+        $user = User::factory()->create();
+        $phone = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[phone]']);
+        $none = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios']);
+        $broken = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'android']);
+        DB::table('app_devices')->where('id', $broken->id)->update(['push_token' => 'not-a-ciphertext']); // an old APP_KEY
+
+        $migration = require database_path('migrations/2026_11_14_100000_add_push_token_hash_to_app_devices_table.php');
+        $migration->down();
+        $migration->up();
+
+        $this->assertSame(hash('sha256', 'ExponentPushToken[phone]'), DB::table('app_devices')->where('id', $phone->id)->value('push_token_hash'));
+        $this->assertNull(DB::table('app_devices')->where('id', $none->id)->value('push_token_hash'));
+        $this->assertNull(DB::table('app_devices')->where('id', $broken->id)->value('push_token_hash'));
+    }
+
     public function test_update_validates(): void
     {
         $user = User::factory()->create();
@@ -99,7 +147,7 @@ class DevicesTest extends TestCase
     {
         $user = User::factory()->create();
         $token = $this->appToken($user);
-        $other = $this->appDevice($user, ['name' => 'Laptop']);
+        $other = $this->appDevice($user, ['name' => 'Phone', 'client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[phone]']);
         $otherToken = $this->appToken($user, $other);
 
         $this->deleteJson("/api/v1/devices/{$other->id}", [], $this->appHeaders($token))->assertNoContent();
@@ -108,6 +156,8 @@ class DevicesTest extends TestCase
         $this->assertTrue($other->isRevoked());
         $this->assertSame('user', $other->revoked_reason);
         $this->assertNull($other->access_token_hash);
+        $this->assertNull($other->push_token); // signed out: never pushed to again
+        $this->assertNull($other->push_token_hash);
         $this->getJson('/api/v1/devices', $this->appHeaders($otherToken))->assertStatus(401);
         // the caller stays signed in
         $this->getJson('/api/v1/devices', $this->appHeaders($token))->assertOk()->assertJsonCount(1, 'data');
@@ -199,6 +249,10 @@ class DevicesTest extends TestCase
         $phone->forceFill(['push_token' => 'not-an-expo-token'])->save();
         $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($phoneToken))
             ->assertStatus(409)->assertJsonPath('code', 'no_push_token');
+        // a sign-in that can't be refreshed any more is never pushed to (AppDevice::eligibleForPush)
+        $phone->forceFill(['push_token' => 'ExponentPushToken[phone]', 'refresh_expires_at' => now()->subMinute()])->save();
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($phoneToken))
+            ->assertStatus(409)->assertJsonPath('code', 'no_push_token');
 
         config(['app-api.push.enabled' => false]);
         $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($macToken))
@@ -231,7 +285,7 @@ class DevicesTest extends TestCase
         AppTokens::issue($device);
 
         $array = AppDevice::find($device->id)->toArray();
-        foreach (['push_token', 'access_token_hash', 'refresh_token_hash', 'previous_refresh_hash'] as $key) {
+        foreach (['push_token', 'push_token_hash', 'access_token_hash', 'refresh_token_hash', 'previous_refresh_hash'] as $key) {
             $this->assertArrayNotHasKey($key, $array);
         }
     }
