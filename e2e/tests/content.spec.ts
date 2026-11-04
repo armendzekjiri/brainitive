@@ -206,11 +206,13 @@ test.describe('my work', () => {
 
         await page.getByRole('button', { name: /Created by me/ }).click();
         await expect(page).toHaveURL(/scope=created/);
-        await expect(page.getByText('Pricing page copy')).toBeVisible();
-        await expect(page.getByText('Homepage hero')).toBeVisible();
+        // the seeded project's issue: on dev a copy can also sit in a project restored by another journey
+        const seeded = (p: typeof page, title: string) => p.locator('a[href*="/projects/website/"]', { hasText: title }).first();
+        await expect(seeded(page, 'Pricing page copy')).toBeVisible();
+        await expect(seeded(page, 'Homepage hero')).toBeVisible();
 
         await memberPage.goto('/my-work');
-        await expect(memberPage.getByText('Pricing page copy')).toBeVisible();
+        await expect(seeded(memberPage, 'Pricing page copy')).toBeVisible();
         await expect(memberPage.getByText('Checkout bug')).toHaveCount(0);
     });
 });
