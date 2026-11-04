@@ -101,6 +101,18 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.51.0',
+        title: 'Live whiteboards and polls in the mobile app',
+        tag: 'Feature',
+        date: '2026-11-05',
+        items: [
+            'Brainitive Mobile (coming soon): draw on whiteboards live with your team from a tablet — the same live drawing as in the browser, signed in per device and stopped at once when the device is signed out.',
+            'Brainitive Mobile: vote in polls inside docs and issue descriptions, like on the web.',
+            'Poll votes: a vote is always counted for the right doc or issue, however the address is written, and a malformed address answers “not found” instead of an error.',
+            'Docs site: updated its build tool (security fix for the local preview server).',
+        ]
+    },
+    {
         version: 'v1.50.0',
         title: 'Sign in with Apple and push notifications on your phone',
         tag: 'Feature',
