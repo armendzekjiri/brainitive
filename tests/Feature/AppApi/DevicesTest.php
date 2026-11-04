@@ -2,11 +2,13 @@
 
 namespace Tests\Feature\AppApi;
 
+use App\Jobs\SendMobilePush;
 use App\Models\AppDevice;
 use App\Models\User;
 use App\Support\AppApi\AppTokens;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Tests\Feature\AppApi\Concerns\ActsAsAppClient;
 use Tests\Feature\AppApi\Concerns\ForgetsGuardsBetweenRequests;
 use Tests\TestCase;
@@ -156,6 +158,71 @@ class DevicesTest extends TestCase
 
         $this->assertFalse($device->fresh()->isRevoked());
         $this->assertSame('Test Mac', $device->fresh()->name);
+    }
+
+    public function test_test_push_queues_a_push_to_the_calling_device_only(): void
+    {
+        Queue::fake();
+        config(['app-api.push.enabled' => true]);
+        $user = User::factory()->create();
+        $phone = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[phone-secret]']);
+        $this->appDevice($user, ['client' => 'mobile', 'platform' => 'android', 'push_token' => 'ExponentPushToken[other-secret]']);
+        $token = $this->appToken($user, $phone);
+
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($token))
+            ->assertStatus(202)
+            ->assertExactJson(['data' => ['status' => 'queued']]);
+
+        Queue::assertPushed(SendMobilePush::class, 1);
+        Queue::assertPushed(SendMobilePush::class, fn (SendMobilePush $job) => $job->deviceIds === [$phone->id]
+            && $job->userId === $user->id
+            && $job->title === 'Test notification'
+            && $job->url === null && $job->notificationId === null
+            && ! str_contains(serialize($job), 'secret'));
+    }
+
+    public function test_test_push_without_a_push_token_or_with_push_off_is_a_409(): void
+    {
+        Queue::fake();
+        config(['app-api.push.enabled' => true]);
+        $user = User::factory()->create();
+        $phone = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios']);
+        $phoneToken = $this->appToken($user, $phone);
+        $other = User::factory()->create(); // 3 a minute per user
+        $mac = $this->appDevice($other, ['push_token' => 'ExponentPushToken[mac]']); // desktop: never pushed to
+        $macToken = $this->appToken($other, $mac);
+
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($phoneToken))
+            ->assertStatus(409)->assertJsonPath('code', 'no_push_token');
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($macToken))
+            ->assertStatus(409)->assertJsonPath('code', 'no_push_token');
+        $phone->forceFill(['push_token' => 'not-an-expo-token'])->save();
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($phoneToken))
+            ->assertStatus(409)->assertJsonPath('code', 'no_push_token');
+
+        config(['app-api.push.enabled' => false]);
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($macToken))
+            ->assertStatus(409)->assertJsonPath('code', 'push_disabled');
+
+        Queue::assertNothingPushed();
+    }
+
+    public function test_test_push_is_limited_to_three_a_minute_and_needs_an_app_token(): void
+    {
+        Queue::fake();
+        config(['app-api.push.enabled' => true]);
+        $user = User::factory()->create();
+        $phone = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[phone]']);
+        $token = $this->appToken($user, $phone);
+
+        $this->postJson('/api/v1/devices/current/test-push')->assertStatus(401);
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($this->passportToken($user)))->assertStatus(401);
+
+        foreach (range(1, 3) as $i) {
+            $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($token))->assertStatus(202);
+        }
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($token))->assertStatus(429);
+        Queue::assertPushed(SendMobilePush::class, 3);
     }
 
     public function test_the_model_never_serialises_secrets(): void

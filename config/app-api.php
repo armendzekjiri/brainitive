@@ -59,6 +59,10 @@ return [
     'push' => [
         'enabled' => (bool) env('MOBILE_PUSH_ENABLED', true),
         'expo_url' => env('EXPO_PUSH_URL', 'https://exp.host/--/api/v2/push/send'),
+        // Push receipts (delivery to APNs / FCM, DeviceNotRegistered): fetched receipt_delay seconds after
+        // sending (App\Jobs\CheckMobilePushReceipts; real queue only — a sync queue has no delay)
+        'receipts_url' => env('EXPO_RECEIPTS_URL', 'https://exp.host/--/api/v2/push/getReceipts'),
+        'receipt_delay' => 900,
         'expo_access_token' => env('EXPO_ACCESS_TOKEN'),
         'timeout' => 10,
         'connect_timeout' => 5,

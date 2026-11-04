@@ -25,6 +25,9 @@ use Illuminate\Support\Facades\Log;
  *   job gets one attempt. Other HTTP errors are logged and dropped. Never throws.
  * - Tickets: `DeviceNotRegistered` (app uninstalled, token expired) clears that device's push_token,
  *   only while it is still the token that was sent; other ticket errors are logged.
+ * - `ok` tickets: CheckMobilePushReceipts is dispatched receipt_delay (15 min) later with their ids, the
+ *   device ids and a SHA-256 of each token — the receipts report what APNs / FCM made of them. Real
+ *   queue only: a sync queue can't delay.
  */
 class SendMobilePush implements ShouldQueue
 {
@@ -86,7 +89,7 @@ class SendMobilePush implements ShouldQueue
         ], fn ($value) => $value !== '' && $value !== null))->all();
 
         try {
-            $response = $this->request()->post((string) config('app-api.push.expo_url'), $messages);
+            $response = self::expoRequest()->post((string) config('app-api.push.expo_url'), $messages);
         } catch (ConnectionException $e) {
             $this->retryOrGiveUp('connection failed: '.self::redact($e->getMessage()));
 
@@ -123,8 +126,17 @@ class SendMobilePush implements ShouldQueue
             return;
         }
 
+        /** @var array<string, array{device_id: int, token_hash: string}> $pending */
+        $pending = [];
+
         foreach ($devices as $i => $device) {
             $ticket = $tickets[$i] ?? null;
+            if (is_array($ticket) && ($ticket['status'] ?? null) === 'ok'
+                && is_string($id = $ticket['id'] ?? null) && $id !== '' && strlen($id) <= 100) {
+                $pending[$id] = ['device_id' => $device->id, 'token_hash' => self::tokenHash((string) $device->push_token)];
+
+                continue;
+            }
             if (! is_array($ticket) || ($ticket['status'] ?? null) !== 'error') {
                 continue;
             }
@@ -147,9 +159,21 @@ class SendMobilePush implements ShouldQueue
                 'message' => self::redact((string) ($ticket['message'] ?? '')),
             ]);
         }
+
+        // Receipts are ready ~15 min later; a sync queue would run the check at once and find none
+        if ($pending !== [] && $this->job !== null && ! $this->job instanceof SyncJob) {
+            CheckMobilePushReceipts::dispatch($pending)->delay(now()->addSeconds((int) config('app-api.push.receipt_delay', 900)));
+        }
     }
 
-    private function request(): PendingRequest
+    /** Identifies the token a receipt belongs to without keeping the token (a secret) in the queue. */
+    public static function tokenHash(string $token): string
+    {
+        return hash('sha256', $token);
+    }
+
+    /** Expo's push API with the access token when one is set (send and receipts). */
+    public static function expoRequest(): PendingRequest
     {
         $request = Http::acceptJson()
             ->asJson()

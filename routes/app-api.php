@@ -94,6 +94,7 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class, EnsureAppClientA
     // ── Devices ───────────────────────────────────────────────────────────────────────────────
     Route::get('devices', [DeviceController::class, 'index'])->name('devices.index');
     Route::patch('devices/current', [DeviceController::class, 'updateCurrent'])->name('devices.current.update');
+    Route::post('devices/current/test-push', [DeviceController::class, 'testPush'])->middleware('throttle:3,1,app.devices.test-push')->name('devices.current.test-push');
     Route::delete('devices/{device}', [DeviceController::class, 'destroy'])->whereNumber('device')->name('devices.destroy');
 
     // ── Invitations & onboarding ──────────────────────────────────────────────────────────────

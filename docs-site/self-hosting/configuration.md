@@ -254,6 +254,7 @@ The Brainitive apps talk to your server's App API under `/api/v1`. See [Desktop 
 | `MOBILE_PUSH_ENABLED` | `true` | Push notifications to the mobile app, through the Expo push service (`exp.host`). They follow each person's "Push" choice per category, like browser push. Needs outgoing HTTPS to `exp.host`; `false` turns them off |
 | `EXPO_ACCESS_TOKEN` | – | Only when "Enhanced push security" is on for the app's Expo project: an Expo access token sent with every push |
 | `EXPO_PUSH_URL` | `https://exp.host/--/api/v2/push/send` | Where pushes are sent. Leave as is |
+| `EXPO_RECEIPTS_URL` | `https://exp.host/--/api/v2/push/getReceipts` | Where push receipts are fetched, about 15 minutes after sending, to forget the push tokens of uninstalled apps. Needs a queue worker (`QUEUE_CONNECTION` other than `sync`). Leave as is |
 
 ## Legal pages
 
