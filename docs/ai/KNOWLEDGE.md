@@ -878,7 +878,7 @@ php artisan tinker --execute="\App\Models\User::where('email','...')->update(['e
   (run uuid, path), and `imports/<run>/notion-stored.json` lists what was stored, so a retry neither
   duplicates nor double-counts. SVG, video etc. aren't accepted by the editor and are reported.
 - **Markdown:** `Imports\Shared\MarkdownHtml` (league/commonmark GFM, single newline → `<br>` for Notion),
-  not `PageContentConverter::markdownToHtml` (no tables / images / nested lists). HTML longer than
+  not `PageContentConverter::markdownToHtml` (no nested lists, raw HTML escaped; tables since v1.51.0). HTML longer than
   500 000 characters is refused (`ImportFailed`, page named) because `SafeHtml` would truncate it.
   Tables stop at 1 000 rows / 400 000 characters with a note; the original CSV is linked. CSVs are read
   with the Jira import's streaming `CsvReader` (a damaged CSV fails the preview, naming the database).
@@ -2300,6 +2300,18 @@ Never migrate devdb just to export the spec.
 - **Markdown keeps only the link of a smart link** (`data-smart-link` is dropped), so `GET /links/resolve` also takes Brainitive URLs
   (`SmartLinks::refFromUrl`: this host or relative paths only; `boards/<b>/items/<id>`, `boards/<b>#item-<id>`, `pages/<uuid>`,
   `helpdesks/<h>/tickets/<id>`, `plans/<slug>` → `plan:<project>/<slug>`).
+- **Markdown tables (v1.51.0):** `PageContentConverter::markdownToHtml` reads GFM tables (header + `|---|:-:|` delimiter row with the
+  same cell count, optional edge pipes, `\|`, ragged rows padded / cut, inline Markdown in cells) and writes what the Lexical editor
+  imports as its own table: `<table><tbody><tr><th><p>…</p></th>…`, a column's alignment as `style="text-align: …"` on the cells'
+  paragraphs (Lexical keeps alignment on the paragraph; SafeHtml drops `style`, which only costs the alignment). `htmlToMarkdown`
+  turns any table back into GFM (first row = header, one line per cell, pipes escaped, colspan → empty cells), so MCP get → edit →
+  update keeps tables. Kept the hand parser instead of switching to `Imports\Shared\MarkdownHtml` (CommonMark): CommonMark passes raw
+  HTML through to SafeHtml (this converter escapes it), wraps list items / blockquotes differently and would change mentions, code
+  language and task-list output the App API tests pin. Before v1.51.0 tables were stored as text — the old converter joined the lines
+  into one `<p>| a | b | |---|---| | 1 | 2 |</p>`; `php artisan pages:repair-markdown-tables` (dry run; `--force` writes, `--items`
+  adds issue descriptions) rebuilds them: only top-level paragraphs that form a table change, through `PageWrites::repairHtml`
+  (content and draft each in place, `edit_revision` + 1, live document reset, no version / updated_at / notification). Paragraphs with
+  mentions or smart links, and ragged joined rows, are reported as "left alone". Idempotent.
 - **The Markdown converter now keeps images** (`![alt](src)` ⇄ `<img>`; http(s) / site paths only, `data:` / `javascript:` dropped).
   Before, a doc's or issue's images vanished on any Markdown write (MCP included).
 - **Tree without content:** `GET /projects/{id}/pages` never loads `pages.content` (whiteboard scenes are large): `kind` comes from
@@ -2308,6 +2320,11 @@ Never migrate devdb just to export the spec.
 - **No whiteboard image export on the server** (nothing renders Excalidraw server-side): `preview_image_url` is the last "Save & exit"
   PNG and can be older than the scene. **No file registry:** uploads return their public URL (as attachments do); no signed URLs or
   thumbnails.
+- **Native live whiteboards (v1.51.0) keep the web's field names** so a port of `lib/whiteboard/live.ts` only swaps URLs: `scene` /
+  `vector` stay JSON strings (objects accepted too), the session answers `vector` (docs: `html_vector`), 409 keeps `reset` /
+  `epoch` next to `code: conflict`. **PHP never parses a multipart PUT body** (`$_FILES` / `$_POST` are POST-only), so the
+  browser's FormData sent as PUT arrives empty → 422: a save with the preview `image` is POST + `_method=PUT` (Laravel's method
+  override), a JSON body can be a plain PUT.
 - **App API uploads skipped the storage limit** before phase 07 (issue attachments, bookmark files: `file.room` is web middleware). Now
   `FileRoom::ensure` inside the idempotent write, so a replayed `request_id` is never refused.
 

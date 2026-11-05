@@ -6,13 +6,9 @@ use App\Models\Page;
 use App\Models\Project;
 use App\Models\Workspace;
 use App\Support\Collab\CollabConfig;
-use App\Support\Collab\StateVector;
 use App\Support\Collab\WhiteboardCollab;
-use App\Support\Files\WorkspaceFiles;
-use App\Support\Uploads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * Live whiteboards from the browser (BRAI-153): connection session (token), storing the live scene as
@@ -51,33 +47,21 @@ class WhiteboardCollabController extends Controller
             'image' => 'nullable|image|mimes:png|max:10240',
         ]);
 
-        $scene = $request->boolean('baseline') ? null : WhiteboardCollab::normalizeScene(json_decode($validated['scene'], true));
-        $vector = StateVector::normalize(json_decode($validated['vector'], true));
-        if ((! $request->boolean('baseline') && $scene === null) || $vector === null) {
-            return response()->json(['message' => 'Invalid whiteboard state.'], 422);
-        }
-
-        // "Save & exit" sends a preview, like the single-user editor
-        $image = $request->file('image');
-        $stored = $image ? WorkspaceFiles::store($page->project->workspace, $image, 'excalidraw-previews', Uploads::imageName($image), 'whiteboard_image', $request->user()) : null;
-        $preview = is_string($stored) ? asset('storage/'.$stored) : null;
-
-        $result = WhiteboardCollab::save(
+        $result = WhiteboardCollab::saveFromClient(
             $page,
             $request->user(),
             (int) $validated['epoch'],
-            $scene ?? ['elements' => [], 'appState' => [], 'files' => [], 'libraryItems' => null],
-            $vector,
+            $validated['scene'],
+            $validated['vector'],
             $request->boolean('baseline'),
             $request->boolean('checkpoint'),
-            $preview,
+            $request->file('image'),
         );
+        if ($result['status'] === 'invalid') {
+            return response()->json(['message' => 'Invalid whiteboard state.'], 422);
+        }
 
         if ($result['status'] === 'stale') {
-            if ($preview !== null) {
-                Storage::disk('public')->delete($stored); // nothing points to it
-            }
-
             return response()->json(['message' => 'This whiteboard was replaced while you were drawing.', 'reset' => true, 'epoch' => $result['epoch']], 409);
         }
 

@@ -111,7 +111,7 @@ class MobilePushTest extends TestCase
                     'sound' => 'default',
                     'badge' => 1,
                     'priority' => 'high',
-                    'data' => ['url' => '/workspaces/acme/projects/web/boards/main/items/412?tab=comments', 'notification_id' => $notificationId],
+                    'data' => ['url' => '/workspaces/acme/projects/web/boards/main/items/412?tab=comments', 'notification_id' => $notificationId, 'origin' => 'https://brainitive.test'],
                 ];
         });
         $this->assertSame(self::IPHONE, $iphone->fresh()->push_token);
@@ -269,5 +269,13 @@ class MobilePushTest extends TestCase
         $this->assertNull(MobilePushChannel::webPath('//evil.example/x'));
         $this->assertNull(MobilePushChannel::webPath('/\\evil.example/x'));
         $this->assertNull(MobilePushChannel::webPath('/workspaces\\acme'));
+    }
+
+    public function test_the_origin_in_the_payload_is_the_servers_origin(): void
+    {
+        config(['app.url' => 'https://work.example.com:8443/sub']);
+        $this->assertSame('https://work.example.com:8443', SendMobilePush::origin());
+        config(['app.url' => 'https://brainitive.test']);
+        $this->assertSame('https://brainitive.test', SendMobilePush::origin());
     }
 }

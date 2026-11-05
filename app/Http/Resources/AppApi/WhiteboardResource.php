@@ -3,13 +3,15 @@
 namespace App\Http\Resources\AppApi;
 
 use App\Models\Page;
+use App\Support\Collab\CollabConfig;
+use App\Support\Collab\WhiteboardCollab;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * A whiteboard with its Excalidraw scene, read-only (`GET /whiteboards/{uuid}`, BRAI-414): the page fields of
+ * A whiteboard with its Excalidraw scene (`GET /whiteboards/{uuid}`, BRAI-414): the page fields of
  * the tree, the scene's live elements (deleted ones left out), the canvas settings and the embedded image files,
- * and the preview image of the last "Save & exit" (may be older than the scene).
+ * the preview image of the last "Save & exit" (may be older than the scene) and whether live drawing is offered.
  *
  * @mixin Page
  */
@@ -33,6 +35,7 @@ class WhiteboardResource extends PageResource
     public function toArray(Request $request): array
     {
         $user = $request->user();
+        $canUpdate = $user->can('update', $this->resource);
         $content = is_array($this->content) ? $this->content : [];
         $elements = array_values(array_filter(
             is_array($content['elements'] ?? null) ? $content['elements'] : [],
@@ -67,9 +70,16 @@ class WhiteboardResource extends PageResource
             ],
             // PNG of the last "Save & exit" on the web; null when there is none
             'preview_image_url' => is_string($preview) && $preview !== '' ? $preview : null,
+            /**
+             * live drawing offered to this user: edit (draw), view (watch), or null (live editing off on the server,
+             * archived) — `POST /whiteboards/{uuid}/collab-token`
+             *
+             * @var 'edit'|'view'|null
+             */
+            'live' => CollabConfig::enabled($request) ? WhiteboardCollab::access($this->resource, $user, $canUpdate) : null,
             'can' => [
-                // drawing: the web / desktop webview
-                'update' => $user->can('update', $this->resource),
+                // drawing: live (`live: edit`), or the web / desktop webview
+                'update' => $canUpdate,
             ],
         ];
     }

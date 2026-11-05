@@ -4,7 +4,7 @@ namespace App\Http\Requests\AppApi;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 
-/** `POST /pages/{uuid}/collab/bootstrap`: an editor's client synced an empty live document. */
+/** `POST /pages/{uuid}/collab/bootstrap` and `POST /whiteboards/{uuid}/collab/bootstrap`: an editor's client synced an empty live document. */
 class CollabBootstrapRequest extends PageRequest
 {
     /** @return array<string, ValidationRule|array<mixed>|string> */

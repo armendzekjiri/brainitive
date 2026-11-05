@@ -188,6 +188,18 @@ class PagesTest extends TestCase
             ->assertCreated()->assertJsonPath('data.kind', 'whiteboard')->assertJsonPath('data.status', 'draft')->assertJsonPath('data.markdown', null);
     }
 
+    public function test_markdown_tables_are_stored_as_editor_tables_and_read_back_as_markdown(): void
+    {
+        $markdown = "Totals:\n\n| Who | Hours |\n| --- | :---: |\n| @[Vi](user:{$this->viewer->id}) | 4 |";
+        $doc = $this->postJson("/api/v1/projects/{$this->project->id}/pages", ['name' => 'Timesheet', 'markdown' => $markdown], $this->headers())
+            ->assertCreated();
+
+        $stored = Page::where('uuid', $doc->json('data.uuid'))->firstOrFail();
+        $this->assertStringContainsString('<table><tbody><tr><th><p>Who</p></th><th><p style="text-align: center;">Hours</p></th></tr>', $stored->content['html']);
+        $this->assertStringContainsString('<td><p><span class="mention" data-mention-user-id="'.$this->viewer->id.'">', $stored->content['html']);
+        $this->assertSame("Totals:\n\n| Who | Hours |\n| --- | :---: |\n| @[{$this->viewer->name}](user:{$this->viewer->id}) | 4 |", $doc->json('data.markdown'));
+    }
+
     public function test_create_rules_roles_and_the_storage_limit(): void
     {
         $this->postJson("/api/v1/projects/{$this->project->id}/pages", ['name' => 'x'], $this->headers($this->viewer))->assertForbidden()->assertJsonPath('code', 'forbidden');

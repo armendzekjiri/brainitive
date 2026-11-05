@@ -85,7 +85,9 @@ class SendMobilePush implements ShouldQueue
             'sound' => 'default',
             'badge' => $badge,
             'priority' => 'high',
-            'data' => ['url' => $this->url, 'notification_id' => $this->notificationId],
+            // `origin`: the app may be signed in to several servers with one push token — it opens the
+            // push on the server that sent it, not whichever is current
+            'data' => ['url' => $this->url, 'notification_id' => $this->notificationId, 'origin' => self::origin()],
         ], fn ($value) => $value !== '' && $value !== null))->all();
 
         try {
@@ -221,5 +223,14 @@ class SendMobilePush implements ShouldQueue
         return is_array($errors)
             ? array_values(array_filter(array_map(fn ($e) => is_array($e) && is_string($e['code'] ?? null) ? $e['code'] : null, $errors)))
             : [];
+    }
+
+    /** This server's origin (scheme + host + port), as the app stores it. */
+    public static function origin(): string
+    {
+        $parts = parse_url((string) config('app.url'));
+        $origin = ($parts['scheme'] ?? 'https').'://'.($parts['host'] ?? '');
+
+        return isset($parts['port']) ? $origin.':'.$parts['port'] : $origin;
     }
 }

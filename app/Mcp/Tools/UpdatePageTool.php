@@ -243,7 +243,7 @@ class UpdatePageTool extends Tool
             'project' => $schema->string()->description('The project slug.')->required(),
             'page_uuid' => $schema->string()->description('The page uuid to update.')->required(),
             'title' => $schema->string()->description('Optional new title.'),
-            'markdown' => $schema->string()->description('Optional new body as Markdown.'),
+            'markdown' => $schema->string()->description('Optional new body as Markdown (headings, lists, bold, links, code blocks and GitHub-style tables).'),
             'mode' => $schema->string()->enum(['replace', 'append'])->description('How to apply markdown: replace the whole body (default) or append to the end (of the draft, when the change goes into the draft).')->default('replace'),
             'parent_uuid' => $schema->string()->nullable()->description('Optional: move the page. The uuid of a folder or page in the same project to move it into, or null to move it to the top level. Leave it out to keep the page where it is.'),
             'expected_revision' => $schema->integer()->description('edit_revision from get_page (recommended). If the page changed since, nothing is changed and you get the current revision. Required to replace a published page\'s unpublished draft.'),
