@@ -36,6 +36,7 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
         'google_id',
         'github_id',
         'microsoft_id',
+        'apple_id',
         'avatar',
         'bio',
         'phone',
@@ -60,6 +61,7 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
         'password',
         'remember_token',
         'app_auth_generation',
+        'apple_refresh_token',
     ];
 
     /**
@@ -80,6 +82,8 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
             'notification_preferences' => 'array',
             'sidebar_preferences' => 'array',
             'app_auth_generation' => 'integer',
+            // Sign in with Apple: only kept to revoke the authorization on account deletion
+            'apple_refresh_token' => 'encrypted',
         ];
     }
 

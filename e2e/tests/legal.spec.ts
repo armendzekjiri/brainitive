@@ -16,6 +16,7 @@ const LEGAL_PAGES: [string, string][] = [
     ['Terms', 'Terms of Use'],
     ['Cookies', 'Cookies and storage'],
     ['Sub-processors', 'Sub-processors'],
+    ['Support', 'Support'],
 ];
 
 async function xsrf(page: Page): Promise<Record<string, string>> {

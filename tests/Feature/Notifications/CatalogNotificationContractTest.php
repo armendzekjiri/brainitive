@@ -17,6 +17,7 @@ use App\Models\TicketContact;
 use App\Models\Webhook;
 use App\Notifications\AutomationNoticeNotification;
 use App\Notifications\CatalogNotification;
+use App\Notifications\Channels\MobilePushChannel;
 use App\Notifications\ClientCommentedNotification;
 use App\Notifications\ClientDecisionNotification;
 use App\Notifications\FeedbackSubmittedNotification;
@@ -146,7 +147,7 @@ class CatalogNotificationContractTest extends TestCase
 
         // defaults: comments = in-app only; assignments = in-app + push
         $this->assertSame(['database'], $commented->via($this->viewer));
-        $this->assertSame(['database', WebPushChannel::class], $task->via($this->viewer));
+        $this->assertSame(['database', WebPushChannel::class, MobilePushChannel::class], $task->via($this->viewer));
 
         $this->viewer->update(['notification_preferences' => ['assignments' => ['in_app' => false, 'push' => false, 'email' => true]]]);
         $this->assertSame(['mail'], $task->via($this->viewer->fresh()));

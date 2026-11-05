@@ -45,6 +45,37 @@ class LegalPagesTest extends TestCase
         $this->get('/refund')->assertOk();
     }
 
+    public function test_support_page_is_public_and_leaves_helpdesk_support_pages_alone(): void
+    {
+        config(['legal.cloud' => true]);
+
+        $this->assertGuest();
+        $this->get('/support')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Support')
+            ->where('legal.document.key', 'support')
+            ->where('legal.operator.email', 'hello@brainitive.app')
+            ->where('legal.support', route('support'))
+            ->where('legalLinks.support', route('support')));
+        $this->assertSame(url('/support'), route('support'));
+
+        // a helpdesk's public page still resolves to the helpdesk route, not to this page
+        $route = app('router')->getRoutes()->match(Request::create('/support/acme-help'));
+        $this->assertSame('helpdesks.support-page', $route->getName());
+        $this->assertSame('acme-help', $route->parameter('publicSlug'));
+        $this->get('/support/no-such-helpdesk')->assertNotFound();
+    }
+
+    public function test_self_hosted_support_page_names_the_installs_operator_not_brainitive_cloud(): void
+    {
+        config(['legal.cloud' => false, 'legal.operator.email' => 'it@example.com']);
+
+        $this->get('/support')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Support')
+            ->where('legal.cloud', false)
+            ->where('legal.operator.email', 'it@example.com'))
+            ->assertDontSee('hello@brainitive.app', false);
+    }
+
     public function test_configured_operator_values_win_over_the_cloud_defaults(): void
     {
         config(['legal.cloud' => true, 'legal.operator.name' => 'Jane Operator', 'legal.operator.email' => 'legal@example.com', 'legal.providers.hosting_location' => 'Gravelines, France']);

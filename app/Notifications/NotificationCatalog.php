@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\User;
+use App\Notifications\Channels\MobilePushChannel;
 use NotificationChannels\WebPush\WebPushChannel;
 
 /**
@@ -19,6 +20,9 @@ use NotificationChannels\WebPush\WebPushChannel;
 final class NotificationCatalog
 {
     public const CHANNELS = ['in_app', 'push', 'email'];
+
+    /** The Laravel channels behind the `push` choice: browser push and the mobile app (BRAI-448). */
+    public const PUSH_CHANNELS = [WebPushChannel::class, MobilePushChannel::class];
 
     /** category => [label, description, default channels] */
     public const CATEGORIES = [
@@ -143,7 +147,7 @@ final class NotificationCatalog
         $user->update(['notification_preferences' => $stored]);
     }
 
-    /** Laravel channel names for a type: 'database', WebPushChannel::class, 'mail'. */
+    /** Laravel channel names for a type: 'database', the PUSH_CHANNELS, 'mail'. */
     public static function channels(object $notifiable, string $type): array
     {
         if (! $notifiable instanceof User) {
@@ -152,10 +156,10 @@ final class NotificationCatalog
 
         $prefs = self::preferences($notifiable, self::category($type));
 
-        return array_values(array_filter([
-            $prefs['in_app'] ? 'database' : null,
-            $prefs['push'] ? WebPushChannel::class : null,
-            $prefs['email'] ? 'mail' : null,
-        ]));
+        return [
+            ...($prefs['in_app'] ? ['database'] : []),
+            ...($prefs['push'] ? self::PUSH_CHANNELS : []),
+            ...($prefs['email'] ? ['mail'] : []),
+        ];
     }
 }

@@ -2,11 +2,13 @@
 
 namespace Tests\Feature\AppApi;
 
+use App\Jobs\SendMobilePush;
 use App\Models\AppDevice;
 use App\Models\User;
 use App\Support\AppApi\AppTokens;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Tests\Feature\AppApi\Concerns\ActsAsAppClient;
 use Tests\Feature\AppApi\Concerns\ForgetsGuardsBetweenRequests;
 use Tests\TestCase;
@@ -82,6 +84,54 @@ class DevicesTest extends TestCase
         $this->assertNull($device->fresh()->push_token);
     }
 
+    public function test_setting_a_push_token_takes_it_off_every_other_device(): void
+    {
+        $user = User::factory()->create();
+        $old = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[same-phone]']);
+        $tablet = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[tablet]']);
+        $someoneElse = $this->appDevice(User::factory()->create(), ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[same-phone]']);
+        $new = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios']); // the app signed in again on that phone
+        $token = $this->appToken($user, $new);
+
+        $this->patchJson('/api/v1/devices/current', ['push_token' => 'ExponentPushToken[same-phone]'], $this->appHeaders($token))
+            ->assertOk()->assertJsonPath('data.has_push_token', true);
+
+        $this->assertSame('ExponentPushToken[same-phone]', $new->fresh()->push_token);
+        $this->assertNull($old->fresh()->push_token);
+        $this->assertSame('ExponentPushToken[tablet]', $tablet->fresh()->push_token);
+        // the phone signed into another account before: that account isn't pushed to this phone any more
+        $this->assertNull($someoneElse->fresh()->push_token);
+        $this->assertNull($someoneElse->fresh()->push_token_hash);
+        $this->assertNull($old->fresh()->push_token_hash);
+        $this->assertSame(hash('sha256', 'ExponentPushToken[same-phone]'), $new->fresh()->push_token_hash);
+        $this->assertSame(hash('sha256', 'ExponentPushToken[tablet]'), $tablet->fresh()->push_token_hash);
+
+        // the hash follows the token (changed, removed) and never leaves the server
+        $this->patchJson('/api/v1/devices/current', ['push_token' => 'ExponentPushToken[rotated]'], $this->appHeaders($token))
+            ->assertOk()->assertJsonMissingPath('data.push_token_hash');
+        $this->assertSame(hash('sha256', 'ExponentPushToken[rotated]'), $new->fresh()->push_token_hash);
+        $this->patchJson('/api/v1/devices/current', ['push_token' => null], $this->appHeaders($token))->assertOk();
+        $this->assertNull($new->fresh()->push_token_hash);
+        $this->assertSame('ExponentPushToken[tablet]', $tablet->fresh()->push_token);
+    }
+
+    public function test_the_push_token_hash_migration_backfills_existing_rows(): void
+    {
+        $user = User::factory()->create();
+        $phone = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[phone]']);
+        $none = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios']);
+        $broken = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'android']);
+        DB::table('app_devices')->where('id', $broken->id)->update(['push_token' => 'not-a-ciphertext']); // an old APP_KEY
+
+        $migration = require database_path('migrations/2026_11_14_100000_add_push_token_hash_to_app_devices_table.php');
+        $migration->down();
+        $migration->up();
+
+        $this->assertSame(hash('sha256', 'ExponentPushToken[phone]'), DB::table('app_devices')->where('id', $phone->id)->value('push_token_hash'));
+        $this->assertNull(DB::table('app_devices')->where('id', $none->id)->value('push_token_hash'));
+        $this->assertNull(DB::table('app_devices')->where('id', $broken->id)->value('push_token_hash'));
+    }
+
     public function test_update_validates(): void
     {
         $user = User::factory()->create();
@@ -97,7 +147,7 @@ class DevicesTest extends TestCase
     {
         $user = User::factory()->create();
         $token = $this->appToken($user);
-        $other = $this->appDevice($user, ['name' => 'Laptop']);
+        $other = $this->appDevice($user, ['name' => 'Phone', 'client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[phone]']);
         $otherToken = $this->appToken($user, $other);
 
         $this->deleteJson("/api/v1/devices/{$other->id}", [], $this->appHeaders($token))->assertNoContent();
@@ -106,6 +156,8 @@ class DevicesTest extends TestCase
         $this->assertTrue($other->isRevoked());
         $this->assertSame('user', $other->revoked_reason);
         $this->assertNull($other->access_token_hash);
+        $this->assertNull($other->push_token); // signed out: never pushed to again
+        $this->assertNull($other->push_token_hash);
         $this->getJson('/api/v1/devices', $this->appHeaders($otherToken))->assertStatus(401);
         // the caller stays signed in
         $this->getJson('/api/v1/devices', $this->appHeaders($token))->assertOk()->assertJsonCount(1, 'data');
@@ -158,13 +210,82 @@ class DevicesTest extends TestCase
         $this->assertSame('Test Mac', $device->fresh()->name);
     }
 
+    public function test_test_push_queues_a_push_to_the_calling_device_only(): void
+    {
+        Queue::fake();
+        config(['app-api.push.enabled' => true]);
+        $user = User::factory()->create();
+        $phone = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[phone-secret]']);
+        $this->appDevice($user, ['client' => 'mobile', 'platform' => 'android', 'push_token' => 'ExponentPushToken[other-secret]']);
+        $token = $this->appToken($user, $phone);
+
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($token))
+            ->assertStatus(202)
+            ->assertExactJson(['data' => ['status' => 'queued']]);
+
+        Queue::assertPushed(SendMobilePush::class, 1);
+        Queue::assertPushed(SendMobilePush::class, fn (SendMobilePush $job) => $job->deviceIds === [$phone->id]
+            && $job->userId === $user->id
+            && $job->title === 'Test notification'
+            && $job->url === null && $job->notificationId === null
+            && ! str_contains(serialize($job), 'secret'));
+    }
+
+    public function test_test_push_without_a_push_token_or_with_push_off_is_a_409(): void
+    {
+        Queue::fake();
+        config(['app-api.push.enabled' => true]);
+        $user = User::factory()->create();
+        $phone = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios']);
+        $phoneToken = $this->appToken($user, $phone);
+        $other = User::factory()->create(); // 3 a minute per user
+        $mac = $this->appDevice($other, ['push_token' => 'ExponentPushToken[mac]']); // desktop: never pushed to
+        $macToken = $this->appToken($other, $mac);
+
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($phoneToken))
+            ->assertStatus(409)->assertJsonPath('code', 'no_push_token');
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($macToken))
+            ->assertStatus(409)->assertJsonPath('code', 'no_push_token');
+        $phone->forceFill(['push_token' => 'not-an-expo-token'])->save();
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($phoneToken))
+            ->assertStatus(409)->assertJsonPath('code', 'no_push_token');
+        // a sign-in that can't be refreshed any more is never pushed to (AppDevice::eligibleForPush)
+        $phone->forceFill(['push_token' => 'ExponentPushToken[phone]', 'refresh_expires_at' => now()->subMinute()])->save();
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($phoneToken))
+            ->assertStatus(409)->assertJsonPath('code', 'no_push_token');
+
+        config(['app-api.push.enabled' => false]);
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($macToken))
+            ->assertStatus(409)->assertJsonPath('code', 'push_disabled');
+
+        Queue::assertNothingPushed();
+    }
+
+    public function test_test_push_is_limited_to_three_a_minute_and_needs_an_app_token(): void
+    {
+        Queue::fake();
+        config(['app-api.push.enabled' => true]);
+        $user = User::factory()->create();
+        $phone = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios', 'push_token' => 'ExponentPushToken[phone]']);
+        $token = $this->appToken($user, $phone);
+
+        $this->postJson('/api/v1/devices/current/test-push')->assertStatus(401);
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($this->passportToken($user)))->assertStatus(401);
+
+        foreach (range(1, 3) as $i) {
+            $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($token))->assertStatus(202);
+        }
+        $this->postJson('/api/v1/devices/current/test-push', [], $this->appHeaders($token))->assertStatus(429);
+        Queue::assertPushed(SendMobilePush::class, 3);
+    }
+
     public function test_the_model_never_serialises_secrets(): void
     {
         $device = $this->appDevice(User::factory()->create(), ['push_token' => 'secret']);
         AppTokens::issue($device);
 
         $array = AppDevice::find($device->id)->toArray();
-        foreach (['push_token', 'access_token_hash', 'refresh_token_hash', 'previous_refresh_hash'] as $key) {
+        foreach (['push_token', 'push_token_hash', 'access_token_hash', 'refresh_token_hash', 'previous_refresh_hash'] as $key) {
             $this->assertArrayNotHasKey($key, $array);
         }
     }

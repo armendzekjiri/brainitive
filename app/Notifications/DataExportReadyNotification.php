@@ -6,7 +6,6 @@ use App\Models\DataExport;
 use App\Notifications\Messages\BrandedMailMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Number;
-use NotificationChannels\WebPush\WebPushChannel;
 
 /**
  * "Your data is ready to download" (GDPR Art. 15 + 20, BRAI-156 follow-up). The person asked for it,
@@ -27,7 +26,7 @@ class DataExportReadyNotification extends CatalogNotification
 
     public function via(object $notifiable): array
     {
-        $push = in_array(WebPushChannel::class, $this->channelsFor($notifiable, self::TYPE), true) ? [WebPushChannel::class] : [];
+        $push = array_values(array_intersect($this->channelsFor($notifiable, self::TYPE), NotificationCatalog::PUSH_CHANNELS));
 
         return ['database', 'mail', ...$push];
     }

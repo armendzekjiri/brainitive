@@ -51,10 +51,17 @@ export default function Subprocessors({ legal }: { legal: LegalPageData }) {
                 <LegalTable
                     head={['Service', 'Purpose', 'When', 'Location / safeguard']}
                     rows={[
-                        ['Google (Google Ireland Ltd. / Google LLC)', 'Sign-in with Google, Google Calendar & Tasks, Google Meet; push notifications in Chrome-based browsers', 'Only if you use the integration or push', 'EU / USA — EU-U.S. Data Privacy Framework or Standard Contractual Clauses'],
+                        ['Google (Google Ireland Ltd. / Google LLC)', 'Sign-in with Google, Google Calendar & Tasks, Google Meet; push notifications in Chrome-based browsers and to the mobile app on Android (Firebase Cloud Messaging)', 'Only if you use the integration or push', 'EU / USA — EU-U.S. Data Privacy Framework or Standard Contractual Clauses'],
                         ['Microsoft (Microsoft Ireland Operations Ltd. / Microsoft Corp.)', 'Sign-in with Microsoft, Outlook calendar, Teams meetings; push notifications in Edge / Windows', 'Only if you use the integration or push', 'EU / USA — EU-U.S. Data Privacy Framework or Standard Contractual Clauses'],
                         ['GitHub, Inc.', 'Sign-in with GitHub, GitHub App / webhooks for repositories', 'Only if you use the integration', 'USA — EU-U.S. Data Privacy Framework or Standard Contractual Clauses'],
                         ['Apple, Mozilla', 'Push notifications in Safari / Firefox', 'Only if you enable push', 'Push service of your browser; contents end-to-end encrypted'],
+                        [
+                            'Expo (650 Industries, Inc.)',
+                            'Push notifications to the Brainitive mobile app (passed on to Apple Push Notification service or Firebase Cloud Messaging)',
+                            'Only if you turn notifications on in the app',
+                            <span key="expo">USA — <ToConfirm>safeguard</ToConfirm></span>,
+                        ],
+                        ['Apple Inc. / Apple Distribution International Ltd.', 'Sign in with Apple; push notifications to the mobile app on iPhone (APNs)', 'Only if you use Sign in with Apple or app notifications', 'EU / USA — EU-U.S. Data Privacy Framework or Standard Contractual Clauses'],
                         ['AI service chosen by the workspace (e.g. OpenAI, Azure OpenAI, a self-hosted model)', 'AI features', 'Only if your workspace adds its own key', 'Chosen and contracted by the workspace'],
                     ]}
                 />

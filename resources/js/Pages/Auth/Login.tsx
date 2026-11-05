@@ -1,3 +1,4 @@
+import AppleSignInButton from '@/components/AppleSignInButton';
 import Checkbox from '@/components/Checkbox';
 import InputError from '@/components/InputError';
 import InputLabel from '@/components/InputLabel';
@@ -14,13 +15,17 @@ export default function Login({
     canLoginWithGoogle,
     canLoginWithGitHub,
     canLoginWithMicrosoft,
+    canLoginWithApple,
 }: {
     status?: string;
     canResetPassword: boolean;
     canLoginWithGoogle?: boolean;
     canLoginWithGitHub?: boolean;
     canLoginWithMicrosoft?: boolean;
+    canLoginWithApple?: boolean;
 }) {
+    const anySocial = canLoginWithGoogle || canLoginWithGitHub || canLoginWithMicrosoft || canLoginWithApple;
+
     const { data, setData, post, processing, errors, reset } = useForm({
         email: '',
         password: '',
@@ -45,7 +50,7 @@ export default function Login({
                 </div>
             )}
 
-            {(canLoginWithGoogle || canLoginWithGitHub || canLoginWithMicrosoft) && (
+            {anySocial && (
                 <div className="mb-4 space-y-2">
                     {canLoginWithGoogle && (
                         <a
@@ -98,14 +103,15 @@ export default function Login({
                             Continue with Microsoft
                         </a>
                     )}
+                    {canLoginWithApple && <AppleSignInButton />}
                 </div>
             )}
 
-            {(canLoginWithGoogle || canLoginWithGitHub || canLoginWithMicrosoft) && (
-                <TermsNotice action="continuing with Google, GitHub or Microsoft for the first time" className="mb-4" />
+            {anySocial && (
+                <TermsNotice action="continuing with Google, GitHub, Microsoft or Apple for the first time" className="mb-4" />
             )}
 
-            {(canLoginWithGoogle || canLoginWithGitHub || canLoginWithMicrosoft) && (
+            {anySocial && (
                 <div className="relative my-4">
                     <div className="absolute inset-0 flex items-center">
                         <span className="w-full border-t border-border" />

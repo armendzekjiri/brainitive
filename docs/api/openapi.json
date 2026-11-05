@@ -741,6 +741,7 @@
         "/devices/current": {
             "patch": {
                 "operationId": "app.v1.devices.current.update",
+                "description": "A push token belongs to one install: any other device holding the same one (an earlier sign-in\non this phone, also in another account) loses it, so the phone only gets this account's pushes.",
                 "summary": "The calling device updates its name, versions or push token",
                 "tags": [
                     "Devices"
@@ -778,6 +779,116 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/devices/current/test-push": {
+            "post": {
+                "operationId": "app.v1.devices.current.test-push",
+                "description": "Queued through the Expo push service like every push \u2192 202. The device needs an Expo push token\n(`PATCH /devices/current`); without one \u2192 409 `no_push_token`. Push turned off on this server \u2192\n409 `push_disabled`. 3 per minute.",
+                "summary": "Send a test notification to the calling device (\"Send a test notification to this device\")",
+                "tags": [
+                    "Devices"
+                ],
+                "responses": {
+                    "202": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "status": {
+                                                    "type": "string",
+                                                    "const": "queued"
+                                                }
+                                            },
+                                            "required": [
+                                                "status"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string",
+                                                    "const": "This device has no push token. Allow notifications in the app, then try again."
+                                                },
+                                                "code": {
+                                                    "type": "string",
+                                                    "const": "no_push_token"
+                                                }
+                                            },
+                                            "required": [
+                                                "message",
+                                                "code"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string",
+                                                    "const": "Push notifications are turned off on this server."
+                                                },
+                                                "code": {
+                                                    "type": "string",
+                                                    "const": "push_disabled"
+                                                }
+                                            },
+                                            "required": [
+                                                "message",
+                                                "code"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string",
+                                                    "description": "Human-readable, safe to show."
+                                                },
+                                                "code": {
+                                                    "type": "string",
+                                                    "description": "Machine-readable: switch on this, not on the message.",
+                                                    "enum": [
+                                                        "conflict"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "message",
+                                                "code"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
                     },
                     "429": {
                         "$ref": "#/components/responses/RateLimited"
@@ -16625,13 +16736,17 @@
                             },
                             "microsoft": {
                                 "type": "boolean"
+                            },
+                            "apple": {
+                                "type": "boolean"
                             }
                         },
                         "required": [
                             "password",
                             "google",
                             "github",
-                            "microsoft"
+                            "microsoft",
+                            "apple"
                         ]
                     },
                     "sign_up_open": {

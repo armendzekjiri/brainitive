@@ -33,7 +33,7 @@ class UserController extends Controller
         $adminIds = InstanceAdmin::pluck('user_id');
 
         $users = User::query()
-            ->select(['id', 'name', 'email', 'avatar', 'email_verified_at', 'suspended_at', 'last_login_at', 'created_at', 'google_id', 'github_id', 'microsoft_id'])
+            ->select(['id', 'name', 'email', 'avatar', 'email_verified_at', 'suspended_at', 'last_login_at', 'created_at', 'google_id', 'github_id', 'microsoft_id', 'apple_id'])
             ->withCount(['workspaces', 'ownedWorkspaces'])
             ->addSelect(['projects_count' => $this->accessibleProjectsCount()])
             ->when($search !== '', function ($query) use ($search) {
@@ -267,6 +267,7 @@ class UserController extends Controller
                 $user->google_id ? 'google' : null,
                 $user->github_id ? 'github' : null,
                 $user->microsoft_id ? 'microsoft' : null,
+                $user->apple_id ? 'apple' : null,
             ])),
             'is_instance_admin' => $isAdmin,
             'workspaces_count' => $user->workspaces_count,

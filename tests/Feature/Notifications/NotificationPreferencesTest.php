@@ -9,6 +9,7 @@ use App\Models\Ticket;
 use App\Models\TicketContact;
 use App\Models\User;
 use App\Notifications\CalendarReminderNotification;
+use App\Notifications\Channels\MobilePushChannel;
 use App\Notifications\ItemAssignedNotification;
 use App\Notifications\MentionNotification;
 use App\Notifications\NewLeadNotification;
@@ -48,7 +49,7 @@ class NotificationPreferencesTest extends TestCase
         $user = User::factory()->create();
 
         // helpdesk category: in-app, push and email on by default, as before v1.39.0
-        $this->assertSame(['database', WebPushChannel::class, 'mail'], NotificationCatalog::channels($user, 'ticket_assigned'));
+        $this->assertSame(['database', WebPushChannel::class, MobilePushChannel::class, 'mail'], NotificationCatalog::channels($user, 'ticket_assigned'));
     }
 
     public function test_an_inertia_save_goes_back(): void
@@ -95,10 +96,10 @@ class NotificationPreferencesTest extends TestCase
         $actor = User::factory()->create();
 
         $mention = new MentionNotification('item', 'Spec', '/x', $actor);
-        $this->assertSame(['database', WebPushChannel::class], $mention->via($user));
+        $this->assertSame(['database', WebPushChannel::class, MobilePushChannel::class], $mention->via($user));
 
         $calendar = new CalendarReminderNotification('Standup', 'in 10 minutes');
-        $this->assertSame([WebPushChannel::class], $calendar->via($user));
+        $this->assertSame([WebPushChannel::class, MobilePushChannel::class], $calendar->via($user));
     }
 
     public function test_via_follows_the_users_category_choice(): void
@@ -126,7 +127,7 @@ class NotificationPreferencesTest extends TestCase
         $user = User::factory()->create();
         $lead = new Lead;
 
-        $this->assertSame(['database', WebPushChannel::class, 'mail'], (new NewLeadNotification($lead))->via($user));
+        $this->assertSame(['database', WebPushChannel::class, MobilePushChannel::class, 'mail'], (new NewLeadNotification($lead))->via($user));
     }
 
     public function test_turning_in_app_off_stops_the_notification_in_the_inbox(): void

@@ -100,9 +100,18 @@ export function createLexicalBridge(provider: HocuspocusProvider) {
             setLocalStateField: (field: string, value: unknown) => awareness.setLocalStateField(field, value),
             on: (type: 'update', cb: () => void) => awareness.on(type, cb),
             off: (type: 'update', cb: () => void) => awareness.off(type, cb),
+            // Only the others: Lexical skips the caret of its own Y doc's clientID, but the editor runs on
+            // a mirror doc (see above) while our awareness belongs to the transport doc — without this, the
+            // user saw their own caret and name. Our other tabs / devices are left out too, like the peer list.
             getStates: () => {
                 const states = new Map<number, Record<string, unknown>>();
-                awareness.getStates().forEach((state, clientId) => states.set(clientId, safeAwarenessState(state)));
+                const ownUserId = (awareness.getLocalState()?.awarenessData as Partial<CollabAwarenessData> | undefined)?.userId;
+                awareness.getStates().forEach((state, clientId) => {
+                    if (clientId === awareness.clientID) return;
+                    const userId = (state.awarenessData as Partial<CollabAwarenessData> | undefined)?.userId;
+                    if (ownUserId !== undefined && userId === ownUserId) return;
+                    states.set(clientId, safeAwarenessState(state));
+                });
                 return states;
             },
         },
