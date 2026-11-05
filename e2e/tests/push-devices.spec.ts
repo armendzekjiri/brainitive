@@ -197,3 +197,18 @@ test.describe('push devices', () => {
         await expect(thisDevice).toHaveCount(1);
     });
 });
+
+test.describe('inside Brainitive Desktop', () => {
+    // the desktop webview's user agent ends in ` BrainitiveDesktop/<version>`
+    test.use({ userAgent: `${WINDOWS_CHROME} BrainitiveDesktop/1.0.0` });
+
+    test('the desktop app explains its own notifications instead of offering browser push', async ({ page }) => {
+        await page.goto('/profile#notifications');
+        const settings = page.getByTestId('push-settings');
+        await expect(settings.getByText('Brainitive Desktop shows notifications itself')).toBeVisible();
+        await expect(settings.getByRole('button', { name: 'Register this device' })).toHaveCount(0);
+        await expect(settings.getByRole('button', { name: 'Turn on' })).toHaveCount(0);
+        // the device list (other browsers / phones) stays
+        await expect(settings.getByText('Your devices')).toBeVisible();
+    });
+});

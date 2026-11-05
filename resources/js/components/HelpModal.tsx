@@ -135,7 +135,7 @@ const CHANGELOG = [
     {
         version: 'v1.49.0',
         title: 'Desktop app support, app sign-in and a public API',
-        tag: 'Feature',
+        tag: 'Major Feature',
         date: '2026-11-02',
         items: [
             'Brainitive Desktop (beta, coming soon): the server side is ready. The app signs you in through your browser, whether you use Brainitive Cloud or your own server, so Google, Microsoft and GitHub sign-in work as usual.',
