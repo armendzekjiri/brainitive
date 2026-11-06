@@ -6,6 +6,7 @@ use App\Models\Board;
 use App\Models\Plan;
 use App\Models\PlanVersion;
 use App\Models\Project;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Boards\ProjectIssues;
 use App\Support\Entitlements\LimitGate;
@@ -61,7 +62,12 @@ class PlanController extends Controller
             'workspace' => $workspace,
             'project' => $project,
             'plan' => $this->payload($workspace, $project, $plan),
-            'members' => $workspace->users()->orderBy('name')->get(['users.id', 'users.name', 'users.avatar']),
+            // workspace members + people invited to this project only (guests), for the Who picker
+            'members' => User::query()
+                ->where(fn ($q) => $q
+                    ->whereHas('workspaces', fn ($w) => $w->where('workspaces.id', $workspace->id))
+                    ->orWhereHas('projects', fn ($p) => $p->where('projects.id', $project->id)))
+                ->orderBy('name')->get(['id', 'name', 'avatar']),
             'issues' => $this->linkedIssues($workspace, $project, $plan),
             'boards' => $project->boards()->get(['id', 'name', 'project_id'])
                 ->each(fn (Board $board) => $board->setRelation('project', $project))
