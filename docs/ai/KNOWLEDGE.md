@@ -2474,3 +2474,17 @@ Findings and tests: `docs/ai/tasks/release-v1.49.0.md` → Codex realtime review
 - **Log lines with client values** go through `realtime/src/log.js` `fields()`: escaped, truncated, `key="value"`.
 - **Deploy:** restart `brainitive-realtime` after the deploy (old server: the session push 404s — reported, harmless —
   and old tokens without `sid` keep working until they expire). New realtime env vars are optional (defaults above).
+
+### My Work filter bar (v1.51.0, feat/my-work-filters)
+- **Client-side on purpose:** `MyWorkController::index` returns every row of the scope + due chip (no pagination), so
+  search / project / source / priority / labels / status / sort run in the browser (`lib/myWorkFilters.ts`). If the
+  page ever gets paginated, these must move to server params (the App API's `/me/work` already has `status` / `due`).
+- **URL:** `scope` / `filter` stay server params; the client ones (`q`, `projects`, `source`, `priority`, `labels`,
+  `status`, `sort`, defaults left out) are written with `history.replaceState(history.state, …)` like the board's
+  filter bar. The scope / due chips visit with `preserveState` and carry them along.
+- **Status defaults to Open** (done rows used to be listed dimmed at the bottom). A task completed with the circle
+  while on Open stays listed (struck through) until the status filter changes or the page reloads (`keepVisible`).
+- **Counts:** the scope / due chips and the header stats stay server totals of the scope (they describe it, not the
+  narrowed view); "Done here" counts done rows matching the other filters; the bar shows "N of M tasks".
+- Priorities and labels are per project: the dropdowns group them by slug / lower-case name across projects. List
+  tasks have neither (a priority or label filter hides them; "No priority" matches them). My Day ignores the filters.

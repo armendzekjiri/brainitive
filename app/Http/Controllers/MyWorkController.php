@@ -74,6 +74,7 @@ class MyWorkController extends Controller
             'description' => $item->description,
             'due_date' => $item->due_date?->toDateString(),
             'completed_at' => $item->completed_at?->toIso8601String(),
+            'updated_at' => $item->updated_at?->toIso8601String(),
             'position' => $item->position,
             'source' => [
                 'type' => 'board',
@@ -96,6 +97,8 @@ class MyWorkController extends Controller
             ] : null,
             'item_type' => $item->itemType,
             'priority' => $item->priority,
+            // filter bar (My Work): labels by name across projects, sort by recently updated
+            'labels' => $item->labels->map(fn ($label) => ['id' => $label->id, 'name' => $label->name, 'color' => $label->color])->values()->all(),
             'assignee' => $item->assignee,
         ];
     }
@@ -113,6 +116,7 @@ class MyWorkController extends Controller
             'description' => $item->description,
             'due_date' => $item->due_date?->toDateString(),
             'completed_at' => $item->status === 'done' ? $item->updated_at?->toIso8601String() : null,
+            'updated_at' => $item->updated_at?->toIso8601String(),
             'position' => $item->position,
             'status' => $item->status,
             'source' => [
@@ -133,6 +137,7 @@ class MyWorkController extends Controller
             ],
             'item_type' => null,
             'priority' => null,
+            'labels' => [],
             'assignee' => $item->assignee,
         ];
     }
@@ -163,6 +168,7 @@ class MyWorkController extends Controller
                 'itemType',
                 'priority',
                 'assignee:id,name,email',
+                'labels:id,name,color',
             ])
             ->orderByRaw('CASE WHEN completed_at IS NULL THEN 0 ELSE 1 END')
             ->orderBy('due_date')
@@ -279,6 +285,7 @@ class MyWorkController extends Controller
             'itemType',
             'priority',
             'assignee:id,name,email',
+            'labels:id,name,color',
         ], [
             'taskList:id,project_id,name,slug',
             'taskList.project:id,workspace_id,name,slug,key,color',

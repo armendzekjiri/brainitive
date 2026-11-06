@@ -9,6 +9,21 @@ import { ProjectIcon } from '@/components/ProjectIcon';
 import { Badge } from '@/components/ui/badge';
 import { myDaySnapshot, useOfflineSnapshot } from '@/lib/offline/snapshots';
 import { cn } from '@/lib/utils';
+import MyWorkFilterBar from '@/components/my-work/MyWorkFilterBar';
+import {
+    activeFilterCount,
+    applyMyWorkFilters,
+    DEFAULT_MY_WORK_FILTERS,
+    filterOptions,
+    isWorkDone,
+    matchesNarrowing,
+    myWorkFilterParams,
+    type MyWorkFilters,
+    readMyWorkFilters,
+    workKey,
+    writeMyWorkFilters,
+} from '@/lib/myWorkFilters';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ListTodo,
     Calendar,
@@ -16,6 +31,7 @@ import {
     CalendarDays,
     LayoutGrid,
     Inbox,
+    SearchX,
 } from 'lucide-react';
 
 type FilterKey = 'all' | 'today' | 'overdue' | 'week';
@@ -30,7 +46,7 @@ interface Props extends PageProps {
     myDay: MyDayPlan;
 }
 
-const filters: { key: FilterKey; label: string; icon: typeof Calendar }[] = [
+const dueFilters: { key: FilterKey; label: string; icon: typeof Calendar }[] = [
     { key: 'all', label: 'All', icon: LayoutGrid },
     { key: 'today', label: 'Today', icon: Calendar },
     { key: 'overdue', label: 'Overdue', icon: AlertCircle },
@@ -243,7 +259,38 @@ export default function MyWorkIndex({ auth, scope, filter, projects, counts, sco
     // Offline mode (BRAI-82): today's plan, for My Day without internet (a no-op while it's off).
     useOfflineSnapshot('myday', 'today', () => myDaySnapshot(myDay), [myDay]);
     const totalItems = projects.reduce((acc, p) => acc + p.items.length, 0);
-    const visibleDone = projects.reduce((acc, p) => acc + p.items.filter((item) => item.completed_at).length, 0);
+
+    // Filter bar (v1.51.0): every row of the scope + due chip is loaded, so it filters in the browser
+    // and mirrors itself into the URL (like the board's filter bar).
+    const [filters, setFilters] = useState<MyWorkFilters>(readMyWorkFilters);
+    const openKeys = () => new Set(projects.flatMap((p) => p.items.filter((i) => !isWorkDone(i)).map(workKey)));
+    // rows open when the view was set up stay listed after the circle completes them
+    const [keepVisible, setKeepVisible] = useState<Set<string>>(openKeys);
+    useEffect(() => writeMyWorkFilters(filters), [filters]);
+    const updateFilters = (next: Partial<MyWorkFilters>) => {
+        if (next.status && next.status !== filters.status) setKeepVisible(openKeys());
+        setFilters((current) => ({ ...current, ...next }));
+    };
+    const clearFilters = () => {
+        setKeepVisible(openKeys());
+        setFilters(DEFAULT_MY_WORK_FILTERS);
+    };
+    const options = useMemo(() => filterOptions(projects), [projects]);
+    const visibleProjects = useMemo(() => applyMyWorkFilters(projects, filters, keepVisible), [projects, filters, keepVisible]);
+    const shownItems = visibleProjects.reduce((acc, p) => acc + p.items.length, 0);
+    // done rows among what the other filters show (status ignored): "done among what you look at"
+    const visibleDone = projects.reduce(
+        (acc, p) => acc + p.items.filter((item) => isWorkDone(item) && matchesNarrowing(item, p, filters)).length,
+        0,
+    );
+    const onlyStatusHides = activeFilterCount(filters) === 0 && filters.q.trim() === '' && filters.status === 'open';
+    // scope / due chips are server visits: carry the client filters along
+    const visit = (params: { scope: ScopeKey; filter: string }) =>
+        router.get(
+            route('my-work.index'),
+            { ...params, ...Object.fromEntries(Object.entries(myWorkFilterParams(filters)).filter(([, v]) => v)) },
+            { preserveState: true, preserveScroll: true },
+        );
     const firstName = auth.user.name?.split(' ')[0] || 'there';
     const isCreatedScope = scope === 'created';
     const currentDate = new Date().toLocaleDateString(undefined, {
@@ -325,9 +372,7 @@ export default function MyWorkIndex({ auth, scope, filter, projects, counts, sco
                                             : 'text-muted-foreground hover:text-foreground',
                                     )}
                                     title={scopeOption.description}
-                                    onClick={() =>
-                                        router.get(route('my-work.index'), { scope: scopeOption.key, filter })
-                                    }
+                                    onClick={() => visit({ scope: scopeOption.key, filter })}
                                 >
                                     {scopeOption.label}
                                     <span className="rounded-full bg-secondary px-1.5 text-[10px] text-muted-foreground">
@@ -338,7 +383,7 @@ export default function MyWorkIndex({ auth, scope, filter, projects, counts, sco
                         })}
                     </div>
 
-                    {filters.map(({ key, label, icon: Icon }) => {
+                    {dueFilters.map(({ key, label, icon: Icon }) => {
                         const count = counts[key];
                         const isActive = filter === key;
                         return (
@@ -351,9 +396,7 @@ export default function MyWorkIndex({ auth, scope, filter, projects, counts, sco
                                         ? 'border-transparent bg-primary text-primary-foreground shadow-[0_1px_0_rgba(20,32,44,0.04)]'
                                         : 'border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground',
                                 )}
-                                onClick={() =>
-                                    router.get(route('my-work.index'), { scope, filter: key })
-                                }
+                                onClick={() => visit({ scope, filter: key })}
                             >
                                 <Icon className="size-3.5" />
                                 <span>{label}</span>
@@ -370,6 +413,17 @@ export default function MyWorkIndex({ auth, scope, filter, projects, counts, sco
                     })}
                 </div>
 
+                {totalItems > 0 && (
+                    <MyWorkFilterBar
+                        filters={filters}
+                        options={options}
+                        onChange={updateFilters}
+                        onClear={clearFilters}
+                        shown={shownItems}
+                        total={totalItems}
+                    />
+                )}
+
                 {/* Content */}
                 {totalItems === 0 ? (
                     <div className="flex min-h-[360px] flex-col items-center justify-center rounded-[10px] border border-dashed border-border bg-card px-6 text-center">
@@ -385,9 +439,32 @@ export default function MyWorkIndex({ auth, scope, filter, projects, counts, sco
                                 : `No tasks ${filter === 'today' ? 'due today' : filter === 'overdue' ? 'overdue' : 'due this week'}.`}
                         </p>
                     </div>
+                ) : shownItems === 0 ? (
+                    <div className="flex min-h-[280px] flex-col items-center justify-center rounded-[10px] border border-dashed border-border bg-card px-6 text-center">
+                        <div className="mb-5 grid size-16 place-items-center rounded-full bg-secondary">
+                            <SearchX className="size-8 text-muted-foreground" />
+                        </div>
+                        {onlyStatusHides ? (
+                            <>
+                                <h3 className="mb-1 text-base font-semibold">No open tasks here</h3>
+                                <p className="max-w-sm text-sm text-muted-foreground">Everything in this view is done.</p>
+                                <button type="button" className="mt-3 text-sm font-semibold text-primary hover:underline" onClick={() => updateFilters({ status: 'all' })}>
+                                    Show done tasks
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <h3 className="mb-1 text-base font-semibold">No tasks match these filters</h3>
+                                <p className="max-w-sm text-sm text-muted-foreground">Try another search or fewer filters.</p>
+                                <button type="button" className="mt-3 text-sm font-semibold text-primary hover:underline" onClick={clearFilters}>
+                                    Clear filters
+                                </button>
+                            </>
+                        )}
+                    </div>
                 ) : (
                     <div className="space-y-4">
-                        {projects.map((project) => (
+                        {visibleProjects.map((project) => (
                             <section key={project.id} className="overflow-hidden rounded-[10px] border border-border bg-card shadow-[0_1px_0_rgba(20,32,44,0.04)]">
                                 <header className="flex items-center gap-3 border-b border-border/70 bg-background px-3.5 py-[11px]">
                                     <ProjectIcon

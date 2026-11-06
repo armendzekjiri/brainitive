@@ -370,6 +370,10 @@ Plan [`tasks/feat-legal-compliance.md`](./tasks/feat-legal-compliance.md); human
 
 ### MyWork, Search, Notifications, Files
 - **MyWork:** `MyWorkController` → `Pages/MyWork/` — cross-workspace "assigned to me" dashboard
+  - **Filter bar** (v1.51.0): `components/my-work/MyWorkFilterBar.tsx` + `lib/myWorkFilters.ts`.
+    Server params stay `scope` + `filter` (due chip); search / project / source / priority / labels /
+    status (`open` default) / sort run client-side on the full payload and are mirrored into the URL
+    (`q`, `projects`, `source`, `priority`, `labels`, `status`, `sort`) with `history.replaceState`.
   - **My Day** (BRAI-74): `MyDayEntry` (`my_day_entries`: user + board item / list task + local
     `plan_date` + position), `MyDayController` (`my-day.*`: add / remove / reorder /
     carry-over), `Support/MyDay/MyDayPlan` (today in the user's zone, resolves entries to
