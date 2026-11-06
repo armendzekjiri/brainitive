@@ -114,6 +114,7 @@ const CHANGELOG = [
             'Self-hosted: docs and issues that already show tables as “| a | b |” text can be repaired once with php artisan pages:repair-markdown-tables --items (a dry run; add --force to write).',
             'AI assistants (MCP) can now list, create and update releases and link issues to them.',
             'Boards: right-click an issue in the list or a card on the board for Open, Copy link / key, Status, Assignee, Priority, Type, Due date, Labels and Delete. In the list, right-clicking a selected row changes all selected issues (thanks for the request on GitHub!).',
+            'My Work: real filters — search by title or key, filter by project, source (boards / task lists), priority, labels and status (open by default), sort by due date, priority, recently updated or project; kept in the address so reload and back keep them.',
             'Privacy policy 2.5: the mobile app only uses the photo picker, never the camera.',
             'Docs site: updated its build tool (security fix for the local preview server).',
         ]
