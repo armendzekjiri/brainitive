@@ -437,6 +437,23 @@ board access (every policy check starts with BoardPolicy::view).
 - Compare views on normalized params: the server stores `quick` in its fixed order, so the client
   serializes it in the same order (`QUICK_FILTERS`), not click order.
 
+### Board column widths are personal: localStorage, not saved views (v1.51.0)
+- Timeline "Items" width and List column widths live in localStorage
+  (`board-<id>-u<userId>-timeline-widths`, `board-<id>-u<userId>-list-col-widths`, only resized
+  columns are stored), written on release / key / reset, never per pointer move. They apply in
+  every saved view: saved views are URL params compared on normalized values, so pixel widths
+  there would mark a view "modified" after every drag.
+- Not the PlanChart pattern on purpose: a plan's `settings.gridWidth` is shared document state
+  (everyone sees it, goes through `usePlanEditor`); board widths are one person's preference.
+- List: `table-layout: fixed`. Title has `default: null` (auto, fills the spare space, 200px
+  floor); once it's dragged it becomes fixed and an empty trailing filler column takes the spare
+  space — otherwise a fixed table spreads the excess over every column and the handle no longer
+  follows the pointer. Table `min-width` = sum of the columns → sideways scroll, never squeezing.
+- Phones get no handles (`useIsMobile`); the Timeline column is then min(288, 60% of the window).
+- **Trap:** `overflow-x-auto` makes `overflow-y` auto too. The board tab strip
+  (`BoardHeader`) had tabs with `-mb-px`, i.e. 1px of vertical overflow → a tiny ▲▼ scrollbar
+  next to the tabs. Keep `overflow-y-hidden` on horizontally scrolling strips.
+
 ### Bulk edit in the board list view goes through the model, once per issue (BRAI-108)
 `PATCH|DELETE boards/{board}/items/bulk` (`BoardBulkItemController` → `Support/Boards/BulkItemEdit`)
 changes up to 200 issues of **this** board (one query loads them; a missing, deleted or foreign

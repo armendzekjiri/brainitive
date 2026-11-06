@@ -136,6 +136,8 @@ import { BulkEditBar } from '@/components/board/BulkEditBar';
 import type { BulkEditOptions } from '@/components/board/bulkItemEdit';
 import { ItemContextMenu } from '@/components/board/ItemContextMenu';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
+import { useResizableColumns, type ColumnSpec } from '@/hooks/useResizableColumns';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -1326,16 +1328,31 @@ function writeHiddenFields(boardId: number, ids: number[]) {
     if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.href);
 }
 
-function SortHeader({ label, sortKey, sort, onSort, className }: {
+/** The drag/keyboard handle on a column's right edge (props from useResizableColumns). */
+function ColumnResizeHandle(props: React.HTMLAttributes<HTMLDivElement>) {
+    return (
+        <div
+            {...props}
+            className="group/resize absolute -right-1.5 top-0 bottom-0 z-10 flex w-3 cursor-col-resize touch-none select-none justify-center outline-none"
+        >
+            <span className="my-1.5 w-px bg-border transition-colors group-hover/resize:w-0.5 group-hover/resize:bg-primary group-focus-visible/resize:w-0.5 group-focus-visible/resize:bg-primary" />
+        </div>
+    );
+}
+
+function SortHeader({ label, sortKey, sort, onSort, className, resize }: {
     label: string; sortKey: ListSortKey; sort: ListSort | null; onSort: (key: ListSortKey) => void; className?: string;
+    /** Resize handle props; omitted on phones. */
+    resize?: React.HTMLAttributes<HTMLDivElement>;
 }) {
     const active = sort?.key === sortKey;
     return (
-        <th className={cn('pb-3 font-medium', className)} aria-sort={active ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-            <button type="button" onClick={() => onSort(sortKey)} className={cn('inline-flex items-center gap-1 hover:text-foreground transition-colors', active && 'text-foreground')}>
-                <span className="truncate max-w-[160px]">{label}</span>
-                {active && (sort!.dir === 'asc' ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
+        <th className={cn('relative pb-3 px-3 font-medium', className)} aria-sort={active ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+            <button type="button" onClick={() => onSort(sortKey)} className={cn('inline-flex max-w-full items-center gap-1 hover:text-foreground transition-colors', active && 'text-foreground')} title={label}>
+                <span className="truncate">{label}</span>
+                {active && (sort!.dir === 'asc' ? <ArrowUp className="size-3 shrink-0" /> : <ArrowDown className="size-3 shrink-0" />)}
             </button>
+            {resize && <ColumnResizeHandle {...resize} />}
         </th>
     );
 }
@@ -1346,15 +1363,30 @@ function FieldCell({ field, item }: { field: ItemField; item: Item }) {
     if (field.type === 'select') {
         const option = fieldOption(field, value);
         return (
-            <span className={cn('inline-flex items-center gap-1.5 text-sm', option?.archived_at && 'text-muted-foreground')}>
+            <span className={cn('flex min-w-0 items-center gap-1.5 text-sm', option?.archived_at && 'text-muted-foreground')} title={option?.label}>
                 {option?.color && <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: option.color }} />}
-                {option?.label}
+                <span className="truncate">{option?.label}</span>
             </span>
         );
     }
     const text = formatFieldValue(field, value);
-    return <span className={cn('text-sm', field.type === 'number' && 'tabular-nums', field.type === 'text' && 'block max-w-[220px] truncate')} title={text}>{text}</span>;
+    return <span className={cn('text-sm', field.type === 'number' && 'tabular-nums', 'block truncate')} title={text}>{text}</span>;
 }
+
+const LIST_CHECKBOX_W = 40;
+const LIST_BASE_KEYS = ['key', 'title', 'parent', 'status', 'priority', 'assignee', 'due_date', 'story_points'] as const;
+/** Default / minimum widths: nothing overlaps at the defaults; wider than the screen scrolls. */
+const LIST_COLUMN_SPECS: Record<(typeof LIST_BASE_KEYS)[number], ColumnSpec> = {
+    key: { min: 96, max: 260, default: 128 },
+    title: { min: 200, max: 1600, default: null },
+    parent: { min: 80, max: 260, default: 104 },
+    status: { min: 96, max: 360, default: 140 },
+    priority: { min: 96, max: 260, default: 120 },
+    assignee: { min: 120, max: 400, default: 180 },
+    due_date: { min: 100, max: 260, default: 120 },
+    story_points: { min: 96, max: 220, default: 120 },
+};
+const LIST_FIELD_SPEC: ColumnSpec = { min: 96, max: 480, default: 160 };
 
 const LIST_CHECKBOX_CLASS = 'size-4 rounded border-input accent-primary cursor-pointer align-middle';
 
@@ -1422,7 +1454,22 @@ function ListView({
     }, [allItems, sort, sortHidden, customFields, columnRank]);
 
     const selectable = bulk !== null;
-    const columnCount = 8 + fieldColumns.length + (selectable ? 1 : 0);
+    // ── Column widths: drag / ←→ on a header's right edge; per person and board (localStorage) ──
+    const isMobile = useIsMobile();
+    const userId = usePage<PageProps>().props.auth?.user?.id ?? 0;
+    const widthSpecs = useMemo<Record<string, ColumnSpec>>(
+        () => ({ ...LIST_COLUMN_SPECS, ...Object.fromEntries(customFields.map((f) => [`f${f.id}`, LIST_FIELD_SPEC])) }),
+        [customFields],
+    );
+    const { widthOf, handleProps } = useResizableColumns(`board-${board.id}-u${userId}-list-col-widths`, widthSpecs);
+    // Phones scroll the table sideways instead (no handles)
+    const resize = (key: string, label: string) => (isMobile ? undefined : handleProps(key, label));
+    const listKeys = [...LIST_BASE_KEYS, ...fieldColumns.map((f) => `f${f.id}`)];
+    // Title fills the spare space until it's resized; then a filler column takes it
+    const fillerColumn = widthOf('title') !== null;
+    const tableMinWidth = (selectable ? LIST_CHECKBOX_W : 0) + listKeys.reduce((sum, key) => sum + (widthOf(key) ?? widthSpecs[key].min), 0);
+
+    const columnCount = 8 + fieldColumns.length + (selectable ? 1 : 0) + (fillerColumn ? 1 : 0);
 
     // ── Selection (BRAI-108): row checkboxes, shift-click ranges, header = all visible rows ──
     const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
@@ -1519,11 +1566,16 @@ function ListView({
                         </Popover>
                     </div>
                 )}
-                <table className="w-full">
+                <table className="table-fixed" style={{ width: '100%', minWidth: tableMinWidth }}>
+                    <colgroup>
+                        {selectable && <col style={{ width: LIST_CHECKBOX_W }} />}
+                        {listKeys.map((key) => <col key={key} style={{ width: widthOf(key) ?? undefined }} />)}
+                        {fillerColumn && <col />}
+                    </colgroup>
                     <thead>
                         <tr className="border-b text-left text-sm text-muted-foreground">
                             {selectable && (
-                                <th className="w-10 pb-3 pl-4">
+                                <th className="pb-3 pl-4">
                                     <input
                                         ref={headerCheckbox}
                                         type="checkbox"
@@ -1535,17 +1587,21 @@ function ListView({
                                     />
                                 </th>
                             )}
-                            <SortHeader label="Key" sortKey="key" sort={sort} onSort={onSort} className={selectable ? '' : 'pl-4'} />
-                            <SortHeader label="Title" sortKey="title" sort={sort} onSort={onSort} />
-                            <th className="pb-3 font-medium">Parent</th>
-                            <SortHeader label="Status" sortKey="status" sort={sort} onSort={onSort} />
-                            <SortHeader label="Priority" sortKey="priority" sort={sort} onSort={onSort} />
-                            <SortHeader label="Assignee" sortKey="assignee" sort={sort} onSort={onSort} />
-                            <SortHeader label="Due Date" sortKey="due_date" sort={sort} onSort={onSort} />
-                            <SortHeader label="Story Points" sortKey="story_points" sort={sort} onSort={onSort} className={fieldColumns.length ? '' : 'pr-4'} />
+                            <SortHeader label="Key" sortKey="key" sort={sort} onSort={onSort} className={selectable ? '' : 'pl-4'} resize={resize('key', 'Key')} />
+                            <SortHeader label="Title" sortKey="title" sort={sort} onSort={onSort} resize={resize('title', 'Title')} />
+                            <th className="relative pb-3 px-3 font-medium">
+                                <span className="block truncate">Parent</span>
+                                {resize('parent', 'Parent') && <ColumnResizeHandle {...resize('parent', 'Parent')} />}
+                            </th>
+                            <SortHeader label="Status" sortKey="status" sort={sort} onSort={onSort} resize={resize('status', 'Status')} />
+                            <SortHeader label="Priority" sortKey="priority" sort={sort} onSort={onSort} resize={resize('priority', 'Priority')} />
+                            <SortHeader label="Assignee" sortKey="assignee" sort={sort} onSort={onSort} resize={resize('assignee', 'Assignee')} />
+                            <SortHeader label="Due Date" sortKey="due_date" sort={sort} onSort={onSort} resize={resize('due_date', 'Due Date')} />
+                            <SortHeader label="Story Points" sortKey="story_points" sort={sort} onSort={onSort} className={fieldColumns.length || fillerColumn ? '' : 'pr-4'} resize={resize('story_points', 'Story Points')} />
                             {fieldColumns.map((field, index) => (
-                                <SortHeader key={field.id} label={field.name} sortKey={`f${field.id}`} sort={sort} onSort={onSort} className={cn('pl-3', index === fieldColumns.length - 1 && 'pr-4')} />
+                                <SortHeader key={field.id} label={field.name} sortKey={`f${field.id}`} sort={sort} onSort={onSort} className={cn(index === fieldColumns.length - 1 && !fillerColumn && 'pr-4')} resize={resize(`f${field.id}`, field.name)} />
                             ))}
+                            {fillerColumn && <th aria-hidden="true" className="pb-3" />}
                         </tr>
                     </thead>
                     {/* Right-click a row: the bulk actions for it, or for the selection it belongs to (GitHub #143) */}
@@ -1574,7 +1630,7 @@ function ListView({
                                 >
                                     {selectable && (
                                         // The whole cell toggles (a bigger target), never opens the issue
-                                        <td className="w-10 py-3 pl-4" onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) toggleRow(item.id, e.shiftKey); }}>
+                                        <td className="py-3 pl-4" onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) toggleRow(item.id, e.shiftKey); }}>
                                             <input
                                                 type="checkbox"
                                                 aria-label={`Select ${item.key}`}
@@ -1584,20 +1640,20 @@ function ListView({
                                             />
                                         </td>
                                     )}
-                                    <td className={cn('py-3', !selectable && 'pl-4')}>
-                                        <div className="flex items-center gap-2">
-                                            <ItemTypeIcon type={item.item_type} className="size-4" />
-                                            <span className="font-mono text-sm text-primary font-medium">{item.key}</span>
+                                    <td className={cn('py-3 px-3', !selectable && 'pl-4')}>
+                                        <div className="flex min-w-0 items-center gap-2">
+                                            <ItemTypeIcon type={item.item_type} className="size-4 shrink-0" />
+                                            <span className="truncate font-mono text-sm text-primary font-medium">{item.key}</span>
                                         </div>
                                     </td>
-                                    <td className="py-3">
-                                        <span className="font-medium">{item.title}</span>
+                                    <td className="py-3 px-3">
+                                        <span className="block break-words font-medium">{item.title}</span>
                                     </td>
                                     <td className="py-3">
                                         {item.parent ? (
                                             <Link
                                                 href={route('boards.items.show', [workspace.slug, project.slug, board.slug, item.parent.id])}
-                                                className="text-primary hover:underline font-mono text-sm"
+                                                className="block truncate text-primary hover:underline font-mono text-sm"
                                                 onClick={(e) => e.stopPropagation()}
                                             >
                                                 {item.parent.key}
@@ -1607,20 +1663,20 @@ function ListView({
                                         )}
                                     </td>
                                     <td className="py-3">
-                                        <Badge variant="secondary" className="font-normal">
-                                            {item.columnName}
+                                        <Badge variant="secondary" className="max-w-full font-normal" title={item.columnName}>
+                                            <span className="min-w-0 truncate">{item.columnName}</span>
                                         </Badge>
                                     </td>
                                     <td className="py-3">
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex min-w-0 items-center gap-2">
                                             <PriorityIndicator slug={item.priority?.slug} />
-                                            <span className="text-sm">{item.priority?.name || 'None'}</span>
+                                            <span className="truncate text-sm">{item.priority?.name || 'None'}</span>
                                         </div>
                                     </td>
                                     <td className="py-3">
                                         {item.assignee ? (
-                                            <div className="flex items-center gap-2">
-                                                <Avatar className="size-6">
+                                            <div className="flex min-w-0 items-center gap-2" title={item.assignee.name}>
+                                                <Avatar className="size-6 shrink-0">
                                                     {item.assignee.avatar_display && (
                                                         <AvatarImage src={item.assignee.avatar_display} alt={item.assignee.name} />
                                                     )}
@@ -1628,20 +1684,20 @@ function ListView({
                                                         {item.assignee.name.charAt(0).toUpperCase()}
                                                     </AvatarFallback>
                                                 </Avatar>
-                                                <span className="text-sm">{item.assignee.name}</span>
+                                                <span className="min-w-0 truncate text-sm">{item.assignee.name}</span>
                                             </div>
                                         ) : (
-                                            <span className="text-muted-foreground text-sm">Unassigned</span>
+                                            <span className="block truncate text-muted-foreground text-sm">Unassigned</span>
                                         )}
                                     </td>
                                     <td className="py-3">
                                         {item.due_date ? (
-                                            <span className="text-sm">{new Date(item.due_date).toLocaleDateString()}</span>
+                                            <span className="block truncate text-sm">{new Date(item.due_date).toLocaleDateString()}</span>
                                         ) : (
                                             <span className="text-muted-foreground text-sm">—</span>
                                         )}
                                     </td>
-                                    <td className={cn('py-3', !fieldColumns.length && 'pr-4')}>
+                                    <td className={cn('py-3 px-3', !fieldColumns.length && !fillerColumn && 'pr-4')}>
                                         {item.story_points ? (
                                             <Badge variant="outline" className="font-mono">{item.story_points}</Badge>
                                         ) : (
@@ -1649,10 +1705,11 @@ function ListView({
                                         )}
                                     </td>
                                     {fieldColumns.map((field, index) => (
-                                        <td key={field.id} className={cn('py-3 pl-3', index === fieldColumns.length - 1 && 'pr-4')}>
+                                        <td key={field.id} className={cn('py-3 px-3', index === fieldColumns.length - 1 && !fillerColumn && 'pr-4')}>
                                             <FieldCell field={field} item={item} />
                                         </td>
                                     ))}
+                                    {fillerColumn && <td aria-hidden="true" />}
                                 </tr>
                             ))}
                             {sortedItems.length === 0 && (
@@ -1700,6 +1757,11 @@ function formatShortDate(d: Date): string {
 
 // Weekday first-letter for header
 const WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+const TIMELINE_ITEMS_DEFAULT = 288;
+const TIMELINE_WIDTH_SPECS: Record<string, ColumnSpec> = {
+    items: { min: 160, max: () => Math.max(160, Math.round(window.innerWidth * 0.6)), default: TIMELINE_ITEMS_DEFAULT },
+};
 
 // Gantt/Timeline View Component
 function GanttView({
@@ -1763,6 +1825,14 @@ function GanttView({
             return next;
         });
     };
+
+    // "Items" column width: drag / ←→ its header's right edge; per person and board (localStorage)
+    const isMobile = useIsMobile();
+    const userId = usePage<PageProps>().props.auth?.user?.id ?? 0;
+    const { widthOf, handleProps } = useResizableColumns(`board-${board.id}-u${userId}-timeline-widths`, TIMELINE_WIDTH_SPECS);
+    const sidebarW = isMobile
+        ? Math.min(TIMELINE_ITEMS_DEFAULT, Math.round(window.innerWidth * 0.6))
+        : (widthOf('items') ?? TIMELINE_ITEMS_DEFAULT);
 
     const today = new Date();
     const startDate = new Date(today.getFullYear(), 0, 1);
@@ -1979,13 +2049,13 @@ function GanttView({
     const draggingItemId = dragRef.current?.item.id;
     // Track horizontal scroll position for out-of-view indicators
     const [viewportScroll, setViewportScroll] = useState<{ left: number; width: number }>({ left: 0, width: 0 });
-    // Initialize: left=0 (raw scrollLeft), width=timeline right edge
+    // Initialize (and follow a resized "Items" column): left = raw scrollLeft, width = timeline right edge
     useEffect(() => {
         if (scrollRef.current) {
             const el = scrollRef.current;
-            setViewportScroll({ left: 0, width: el.clientWidth - 288 });
+            setViewportScroll({ left: el.scrollLeft, width: el.scrollLeft + el.clientWidth - sidebarW });
         }
-    }, []);
+    }, [sidebarW]);
 
     return (
         <div className="flex-1 overflow-auto bg-background relative" ref={scrollRef}
@@ -1994,12 +2064,12 @@ function GanttView({
                 // Sync header horizontal scroll
                 if (headerScrollSyncRef.current) headerScrollSyncRef.current.scrollLeft = el.scrollLeft;
                 // Store: left = raw scrollLeft (for indicator positioning)
-                //        width = timeline visible right edge = scrollLeft + clientWidth - 288
+                //        width = timeline visible right edge = scrollLeft + clientWidth - sidebarW
                 if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
                 rafIdRef.current = requestAnimationFrame(() =>
                     setViewportScroll({
                         left: el.scrollLeft,                          // raw scroll offset
-                        width: el.scrollLeft + el.clientWidth - 288,  // timeline visible right edge
+                        width: el.scrollLeft + el.clientWidth - sidebarW,  // timeline visible right edge
                     })
                 );
             }}
@@ -2012,12 +2082,13 @@ function GanttView({
             />
 
             {/* Min width so scrollbar spans full content */}
-            <div style={{ minWidth: TOTAL_WIDTH + 288 }}>
+            <div style={{ minWidth: TOTAL_WIDTH + sidebarW }}>
 
                 {/* ── Sticky header row: "Items" label + date header ── */}
                 <div className="sticky top-0 z-20 flex bg-background border-b">
-                    <div className="w-72 flex-shrink-0 border-r h-12 px-4 flex items-center font-medium text-sm sticky left-0 bg-background z-30">
+                    <div className="relative flex-shrink-0 border-r h-12 px-4 flex items-center font-medium text-sm sticky left-0 bg-background z-30" style={{ width: sidebarW }}>
                         Items
+                        {!isMobile && <ColumnResizeHandle {...handleProps('items', 'Items')} />}
                     </div>
                     {/* Date header — overflow:hidden + scrollLeft synced via JS */}
                     <div className="flex-1 overflow-hidden" ref={headerScrollSyncRef}>
@@ -2028,7 +2099,7 @@ function GanttView({
                 {/* ── Body: sidebar (sticky-left) + timeline rows ── */}
                 <div className="flex">
                     {/* Left sidebar — sticky left, solid bg so timeline doesn't bleed through */}
-                    <div className="w-72 flex-shrink-0 border-r sticky left-0 z-10 bg-background">
+                    <div className="flex-shrink-0 border-r sticky left-0 z-10 bg-background" style={{ width: sidebarW }}>
                         {visibleItems.map((item) => (
                             <div
                                 key={item.id}
@@ -2100,7 +2171,7 @@ function GanttView({
                             // Out-of-view indicators.
                             // viewportScroll.left = raw scrollLeft (for indicator positioning)
                             // viewportScroll.width = timeline visible right edge
-                            // Timeline visible left = max(0, scrollLeft - 288)
+                            // Timeline visible left = max(0, scrollLeft - sidebarW)
                             const barLeft = position ? position.left : null;
                             const barRight = position ? position.left + position.width : null;
                             const rawScroll = viewportScroll.left;
@@ -2178,7 +2249,7 @@ function GanttView({
                                                 const el = scrollRef.current;
                                                 if (!el) return;
                                                 // Center barLeft in the timeline viewport
-                                                const target = barLeft + 288 - (el.clientWidth - 288) / 2;
+                                                const target = barLeft + sidebarW - (el.clientWidth - sidebarW) / 2;
                                                 el.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
                                             }}
                                         >
@@ -2197,7 +2268,7 @@ function GanttView({
                                                 const el = scrollRef.current;
                                                 if (!el) return;
                                                 // Center barLeft in the timeline viewport
-                                                const target = barLeft + 288 - (el.clientWidth - 288) / 2;
+                                                const target = barLeft + sidebarW - (el.clientWidth - sidebarW) / 2;
                                                 el.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
                                             }}
                                         >
