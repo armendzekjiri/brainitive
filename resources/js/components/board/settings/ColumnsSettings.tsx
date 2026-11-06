@@ -162,7 +162,7 @@ function ColumnRow({ column, params, hasRule, usedInRules, onShowRule, drag }: {
                         className="h-8 w-16 px-2 text-sm"
                     />
                 </label>
-                <span className="w-16 text-right text-xs tabular-nums text-muted-foreground">{itemsCount} {itemsCount === 1 ? 'card' : 'cards'}</span>
+                <span className="whitespace-nowrap text-right text-xs tabular-nums text-muted-foreground sm:w-16">{itemsCount} {itemsCount === 1 ? 'card' : 'cards'}</span>
                 <button
                     type="button"
                     onClick={onShowRule}

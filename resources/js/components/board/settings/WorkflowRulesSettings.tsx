@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { describeRule, EMPTY_RULE, isEmptyRule, ruleKey } from '@/lib/workflowRules';
 import type { Board, BoardColumn, PageProps, Project, Workspace, WorkflowRuleMember, WorkflowRuleRole, WorkflowRuleSettings } from '@/types';
 import { router } from '@inertiajs/react';
-import { Check, ChevronDown, GitBranch, Lock, ShieldCheck, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, GitBranch, Lock, Plus, ShieldCheck, Undo2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -137,6 +137,8 @@ function RuleEditor({ workspace, project, board, column, saved, members, roles, 
     const [saving, setSaving] = useState(false);
     const dirty = ruleKey(draft) !== ruleKey(saved);
     const hasRule = !isEmptyRule(saved);
+    // columns without a rule start folded; a link from Columns (#rule-<id>) opens its editor
+    const [open, setOpen] = useState(() => hasRule || (typeof window !== 'undefined' && window.location.hash === `#rule-${column.id}`));
     const columns = board.columns;
     const preview = describeRule(draft, column, columns, memberName);
     const set = (changes: Partial<WorkflowRuleSettings>) => setDraft((d) => ({ ...d, ...changes }));
@@ -161,6 +163,20 @@ function RuleEditor({ workspace, project, board, column, saved, members, roles, 
             onFinish: () => setSaving(false),
         });
     };
+
+    if (!open) {
+        return (
+            <Card id={`rule-${column.id}`} className="scroll-mt-6" aria-label={`Rule for ${column.name}`} role="group">
+                <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-2 p-3 sm:px-5">
+                    <StatusChip column={column} columns={columns} />
+                    <span className="text-xs text-muted-foreground">No rule — any editor can move cards here</span>
+                    <Button size="sm" variant="outline" className="ml-auto gap-1" onClick={() => setOpen(true)} aria-label={`Add a rule for ${column.name}`}>
+                        <Plus className="size-3.5" />Add rule
+                    </Button>
+                </CardContent>
+            </Card>
+        );
+    }
 
     return (
         <Card id={`rule-${column.id}`} className={cn('scroll-mt-6', hasRule && 'border-primary/30')} aria-label={`Rule for ${column.name}`} role="group">
@@ -226,9 +242,15 @@ function RuleEditor({ workspace, project, board, column, saved, members, roles, 
                     <Button size="sm" onClick={() => send(draft)} disabled={!dirty || saving}>
                         {saving ? 'Saving…' : `Save rule for ${column.name}`}
                     </Button>
-                    {dirty && (
-                        <Button size="sm" variant="ghost" className="gap-1" onClick={() => setDraft(saved)} disabled={saving}>
-                            <Undo2 className="size-3.5" />Discard
+                    {(dirty || !hasRule) && (
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1"
+                            onClick={() => { setDraft(saved); if (!hasRule) setOpen(false); }}
+                            disabled={saving}
+                        >
+                            <Undo2 className="size-3.5" />{hasRule ? 'Discard' : 'Cancel'}
                         </Button>
                     )}
                     {hasRule && !dirty && (

@@ -30,6 +30,7 @@ test('a rule on Done: only from Testing, only the owner — enforced on drag and
     await page.getByRole('tab', { name: 'Workflow rules' }).click();
     await expect(page.getByText('No rules yet')).toBeVisible();
     const doneRule = page.getByRole('group', { name: 'Rule for Done' });
+    await doneRule.getByRole('button', { name: 'Add a rule for Done' }).click();
     await doneRule.getByRole('button', { name: 'Allowed from for Done' }).click();
     await page.getByRole('menuitemcheckbox', { name: 'Testing' }).click();
     await page.keyboard.press('Escape');
