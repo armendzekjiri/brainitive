@@ -1,34 +1,14 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test, uid, urls } from '../fixtures';
-import { createBoard, postJson } from '../helpers/boards';
-import { pageProps } from '../helpers/helpdesk';
+import { boardWithIssues as newBoardWithIssues, listRow, postJson } from '../helpers/boards';
 
 /**
  * BRAI-108: the board's list view selects several issues and edits them at once. Every test works
  * on its own board (uid names), so the seeded issues stay as they are.
  */
 
-/** A new board in the seeded project with these issues in its first column; returns its URL. */
-async function boardWithIssues(page: Page, titles: string[]): Promise<string> {
-    const boardUrl = await createBoard(page, uid('Bulk board'));
-    await page.goto(boardUrl); // a full load: data-page holds this board
-    const { board } = await pageProps<{ board: { columns: { id: number }[] } }>(page);
-    const xsrf = decodeURIComponent((await page.context().cookies()).find((c) => c.name === 'XSRF-TOKEN')!.value);
-    for (const title of titles) {
-        // what the "Create card" form posts (setup shortcut, one after another)
-        const response = await page.request.post(`${boardUrl}/items`, {
-            headers: { 'X-XSRF-TOKEN': xsrf, 'X-Requested-With': 'XMLHttpRequest', Accept: 'text/html, application/xhtml+xml' },
-            data: { title, column_id: board.columns[0].id },
-            maxRedirects: 0,
-        });
-        expect(response.status(), `create ${title}`).toBe(302);
-    }
-    await page.goto(`${boardUrl}?view=list`);
-    for (const title of titles) await expect(row(page, title)).toBeVisible();
-    return boardUrl;
-}
-
-const row = (page: Page, title: string): Locator => page.getByRole('row').filter({ hasText: title });
+const boardWithIssues = (page: Page, titles: string[]) => newBoardWithIssues(page, uid('Bulk board'), titles);
+const row = listRow;
 const checkbox = (page: Page, title: string): Locator => row(page, title).getByRole('checkbox', { name: /^Select [A-Z]+-\d+$/ });
 const bar = (page: Page): Locator => page.getByRole('toolbar', { name: 'Bulk edit selected issues' });
 const bulkWrite = (page: Page, method: 'PATCH' | 'DELETE' = 'PATCH') =>

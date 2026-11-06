@@ -136,6 +136,10 @@ On Scrum boards you also get **Backlog** and **Reports**, see [Sprints and backl
 
 In the **List** view, tick issues (shift-click selects a range, the header box selects everything visible). A bar appears where you change status, assignee, priority, type, sprint, due date or labels for all of them at once, or delete them. <kbd>Esc</kbd> clears the selection.
 
+### Right-click menu
+
+Right-click an issue in the **List** view or a card on the **Board** for **Open**, **Copy link**, **Copy key** and the same changes as the bulk bar: status, assignee, priority, type, sprint, due date (today, tomorrow, next week or a date you pick), labels and delete. Right-clicking a row that is part of your selection changes all selected issues; any other row changes only itself and keeps the selection. People with view-only access see Open and the copy entries. The menu key (or <kbd>Shift</kbd>+<kbd>F10</kbd>) opens it from a focused row checkbox or card button; on touch screens the phone's own long-press menu stays.
+
 ### Swimlanes
 
 Split the board into rows. Use **Swimlanes** in the board toolbar to switch for yourself: lanes by assignee, priority, type or fix version, or the board's custom lanes. In "by assignee / priority / …" lanes, dragging a card to another lane changes that field too.
