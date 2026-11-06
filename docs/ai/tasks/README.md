@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Right-click menu on issues in the board's list and kanban views (GitHub #143)](./feat-item-context-menu.md) | done |
 | [Mobile push: Expo push receipts + "Send a test notification"](./feat-mobile-push-receipts.md) | done |
 | [Revoke the Apple authorization when an account is deleted](./feat-apple-revoke-on-delete.md) | done |
 | [Release v1.51.0: live whiteboards + poll votes for the mobile app (server side)](./release-v1.51.0.md) | in progress |

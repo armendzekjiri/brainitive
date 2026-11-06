@@ -461,6 +461,22 @@ id fails `item_ids`, no per-id `exists` rule). Queries grow by a small constant 
   `BoardController::moveItem` (`BulkItemEdit::notifyStatusChange()`).
 - `bulk` routes are registered **before** `items/{item}`; otherwise `bulk` would bind as an item id.
 
+### Right-click menu on issues (GitHub #143, v1.51.0)
+`ItemContextMenu` sends the bulk bar's requests (`useBulkItemEdit`), so permissions and history are
+the bulk edit's above. Decisions and traps:
+- **One menu per view**, not per row: the trigger is the `<tbody>` / board, and a capture-phase
+  `contextmenu` handler finds `[data-context-item]` under the pointer. Anything else — headers,
+  `a[href]`, text inputs, portaled popovers/dialogs (React events bubble through portals, so the
+  DOM `closest()` decides) — calls `stopPropagation()` there, which keeps Radix' bubble handler
+  from `preventDefault()`-ing: the browser's own menu shows.
+- **Targets like a file manager:** a selected row → the whole selection; an unselected row → only
+  that row, the selection is untouched. Targets are ids, resolved from props on every render (a
+  label toggle keeps the menu open and shows the reloaded state).
+- **Touch / coarse pointers: disabled.** Radix opens on a 700 ms long-press anywhere on the trigger
+  (here: the whole board) and would fight the cards' native drag; phones keep their own menu.
+- Kanban status moves go through the bulk endpoint: no "complete open subtasks?" prompt (as in bulk).
+- The Backlog page (`BacklogRow`) has no menu: it lacks users / priorities / types / labels props.
+
 ### Done column retention: defaults, completed_at, client-side hiding (BRAI-346, 2026-10-30)
 Jira's "hide completed issues older than…" for Kanban boards: `boards.settings.done_retention_days`.
 - **Defaults are deliberate.** A board without the key reads as **Off** — every board from before the

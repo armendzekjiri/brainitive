@@ -86,6 +86,33 @@ export async function createBoard(page: Page, name: string): Promise<string> {
     return new URL(page.url()).pathname;
 }
 
+/** A row of the board's list view, by the issue title. */
+export const listRow = (page: Page, title: string): Locator => page.getByRole('row').filter({ hasText: title });
+
+/**
+ * A new board in the seeded project (`name`) with these issues in its first column; leaves the page
+ * on its list view and returns the board URL.
+ */
+export async function boardWithIssues(page: Page, name: string, titles: string[]): Promise<string> {
+    const boardUrl = await createBoard(page, name);
+    await page.goto(boardUrl); // a full load: data-page holds this board
+    const board = await page.locator('#app').evaluate((el) =>
+        JSON.parse((el as HTMLElement).dataset.page ?? '{}').props.board as { columns: { id: number }[] });
+    const xsrf = decodeURIComponent((await page.context().cookies()).find((c) => c.name === 'XSRF-TOKEN')!.value);
+    for (const title of titles) {
+        // what the "Create card" form posts (setup shortcut, one after another)
+        const response = await page.request.post(`${boardUrl}/items`, {
+            headers: { 'X-XSRF-TOKEN': xsrf, 'X-Requested-With': 'XMLHttpRequest', Accept: 'text/html, application/xhtml+xml' },
+            data: { title, column_id: board.columns[0].id },
+            maxRedirects: 0,
+        });
+        expect(response.status(), `create ${title}`).toBe(302);
+    }
+    await page.goto(`${boardUrl}?view=list`);
+    for (const title of titles) await expect(listRow(page, title)).toBeVisible();
+    return boardUrl;
+}
+
 /** Load the board fresh with an issue's deep link (`#item-<id>` opens its dialog). */
 export async function openDeepLink(page: Page, boardUrl: string, id: number): Promise<Locator> {
     // a hash-only goto would not reload the board: leave it first
