@@ -32,9 +32,10 @@ export default function WorkDoneToggle({ item, workspaceSlug, projectSlug, class
                 setDone(next);
             },
             onSuccess: () => toast.success(next ? `${item.key} done.` : `${item.key} reopened.`),
-            onError: () => {
+            onError: (errors: Record<string, string>) => {
                 setDone(!next);
-                toast.error(next ? 'Could not complete it.' : 'Could not reopen it.');
+                // e.g. a board workflow rule: "Only … can move cards to Done."
+                toast.error(errors.column_id ?? (next ? 'Could not complete it.' : 'Could not reopen it.'));
             },
             onFinish: () => setBusy(false),
         };

@@ -111,6 +111,7 @@ import {
     ArrowDown,
     Columns3,
     Repeat,
+    Lock,
 } from 'lucide-react';
 import { useState, useRef, useEffect, DragEvent, FormEvent, useCallback, useMemo } from 'react';
 import { Link } from '@inertiajs/react';
@@ -133,6 +134,7 @@ import {
 import { ActiveSprintBar, type SprintSummary } from '@/components/board/ActiveSprintBar';
 import SavedViewsMenu from '@/components/board/SavedViewsMenu';
 import { BulkEditBar } from '@/components/board/BulkEditBar';
+import { enterBlockReason, firstError } from '@/lib/workflowRules';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 
 interface Props extends PageProps {
@@ -767,8 +769,11 @@ function BoardColumnComponent({
     createOpen,
     onCreateOpenChange,
     olderDone,
+    blockedReason = null,
 }: {
     column: BoardColumn & { items: Item[] };
+    /** While a card is dragged: why it can't enter this column (workflow rules), null = it can. */
+    blockedReason?: string | null;
     createOpen: boolean;
     onCreateOpenChange: (open: boolean) => void;
     /** Cards in the column before filters (without older done cards that left the board) — what the WIP limit counts. */
@@ -794,7 +799,7 @@ function BoardColumnComponent({
     const isAtWip = wipLimit !== null && wipLimit > 0 && totalItemCount === wipLimit;
     const [wipDialogOpen, setWipDialogOpen] = useState(false);
     const [wipValue, setWipValue] = useState(wipLimit ? String(wipLimit) : '');
-    const settingsUrl = route('boards.edit', [workspace.slug, project.slug, board.slug]);
+    const settingsUrl = `${route('boards.edit', [workspace.slug, project.slug, board.slug])}?tab=columns`;
 
     const [renameOpen, setRenameOpen] = useState(false);
     const [nameValue, setNameValue] = useState(column.name);
@@ -844,10 +849,13 @@ function BoardColumnComponent({
     return (
         <section
             className={cn(
-                'flex-shrink-0 w-[272px] h-full min-h-0 flex flex-col rounded-md bg-muted/60 dark:bg-secondary/30 transition-colors',
-                isDragOver && 'bg-primary/[0.07] ring-2 ring-primary/30',
+                'flex-shrink-0 w-[272px] h-full min-h-0 flex flex-col rounded-md bg-muted/60 dark:bg-secondary/30 transition-[background-color,opacity]',
+                isDragOver && !blockedReason && 'bg-primary/[0.07] ring-2 ring-primary/30',
                 isOverWip && 'bg-destructive/[0.08] dark:bg-destructive/[0.12]',
+                blockedReason && 'opacity-60',
             )}
+            aria-label={column.name}
+            data-blocked={blockedReason ? 'true' : undefined}
             onDragOver={(e) => onDragOver(e, column)}
             onDrop={(e) => onDrop(e, column)}
         >
@@ -868,6 +876,16 @@ function BoardColumnComponent({
                         {wipLimit ? `${totalItemCount} / MAX ${wipLimit}` : column.items?.length || 0}
                     </span>
                     {column.is_done_column && <Check className="size-3.5 shrink-0 text-brand-green" aria-label="Done column" />}
+                    {column.workflow && (
+                        <span
+                            className="shrink-0 text-muted-foreground"
+                            title={column.workflow.summary.join(' ')}
+                            aria-label={`Workflow rule: ${column.workflow.summary.join(' ')}`}
+                            role="img"
+                        >
+                            <Lock className="size-3" />
+                        </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-[2px] opacity-60 transition-opacity group-hover/col:opacity-100">
                     <button
@@ -941,6 +959,13 @@ function BoardColumnComponent({
                     </form>
                 </DialogContent>
             </Dialog>
+
+            {blockedReason && (
+                <div role="note" className="mx-1.5 mb-1.5 flex items-start gap-1.5 rounded-[4px] border border-dashed border-border bg-background/80 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+                    <Lock className="mt-px size-3 shrink-0" />
+                    <span>{blockedReason}</span>
+                </div>
+            )}
 
             {/* Items */}
             <ScrollArea className="flex-1 min-h-0">
@@ -2604,6 +2629,7 @@ export default function BoardsShow({
 
     const handleDragOver = (e: DragEvent, column: BoardColumn) => {
         e.preventDefault();
+        // a column the card can't enter still takes the drop: dropToColumn says why (toast), the card stays
         e.dataTransfer.dropEffect = 'move';
         setDragOverColumn(column.id);
     };
@@ -2616,11 +2642,20 @@ export default function BoardsShow({
         router.patch(
             route('boards.items.move', [workspace.slug, project.slug, board.slug, item.id]),
             { column_id: column.id, position: 0, with_subtasks: withSubtasks },
-            { preserveScroll: true },
+            // the card only moves when the server agrees (workflow rules, permissions): show why not
+            { preserveScroll: true, onError: (errors) => toast.error(firstError(errors, `Could not move ${item.key} to ${column.name}.`)) },
         );
+
+    // Workflow rules (v1.52.0): the board's hints for this user — the server still decides
+    const dropBlockReason = (item: Item, column: BoardColumn) => enterBlockReason(item, column, board.columns);
 
     const dropToColumn = (item: Item, column: BoardColumn) => {
         if (item.column_id === column.id) return;
+        const blocked = dropBlockReason(item, column);
+        if (blocked) {
+            toast.error(blocked);
+            return;
+        }
         const doneIds = new Set(board.columns.filter((c) => c.is_done_column).map((c) => c.id));
         const open = column.is_done_column ? boardTree.descendants(item.id).filter((d) => !doneIds.has(d.column_id as number)) : [];
         if (open.length > 0) {
@@ -3310,6 +3345,7 @@ export default function BoardsShow({
                                     onDragOver={handleDragOver}
                                     onDrop={handleDrop}
                                     isDragOver={dragOverColumn === column.id}
+                                    blockedReason={draggedItem ? dropBlockReason(draggedItem, column) : null}
                                     totalItemCount={wipCount(column.id)}
                                     olderDone={olderDone.get(column.id)}
                                     createOpen={createInColumnId === column.id}
