@@ -1,7 +1,7 @@
 # Workflow rules for boards + a new board settings page
 
 **Branch:** feat/board-workflow-rules
-**Status:** in-progress
+**Status:** done
 **Started:** 2026-11-06
 **Board card:** — (MCP tracking not used for this branch)
 

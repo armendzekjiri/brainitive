@@ -1,6 +1,6 @@
 ---
 title: Boards and issues
-description: "Plan work on boards in Brainitive: issues, columns, assignees, labels, priorities, due dates, subtasks, comments, filters and views."
+description: "Plan work on boards in Brainitive: issues, columns, workflow rules, assignees, labels, priorities, due dates, subtasks, comments, filters and views."
 order: 15
 ---
 
@@ -22,13 +22,33 @@ Columns are the steps of your workflow, for example *To do → In progress → R
 - **Add a column:** click **New column** on the board, type a name and press <kbd>Enter</kbd>. You can add the next one right away.
 - **Rename a column:** open the column's **⋯** menu → **Rename column**.
 - **Limit work in progress:** in the column's **⋯** menu set **Max. cards**. The header then shows "3 / 2" and turns red when the column is over its limit. The limit is a warning, not a lock.
-- **Reorder, recolor or delete columns:** open the board settings (gear icon next to the board name), or **⋯ → Edit columns…**.
+- **Reorder, recolor or delete columns:** open the board settings (gear icon next to the board name) → **Columns & statuses**, or **⋯ → Edit columns…**. Click a name to rename it, the colour dot to recolour it, drag the handle to reorder. A column with cards can't be deleted; move or delete its cards first.
 
 ### The "Done" column
 
-In the board settings, edit a column and tick **Mark as "Done" column**. Moving an issue into a done column marks it as completed, so it no longer counts as overdue. Moving it out again reopens it.
+In the board settings → **Columns & statuses**, tick **Done** next to a column. Moving an issue into a done column marks it as completed, so it no longer counts as overdue. Moving it out again reopens it.
 
-**Keep done cards on the board for…** (board settings → **Done column**, Kanban boards only): choose **Off**, 7, 14, 30, 60 or 90 days. Done cards finished longer ago leave the board but stay in the list view, search and links. The done column shows how many are hidden, and **Show** brings them back for the session. New boards start at 14 days; existing and imported boards start at Off. Scrum boards only show the running sprint, so the setting doesn't apply there.
+**Keep done cards on the board for…** (board settings → **General** → **Done column**, Kanban boards only): choose **Off**, 7, 14, 30, 60 or 90 days. Done cards finished longer ago leave the board but stay in the list view, search and links. The done column shows how many are hidden, and **Show** brings them back for the session. New boards start at 14 days; existing and imported boards start at Off. Scrum boards only show the running sprint, so the setting doesn't apply there.
+
+## Workflow rules
+
+Workflow rules decide **who may move cards into a column, from which columns, and what a card needs first** — for example *“Only Armend can move cards to Done”* or *“Cards can only reach Done from Testing”*. Set them in the board settings → **Workflow rules** (board editors and project admins). Each column can have one rule, written as a sentence:
+
+> Cards can enter **Done** from **[Testing]** · Moved here by **[Armend Zekjiri] [Project admins]** · Only when the card has **[all subtasks done]**
+
+- **From:** pick the columns cards may come from. Empty means *from anywhere*. A column with a "from" list can't have cards created in it directly — a new card has no previous column.
+- **Moved here by:** pick people and/or roles (**Workspace owner**, **Workspace admins**, **Project admins**, **Project editors**). Empty means *anyone who can edit cards*. Someone who is listed **or** has a listed role may move cards in.
+- **Only when the card has:** an assignee, all subtasks done, a due date.
+
+The top of the page lists every rule on the board. Leaving a column is never restricted.
+
+**Where they apply:** everywhere a card moves or is created — drag and drop, the status in the issue dialog, bulk edits in the list view, moving an issue to another board, duplicating it, the desktop and mobile apps, AI assistants (MCP) and automations. **Nobody bypasses them, admins included** — add yourself to a rule if you need to.
+
+- On the board, columns a dragged card can't enter are dimmed and say why, and column headers with a rule show a lock (hover it for the rule). The issue dialog shows statuses you can't pick greyed out with the reason. If you try anyway, the card stays and a message explains why.
+- Moving a parent to a done column with **Also complete the subtasks** checks every subtask too: if one of them isn't allowed, nothing moves and the message names that subtask.
+- Automations act as the person who saved them: a **Move to column** a rule refuses fails with the reason in the rule's run history. A recurring issue a rule refuses is paused with the reason; resume it after changing the rule or the template.
+- Not checked: imports (Jira, Trello, Notion, archives), GitHub merge transitions and booking cards — they are set up by an admin and don't act as a person.
+- Deleting a column removes its rule and takes it out of other rules' "from" lists; if such a list becomes empty, that column can again be entered from anywhere.
 
 ## Issues
 
@@ -177,4 +197,4 @@ Changes by teammates, automations, the AI connector and imports show up on your 
 
 ## Who can do what
 
-People with the **Editor** or **Admin** role in the project create and edit issues and boards; **Viewers** can read and comment. Only project admins delete boards and other people's issues. See [Roles and permissions](./workspaces-and-projects#roles-and-permissions).
+People with the **Editor** or **Admin** role in the project create and edit issues and boards; **Viewers** can read and comment. [Workflow rules](#workflow-rules) can narrow who may move cards into a column. Only project admins delete boards and other people's issues. See [Roles and permissions](./workspaces-and-projects#roles-and-permissions).

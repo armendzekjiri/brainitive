@@ -6990,7 +6990,7 @@
         "/boards/{board}": {
             "get": {
                 "operationId": "app.v1.boards.show",
-                "summary": "One board: columns (WIP limits, card counts), swimlanes, done retention, the running sprint, what the\nuser may do",
+                "summary": "One board: columns (WIP limits, card counts, workflow rules), swimlanes, done retention, the running sprint, what the\nuser may do",
                 "tags": [
                     "Boards"
                 ],
@@ -13661,6 +13661,51 @@
                     },
                     "cards_count": {
                         "type": "integer"
+                    },
+                    "workflow": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "the board's workflow rule for entering this column (v1.52.0); null = none. Hints for the app \u2014 the\nserver refuses a move / create that breaks it with 422 + `workflow_rule`",
+                        "properties": {
+                            "summary": {
+                                "type": "array",
+                                "items": {}
+                            },
+                            "allowed_from_column_ids": {
+                                "type": "array",
+                                "items": {}
+                            },
+                            "requires": {
+                                "type": "object",
+                                "properties": {
+                                    "assignee": {
+                                        "type": "boolean"
+                                    },
+                                    "subtasks_done": {
+                                        "type": "boolean"
+                                    },
+                                    "due_date": {
+                                        "type": "boolean"
+                                    }
+                                },
+                                "required": [
+                                    "assignee",
+                                    "subtasks_done",
+                                    "due_date"
+                                ]
+                            },
+                            "can_move_here": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "summary",
+                            "allowed_from_column_ids",
+                            "requires",
+                            "can_move_here"
+                        ]
                     }
                 },
                 "required": [
@@ -13671,7 +13716,8 @@
                     "position",
                     "is_done",
                     "wip_limit",
-                    "cards_count"
+                    "cards_count",
+                    "workflow"
                 ],
                 "title": "BoardColumnResource"
             },

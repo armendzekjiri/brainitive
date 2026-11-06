@@ -488,6 +488,36 @@ Jira's "hide completed issues older than…" for Kanban boards: `boards.settings
   (`InvalidFormatException`) before `'Y-m-d H:i'` is tried. Jira's own format (`20/Oct/26 9:05 AM`) works.
   Not fixed here.
 
+### Board workflow rules: one guard, a model backstop, strict on purpose (v1.52.0, 2026-11-06)
+Rules per target column (who / allowed from / conditions), enforced by `Support\Boards\WorkflowGuard`.
+- **Two layers.** Explicit `ensure()` where a whole action must be refused up front with a clear message (drag & drop + the
+  "complete subtasks" cascade, bulk edit, move to another board, automations, recurring issues); and a **backstop in
+  `Item::saving`** for every create and every `column_id` change, as `Auth::user()`. A new write path is covered without
+  touching it — but a write that runs while *someone unrelated* is signed in (a guest booking a slot while logged in) must run
+  in `WorkflowGuard::bypass()`. Query-builder column writes skip the backstop: check them explicitly (`moveItemToBoard`'s subtree).
+- **Not checked:** no signed-in user (GitHub merge transitions, webhooks, console without an actor), `ImportScope::active()`
+  (Jira / Trello / Notion / archive imports reproduce existing data), `bypass()` (booking cards for the host). Template
+  instantiation creates a new project, which has no rules yet. Rules don't travel with templates / exports (follow-up).
+- **Creating = entering from nowhere.** Who-rule and conditions apply; a column with an allowed-from list can't be created
+  into (duplicate and "move to another board" count as creating). Strict on purpose: otherwise "create directly in Done" is
+  the loophole. A reorder inside the column isn't entering it.
+- **No bypass for anyone** (workspace owner / admins included) — the requester wanted it strict; they can list themselves.
+- **One refused issue = nothing changes.** Cascade and bulk check every issue first and run in a transaction; issues completed
+  by the same action count as done for "all subtasks done" (`$completingIds`). An `ensure()`d model instance is remembered
+  (`WeakMap`) so the backstop doesn't check it twice — and doesn't re-evaluate "subtasks done" before the subtasks moved.
+- **Errors are `WorkflowRuleViolation`** (a `ValidationWithExtras`): web → `errors.column_id` (the board / dialog toast it),
+  JSON 422, App API adds `workflow_rule {reason…}`, MCP `guard()` returns the text. Wrappers that rebuild a
+  `ValidationException` (App API `IssueController::fieldErrors`) must rethrow it untouched. Automations log
+  "Blocked by the board's workflow rules: …" as the action's error; recurring templates pause with it.
+- **Caching:** the guard is a scoped singleton (rules per board, roles per user+project) and is forgotten on every
+  `RouteMatched` — tests run many requests in one container, and a cached rule set from one request made another request's
+  query count differ (`ItemFieldsTest` query-count test). `WorkflowRules::save()` calls `forget()`.
+- **Cleanup by foreign keys:** members and allowed-from columns are pivots (cascade on user / column delete); no
+  `whereJsonContains`. An allowed-from list emptied by deletes means "from anywhere" again (the delete flash says rules changed).
+  Someone removed from the project stays listed (shown "no longer in the project") but can't move cards anyway (ItemPolicy).
+- **Client hints** (`lib/workflowRules.ts`, `columns[].workflow` with `actor_allowed`) mirror the server's messages; the board
+  refuses a blocked drop itself (toast), but drops still fire (`dropEffect` stays `move`, or no drop event and no message).
+
 ### Explicit route binders run before implicit ones
 In `Route::bind('page' | 'bookmark', …)` the `{workspace}` / `{project}` parameters are still raw
 slugs — an `instanceof Project` check there is always false. `AppServiceProvider::routeProject()` /
