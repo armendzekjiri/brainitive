@@ -1,7 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test, uid } from '../fixtures';
-import { createBoard } from '../helpers/boards';
-import { pageProps } from '../helpers/helpdesk';
+import { boardWithIssues } from '../helpers/boards';
 
 /**
  * Resizable columns on the board Timeline ("Items" column) and List (every column): drag a
@@ -10,23 +9,6 @@ import { pageProps } from '../helpers/helpdesk';
  */
 
 test.use({ viewport: { width: 1600, height: 900 } });
-
-/** A new board with issues in its first column; returns its URL. */
-async function boardWithIssues(page: Page, titles: string[]): Promise<string> {
-    const boardUrl = await createBoard(page, uid('Resize board'));
-    await page.goto(boardUrl); // full load: data-page holds the board
-    const { board } = await pageProps<{ board: { columns: { id: number }[] } }>(page);
-    const xsrf = decodeURIComponent((await page.context().cookies()).find((c) => c.name === 'XSRF-TOKEN')!.value);
-    for (const title of titles) {
-        const response = await page.request.post(`${boardUrl}/items`, {
-            headers: { 'X-XSRF-TOKEN': xsrf, 'X-Requested-With': 'XMLHttpRequest', Accept: 'text/html, application/xhtml+xml' },
-            data: { title, column_id: board.columns[0].id },
-            maxRedirects: 0,
-        });
-        expect(response.status(), `create ${title}`).toBe(302);
-    }
-    return boardUrl;
-}
 
 const handle = (page: Page, column: string): Locator => page.getByRole('separator', { name: `Resize ${column} column` });
 
@@ -45,7 +27,7 @@ const valueNow = async (target: Locator) => Number(await target.getAttribute('ar
 
 test('timeline: drag the Items column wider, keep it after a reload, keys and double-click', async ({ page }) => {
     const title = uid('A rather long issue title that needs more room to be read on the timeline');
-    const boardUrl = await boardWithIssues(page, [title]);
+    const boardUrl = await boardWithIssues(page, uid('Resize board'), [title]);
     await page.goto(`${boardUrl}?view=gantt`);
     await expect(page.getByText(title)).toBeVisible();
 
@@ -81,7 +63,7 @@ test('timeline: drag the Items column wider, keep it after a reload, keys and do
 
 test('list: columns do not overlap, Title drags narrower, widths survive a reload, keys resize', async ({ page }) => {
     const title = uid('List resize issue');
-    const boardUrl = await boardWithIssues(page, [title]);
+    const boardUrl = await boardWithIssues(page, uid('Resize board'), [title]);
     await page.goto(`${boardUrl}?view=list`);
     await expect(page.getByRole('row').filter({ hasText: title })).toBeVisible();
 

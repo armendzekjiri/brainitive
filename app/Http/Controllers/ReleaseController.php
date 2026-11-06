@@ -2,14 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\BoardColumn;
 use App\Models\Item;
 use App\Models\Project;
 use App\Models\Release;
 use App\Models\Workspace;
 use App\Support\Entitlements\LimitGate;
+use App\Support\Releases\ReleaseLifecycle;
 use App\Support\Releases\ReleaseNotes;
 use App\Support\SafeHtml;
+use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -28,9 +29,7 @@ class ReleaseController extends Controller
     {
         $this->authorize('viewAny', [Release::class, $project]);
 
-        $releases = $project->releases()->orderByRaw("case status when 'unreleased' then 0 when 'released' then 1 else 2 end")
-            ->orderByRaw('release_date is null')->orderBy('release_date')->orderByDesc('released_at')->orderBy('id')
-            ->get()
+        $releases = ReleaseLifecycle::ordered($project)->get()
             ->map(fn (Release $r) => $this->summary($r));
 
         return Inertia::render('Releases/Index', [
@@ -48,12 +47,7 @@ class ReleaseController extends Controller
         $this->scope($project, $release);
         $this->authorize('view', $release);
 
-        $items = $release->items()
-            ->with(['column:id,board_id,name,position', 'board:id,slug,name', 'itemType:id,name,slug,icon,color', 'assignee:id,name,avatar'])
-            ->orderBy('key')->limit(500)
-            ->get(['id', 'key', 'title', 'board_id', 'column_id', 'item_type_id', 'assigned_to', 'completed_at', 'parent_id']);
-        $firstColumns = BoardColumn::whereIn('board_id', $items->pluck('board_id')->unique())->orderBy('position')
-            ->get(['id', 'board_id'])->unique('board_id')->pluck('id', 'board_id');
+        $items = ReleaseLifecycle::itemsWithState($release, ['itemType:id,name,slug,icon,color', 'assignee:id,name,avatar']);
 
         return Inertia::render('Releases/Show', [
             'workspace' => $workspace,
@@ -65,17 +59,21 @@ class ReleaseController extends Controller
                 'public_url' => $release->isPublished() ? route('releases.public', $release->public_token) : null,
                 'notes_changed' => $release->isPublished() && $release->notes !== $release->published_notes,
             ],
-            'items' => $items->map(fn (Item $i) => [
-                'id' => $i->id,
-                'key' => $i->key,
-                'title' => $i->title,
-                'state' => $i->completed_at ? 'done' : ($firstColumns->get($i->board_id) === $i->column_id ? 'todo' : 'in_progress'),
-                'status' => $i->column?->name,
-                'type' => $i->itemType?->only(['name', 'slug', 'icon', 'color']),
-                'assignee' => $i->assignee?->only(['id', 'name', 'avatar']),
-                'is_subtask' => $i->parent_id !== null,
-                'url' => $i->board ? route('boards.show', [$workspace->slug, $project->slug, $i->board->slug]).'#item-'.$i->id : null,
-            ])->values(),
+            'items' => $items->map(function (array $row) use ($workspace, $project) {
+                $i = $row['item'];
+
+                return [
+                    'id' => $i->id,
+                    'key' => $i->key,
+                    'title' => $i->title,
+                    'state' => $row['state'],
+                    'status' => $i->column?->name,
+                    'type' => $i->itemType?->only(['name', 'slug', 'icon', 'color']),
+                    'assignee' => $i->assignee?->only(['id', 'name', 'avatar']),
+                    'is_subtask' => $i->parent_id !== null,
+                    'url' => $i->board ? route('boards.show', [$workspace->slug, $project->slug, $i->board->slug]).'#item-'.$i->id : null,
+                ];
+            })->values(),
             'otherReleases' => $project->releases()->where('status', Release::STATUS_UNRELEASED)->whereKeyNot($release->id)
                 ->orderByRaw('release_date is null')->orderBy('release_date')->orderBy('id')->get(['id', 'name']),
             'canManage' => $request->user()->can('update', $release),
@@ -132,17 +130,8 @@ class ReleaseController extends Controller
             return back()->withErrors(['move_unfinished_to' => 'Pick another release.']);
         }
 
-        $moved = DB::transaction(function () use ($release, $validated) {
-            $moved = 0;
-            // One by one so each issue's history records the fix version change.
-            $release->items()->whereNull('completed_at')->get()->each(function (Item $item) use ($validated, &$moved) {
-                $item->update(['release_id' => $validated['move_unfinished_to'] ?? null]);
-                $moved++;
-            });
-            $release->update(['status' => Release::STATUS_RELEASED, 'release_date' => $validated['release_date'], 'released_at' => now()]);
-
-            return $moved;
-        });
+        $target = isset($validated['move_unfinished_to']) ? (int) $validated['move_unfinished_to'] : null;
+        $moved = ReleaseLifecycle::ship($release, $validated['release_date'], $target);
 
         return back()->with('success', "{$release->name} released".($moved ? " — {$moved} unfinished issue".($moved === 1 ? '' : 's').' moved.' : '.'));
     }
@@ -153,10 +142,11 @@ class ReleaseController extends Controller
         $this->authorize('update', $release);
 
         $status = $request->validate(['status' => 'required|in:unreleased,released,archived'])['status'];
-        if ($status === Release::STATUS_RELEASED && $release->status !== Release::STATUS_ARCHIVED) {
-            return back()->withErrors(['status' => 'Use “Release” to ship an unreleased version.']);
+        try {
+            ReleaseLifecycle::setStatus($release, $status);
+        } catch (DomainException $e) {
+            return back()->withErrors(['status' => $e->getMessage()]);
         }
-        $release->update(['status' => $status, 'released_at' => $status === Release::STATUS_UNRELEASED ? null : ($release->released_at ?? now())]);
 
         return back()->with('success', match ($status) {
             Release::STATUS_UNRELEASED => 'Release reopened.',
@@ -174,8 +164,7 @@ class ReleaseController extends Controller
         }
 
         $ids = $request->validate(['item_ids' => 'required|array|min:1|max:200', 'item_ids.*' => 'integer'])['item_ids'];
-        $items = $project->items()->whereIn('id', $ids)->get();
-        $items->each(fn (Item $item) => $item->update(['release_id' => $release->id]));
+        $items = ReleaseLifecycle::assignItems($project, $release, array_map('intval', $ids));
 
         return back()->with('success', $items->count().' issue'.($items->count() === 1 ? '' : 's')." added to {$release->name}.");
     }
@@ -274,12 +263,7 @@ class ReleaseController extends Controller
 
     private function validated(Request $request, Project $project, ?Release $release = null): array
     {
-        return $request->validate([
-            'name' => ['required', 'string', 'max:100', Rule::unique('releases', 'name')->where('project_id', $project->id)->ignore($release?->id)],
-            'description' => 'nullable|string|max:5000',
-            'start_date' => 'nullable|date',
-            'release_date' => 'nullable|date|after_or_equal:start_date',
-        ]);
+        return $request->validate(ReleaseLifecycle::rules($project, $release));
     }
 
     /** @return array<string, mixed> */

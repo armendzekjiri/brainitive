@@ -133,6 +133,8 @@ import {
 import { ActiveSprintBar, type SprintSummary } from '@/components/board/ActiveSprintBar';
 import SavedViewsMenu from '@/components/board/SavedViewsMenu';
 import { BulkEditBar } from '@/components/board/BulkEditBar';
+import type { BulkEditOptions } from '@/components/board/bulkItemEdit';
+import { ItemContextMenu } from '@/components/board/ItemContextMenu';
 import { useLiveBoard } from '@/hooks/useLiveBoard';
 import { useResizableColumns, type ColumnSpec } from '@/hooks/useResizableColumns';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -212,6 +214,7 @@ function ItemCard({
     return (
         <article
             data-live-card={item.id}
+            data-context-item={item.id}
             draggable
             onDragStart={(e) => onDragStart(e, item)}
             onDragEnd={onDragEnd}
@@ -222,6 +225,8 @@ function ItemCard({
                 // Jira-like elevation: hairline outline + 1px drop, a touch more on hover
                 'shadow-[0_1px_1px_rgba(9,30,66,0.25),0_0_1px_rgba(9,30,66,0.31)] dark:shadow-[0_0_0_1px_hsl(var(--border))]',
                 'transition-colors duration-100 hover:bg-secondary/60 dark:hover:bg-secondary/40',
+                // the right-click menu acts on this card
+                'data-[context-target]:ring-2 data-[context-target]:ring-primary/60',
             )}
         >
             {/* Summary */}
@@ -1385,18 +1390,6 @@ const LIST_FIELD_SPEC: ColumnSpec = { min: 96, max: 480, default: 160 };
 
 const LIST_CHECKBOX_CLASS = 'size-4 rounded border-input accent-primary cursor-pointer align-middle';
 
-/** What the list view needs for multi-select + bulk edit (BRAI-108). */
-interface ListBulkOptions {
-    users: User[];
-    priorities: ItemPriority[];
-    itemTypes: ItemType[];
-    labels: LabelType[];
-    /** Scrum boards: the running + planned sprints; null on Kanban boards. */
-    sprints: { id: number; name: string }[] | null;
-    canDeleteAnyItem: boolean;
-    currentUserId: number;
-}
-
 function ListView({
     columns,
     workspace,
@@ -1421,8 +1414,8 @@ function ListView({
     setSort: React.Dispatch<React.SetStateAction<ListSort | null>>;
     hiddenFieldIds: number[];
     setHiddenFieldIds: React.Dispatch<React.SetStateAction<number[]>>;
-    /** Multi-select + bulk edit (BRAI-108); null = read-only list (no checkboxes). */
-    bulk: ListBulkOptions | null;
+    /** Multi-select + bulk edit (BRAI-108); null = read-only list (no checkboxes, a view-only right-click menu). */
+    bulk: BulkEditOptions | null;
 }) {
     const allItems = columns.flatMap(col => col.items.map(item => ({ ...item, columnName: col.name })));
 
@@ -1611,106 +1604,123 @@ function ListView({
                             {fillerColumn && <th aria-hidden="true" className="pb-3" />}
                         </tr>
                     </thead>
-                    <tbody>
-                        {sortedItems.map((item) => (
-                            <tr
-                                key={item.id}
-                                data-live-card={item.id}
-                                className={cn('border-b hover:bg-muted/50 cursor-pointer transition-colors', selectedIds.has(item.id) && 'bg-primary/5 hover:bg-primary/10')}
-                                onClick={() => onEditItem(item)}
-                            >
-                                {selectable && (
-                                    // The whole cell toggles (a bigger target), never opens the issue
-                                    <td className="py-3 pl-4" onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) toggleRow(item.id, e.shiftKey); }}>
-                                        <input
-                                            type="checkbox"
-                                            aria-label={`Select ${item.key}`}
-                                            className={LIST_CHECKBOX_CLASS}
-                                            checked={selectedIds.has(item.id)}
-                                            onChange={(e) => toggleRow(item.id, (e.nativeEvent as MouseEvent).shiftKey === true)}
-                                        />
-                                    </td>
-                                )}
-                                <td className={cn('py-3 px-3', !selectable && 'pl-4')}>
-                                    <div className="flex min-w-0 items-center gap-2">
-                                        <ItemTypeIcon type={item.item_type} className="size-4 shrink-0" />
-                                        <span className="truncate font-mono text-sm text-primary font-medium">{item.key}</span>
-                                    </div>
-                                </td>
-                                <td className="py-3 px-3">
-                                    <span className="block break-words font-medium">{item.title}</span>
-                                </td>
-                                <td className="py-3 px-3">
-                                    {item.parent ? (
-                                        <Link
-                                            href={route('boards.items.show', [workspace.slug, project.slug, board.slug, item.parent.id])}
-                                            className="block truncate text-primary hover:underline font-mono text-sm"
-                                            onClick={(e) => e.stopPropagation()}
-                                        >
-                                            {item.parent.key}
-                                        </Link>
-                                    ) : (
-                                        <span className="text-muted-foreground text-sm">—</span>
+                    {/* Right-click a row: the bulk actions for it, or for the selection it belongs to (GitHub #143) */}
+                    <ItemContextMenu
+                        workspace={workspace}
+                        project={project}
+                        board={board}
+                        columns={columns}
+                        items={sortedItems}
+                        selectedIds={selectedIds}
+                        edit={bulk}
+                        onOpenItem={onEditItem}
+                    >
+                        <tbody>
+                            {sortedItems.map((item) => (
+                                <tr
+                                    key={item.id}
+                                    data-live-card={item.id}
+                                    data-context-item={item.id}
+                                    className={cn(
+                                        'border-b hover:bg-muted/50 cursor-pointer transition-colors',
+                                        selectedIds.has(item.id) && 'bg-primary/5 hover:bg-primary/10',
+                                        'data-[context-target]:bg-primary/10',
                                     )}
-                                </td>
-                                <td className="py-3 px-3">
-                                    <Badge variant="secondary" className="max-w-full font-normal" title={item.columnName}>
-                                        <span className="min-w-0 truncate">{item.columnName}</span>
-                                    </Badge>
-                                </td>
-                                <td className="py-3 px-3">
-                                    <div className="flex min-w-0 items-center gap-2">
-                                        <PriorityIndicator slug={item.priority?.slug} />
-                                        <span className="truncate text-sm">{item.priority?.name || 'None'}</span>
-                                    </div>
-                                </td>
-                                <td className="py-3 px-3">
-                                    {item.assignee ? (
-                                        <div className="flex min-w-0 items-center gap-2" title={item.assignee.name}>
-                                            <Avatar className="size-6 shrink-0">
-                                                {item.assignee.avatar_display && (
-                                                    <AvatarImage src={item.assignee.avatar_display} alt={item.assignee.name} />
-                                                )}
-                                                <AvatarFallback className="text-xs">
-                                                    {item.assignee.name.charAt(0).toUpperCase()}
-                                                </AvatarFallback>
-                                            </Avatar>
-                                            <span className="min-w-0 truncate text-sm">{item.assignee.name}</span>
+                                    onClick={() => onEditItem(item)}
+                                >
+                                    {selectable && (
+                                        // The whole cell toggles (a bigger target), never opens the issue
+                                        <td className="py-3 pl-4" onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) toggleRow(item.id, e.shiftKey); }}>
+                                            <input
+                                                type="checkbox"
+                                                aria-label={`Select ${item.key}`}
+                                                className={LIST_CHECKBOX_CLASS}
+                                                checked={selectedIds.has(item.id)}
+                                                onChange={(e) => toggleRow(item.id, (e.nativeEvent as MouseEvent).shiftKey === true)}
+                                            />
+                                        </td>
+                                    )}
+                                    <td className={cn('py-3 px-3', !selectable && 'pl-4')}>
+                                        <div className="flex min-w-0 items-center gap-2">
+                                            <ItemTypeIcon type={item.item_type} className="size-4 shrink-0" />
+                                            <span className="truncate font-mono text-sm text-primary font-medium">{item.key}</span>
                                         </div>
-                                    ) : (
-                                        <span className="block truncate text-muted-foreground text-sm">Unassigned</span>
-                                    )}
-                                </td>
-                                <td className="py-3 px-3">
-                                    {item.due_date ? (
-                                        <span className="block truncate text-sm">{new Date(item.due_date).toLocaleDateString()}</span>
-                                    ) : (
-                                        <span className="text-muted-foreground text-sm">—</span>
-                                    )}
-                                </td>
-                                <td className={cn('py-3 px-3', !fieldColumns.length && !fillerColumn && 'pr-4')}>
-                                    {item.story_points ? (
-                                        <Badge variant="outline" className="font-mono">{item.story_points}</Badge>
-                                    ) : (
-                                        <span className="text-muted-foreground text-sm">—</span>
-                                    )}
-                                </td>
-                                {fieldColumns.map((field, index) => (
-                                    <td key={field.id} className={cn('py-3 px-3', index === fieldColumns.length - 1 && !fillerColumn && 'pr-4')}>
-                                        <FieldCell field={field} item={item} />
                                     </td>
-                                ))}
-                                {fillerColumn && <td aria-hidden="true" />}
-                            </tr>
-                        ))}
-                        {sortedItems.length === 0 && (
-                            <tr>
-                                <td colSpan={columnCount} className="py-12 text-center text-muted-foreground">
-                                    No items found
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
+                                    <td className="py-3 px-3">
+                                        <span className="block break-words font-medium">{item.title}</span>
+                                    </td>
+                                    <td className="py-3">
+                                        {item.parent ? (
+                                            <Link
+                                                href={route('boards.items.show', [workspace.slug, project.slug, board.slug, item.parent.id])}
+                                                className="block truncate text-primary hover:underline font-mono text-sm"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                {item.parent.key}
+                                            </Link>
+                                        ) : (
+                                            <span className="text-muted-foreground text-sm">—</span>
+                                        )}
+                                    </td>
+                                    <td className="py-3">
+                                        <Badge variant="secondary" className="max-w-full font-normal" title={item.columnName}>
+                                            <span className="min-w-0 truncate">{item.columnName}</span>
+                                        </Badge>
+                                    </td>
+                                    <td className="py-3">
+                                        <div className="flex min-w-0 items-center gap-2">
+                                            <PriorityIndicator slug={item.priority?.slug} />
+                                            <span className="truncate text-sm">{item.priority?.name || 'None'}</span>
+                                        </div>
+                                    </td>
+                                    <td className="py-3">
+                                        {item.assignee ? (
+                                            <div className="flex min-w-0 items-center gap-2" title={item.assignee.name}>
+                                                <Avatar className="size-6 shrink-0">
+                                                    {item.assignee.avatar_display && (
+                                                        <AvatarImage src={item.assignee.avatar_display} alt={item.assignee.name} />
+                                                    )}
+                                                    <AvatarFallback className="text-xs">
+                                                        {item.assignee.name.charAt(0).toUpperCase()}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                                <span className="min-w-0 truncate text-sm">{item.assignee.name}</span>
+                                            </div>
+                                        ) : (
+                                            <span className="block truncate text-muted-foreground text-sm">Unassigned</span>
+                                        )}
+                                    </td>
+                                    <td className="py-3">
+                                        {item.due_date ? (
+                                            <span className="block truncate text-sm">{new Date(item.due_date).toLocaleDateString()}</span>
+                                        ) : (
+                                            <span className="text-muted-foreground text-sm">—</span>
+                                        )}
+                                    </td>
+                                    <td className={cn('py-3 px-3', !fieldColumns.length && !fillerColumn && 'pr-4')}>
+                                        {item.story_points ? (
+                                            <Badge variant="outline" className="font-mono">{item.story_points}</Badge>
+                                        ) : (
+                                            <span className="text-muted-foreground text-sm">—</span>
+                                        )}
+                                    </td>
+                                    {fieldColumns.map((field, index) => (
+                                        <td key={field.id} className={cn('py-3 px-3', index === fieldColumns.length - 1 && !fillerColumn && 'pr-4')}>
+                                            <FieldCell field={field} item={item} />
+                                        </td>
+                                    ))}
+                                    {fillerColumn && <td aria-hidden="true" />}
+                                </tr>
+                            ))}
+                            {sortedItems.length === 0 && (
+                                <tr>
+                                    <td colSpan={columnCount} className="py-12 text-center text-muted-foreground">
+                                        No items found
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </ItemContextMenu>
                 </table>
                 {bulk && selectedItems.length > 0 && (
                     <BulkEditBar
@@ -2841,6 +2851,19 @@ export default function BoardsShow({
         return roots.flatMap((r) => [{ ...r, depth: 0 }, ...all.filter((c) => c.parent_id === r.id).map((c) => ({ ...c, depth: 1 }))]);
     }, [board.columns]);
 
+    // Bulk edit (BRAI-108) in the list view and the right-click menu on rows and cards (GitHub #143)
+    const bulkEdit: BulkEditOptions | null = canEditItems ? {
+        users: projectUsers,
+        priorities,
+        itemTypes,
+        labels: projectLabels,
+        sprints: board.type === 'scrum' ? [...(activeSprint ? [activeSprint] : []), ...plannedSprints] : null,
+        canDeleteAnyItem,
+        currentUserId: auth.user.id,
+    } : null;
+    const boardItems = useMemo(() => board.columns.flatMap((c) => c.items ?? []), [board.columns]);
+    const cardMenu = { workspace, project, board, columns: board.columns, items: boardItems, edit: bulkEdit, onOpenItem: setEditingItem };
+
     return (
         <AppLayout>
             <Head title={`${board.name} - ${project.name}`} />
@@ -3345,52 +3368,59 @@ export default function BoardsShow({
 
                 {/* View Content */}
                 {currentView === 'kanban' && laneModel && (
-                    <SwimlaneBoard
-                        columns={kanbanColumns}
-                        olderDone={olderDone}
-                        lanes={laneModel.lanes}
-                        laneOf={laneModel.laneOf}
-                        showEmptyLanes={laneMode === 'custom'}
-                        workspace={workspace}
-                        project={project}
-                        board={board}
-                        projectUsers={projectUsers}
-                        onEditItem={setEditingItem}
-                        onDragStart={handleDragStart}
-                        onDragEnd={handleDragEnd}
-                        onDropCell={(e, column, lane) => handleLaneDrop(e, column, lane, laneModel.laneOf, laneModel.lanes)}
-                    />
+                    <ItemContextMenu {...cardMenu}>
+                        {/* display: contents — a ref for the menu without a layout box */}
+                        <div className="contents">
+                            <SwimlaneBoard
+                                columns={kanbanColumns}
+                                olderDone={olderDone}
+                                lanes={laneModel.lanes}
+                                laneOf={laneModel.laneOf}
+                                showEmptyLanes={laneMode === 'custom'}
+                                workspace={workspace}
+                                project={project}
+                                board={board}
+                                projectUsers={projectUsers}
+                                onEditItem={setEditingItem}
+                                onDragStart={handleDragStart}
+                                onDragEnd={handleDragEnd}
+                                onDropCell={(e, column, lane) => handleLaneDrop(e, column, lane, laneModel.laneOf, laneModel.lanes)}
+                            />
+                        </div>
+                    </ItemContextMenu>
                 )}
 
                 {currentView === 'kanban' && !laneModel && (
-                    <div className="flex-1 min-h-0 overflow-hidden bg-background">
-                        <div className="flex h-full min-h-0 items-stretch gap-3 overflow-x-auto overflow-y-hidden p-[14px_20px_20px]">
-                            {kanbanColumns.map((column) => (
-                                <BoardColumnComponent
-                                    key={column.id}
-                                    column={column}
-                                    workspace={workspace}
-                                    project={project}
-                                    board={board}
-                                    itemTypes={itemTypes}
-                                    rootItems={rootItems}
-                                    projectUsers={projectUsers}
-                                    onEditItem={setEditingItem}
-                                    onDragStart={handleDragStart}
-                                    onDragEnd={handleDragEnd}
-                                    onDragOver={handleDragOver}
-                                    onDrop={handleDrop}
-                                    isDragOver={dragOverColumn === column.id}
-                                    totalItemCount={wipCount(column.id)}
-                                    olderDone={olderDone.get(column.id)}
-                                    createOpen={createInColumnId === column.id}
-                                    onCreateOpenChange={(open) => setCreateInColumnId(open ? column.id : null)}
-                                />
-                            ))}
+                    <ItemContextMenu {...cardMenu}>
+                        <div className="flex-1 min-h-0 overflow-hidden bg-background">
+                            <div className="flex h-full min-h-0 items-stretch gap-3 overflow-x-auto overflow-y-hidden p-[14px_20px_20px]">
+                                {kanbanColumns.map((column) => (
+                                    <BoardColumnComponent
+                                        key={column.id}
+                                        column={column}
+                                        workspace={workspace}
+                                        project={project}
+                                        board={board}
+                                        itemTypes={itemTypes}
+                                        rootItems={rootItems}
+                                        projectUsers={projectUsers}
+                                        onEditItem={setEditingItem}
+                                        onDragStart={handleDragStart}
+                                        onDragEnd={handleDragEnd}
+                                        onDragOver={handleDragOver}
+                                        onDrop={handleDrop}
+                                        isDragOver={dragOverColumn === column.id}
+                                        totalItemCount={wipCount(column.id)}
+                                        olderDone={olderDone.get(column.id)}
+                                        createOpen={createInColumnId === column.id}
+                                        onCreateOpenChange={(open) => setCreateInColumnId(open ? column.id : null)}
+                                    />
+                                ))}
 
-                            <NewColumnTile workspace={workspace} project={project} board={board} />
+                                <NewColumnTile workspace={workspace} project={project} board={board} />
+                            </div>
                         </div>
-                    </div>
+                    </ItemContextMenu>
                 )}
 
                 {currentView === 'list' && (
@@ -3405,15 +3435,7 @@ export default function BoardsShow({
                         setSort={setListSort}
                         hiddenFieldIds={hiddenFieldIds}
                         setHiddenFieldIds={setHiddenFieldIds}
-                        bulk={canEditItems ? {
-                            users: projectUsers,
-                            priorities,
-                            itemTypes,
-                            labels: projectLabels,
-                            sprints: board.type === 'scrum' ? [...(activeSprint ? [activeSprint] : []), ...plannedSprints] : null,
-                            canDeleteAnyItem,
-                            currentUserId: auth.user.id,
-                        } : null}
+                        bulk={bulkEdit}
                     />
                 )}
 

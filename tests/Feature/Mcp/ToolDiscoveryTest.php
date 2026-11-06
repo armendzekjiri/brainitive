@@ -38,6 +38,9 @@ class ToolDiscoveryTest extends TestCase
             // BRAI-432: related content, referenced by, linked issues
             'list-content-links-tool' => 'readOnlyHint', 'link-related-content-tool' => 'idempotentHint',
             'unlink-related-content-tool' => 'idempotentHint', 'link-issues-tool' => 'idempotentHint', 'unlink-issues-tool' => 'idempotentHint',
+            // Releases
+            'list-releases-tool' => 'readOnlyHint', 'get-release-tool' => 'readOnlyHint', 'create-release-tool' => 'idempotentHint',
+            'update-release-tool' => 'idempotentHint', 'set-items-release-tool' => 'idempotentHint',
         ];
 
         foreach ($expected as $name => $hint) {

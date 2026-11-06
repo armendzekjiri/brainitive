@@ -20,6 +20,7 @@ use App\Mcp\Tools\CreateLabelTool;
 use App\Mcp\Tools\CreatePageTool;
 use App\Mcp\Tools\CreatePriorityTool;
 use App\Mcp\Tools\CreateProjectTool;
+use App\Mcp\Tools\CreateReleaseTool;
 use App\Mcp\Tools\CreateSnippetCollectionTool;
 use App\Mcp\Tools\CreateSnippetTool;
 use App\Mcp\Tools\CreateSprintTool;
@@ -37,6 +38,7 @@ use App\Mcp\Tools\GetPageTool;
 use App\Mcp\Tools\GetPlanTool;
 use App\Mcp\Tools\GetProjectConfigTool;
 use App\Mcp\Tools\GetProjectTool;
+use App\Mcp\Tools\GetReleaseTool;
 use App\Mcp\Tools\GetSprintTool;
 use App\Mcp\Tools\GetTaskListTool;
 use App\Mcp\Tools\LinkIssuesTool;
@@ -52,6 +54,7 @@ use App\Mcp\Tools\ListPagesTool;
 use App\Mcp\Tools\ListPlansTool;
 use App\Mcp\Tools\ListProjectMembersTool;
 use App\Mcp\Tools\ListProjectsTool;
+use App\Mcp\Tools\ListReleasesTool;
 use App\Mcp\Tools\ListSnippetsTool;
 use App\Mcp\Tools\ListSprintsTool;
 use App\Mcp\Tools\ListTaskListsTool;
@@ -60,6 +63,7 @@ use App\Mcp\Tools\MoveBoardItemTool;
 use App\Mcp\Tools\MoveItemsToSprintTool;
 use App\Mcp\Tools\ReorderBoardColumnsTool;
 use App\Mcp\Tools\SearchTool;
+use App\Mcp\Tools\SetItemsReleaseTool;
 use App\Mcp\Tools\StartSprintTool;
 use App\Mcp\Tools\UnlinkIssuesTool;
 use App\Mcp\Tools\UnlinkRelatedContentTool;
@@ -75,6 +79,7 @@ use App\Mcp\Tools\UpdatePageTool;
 use App\Mcp\Tools\UpdatePlanTool;
 use App\Mcp\Tools\UpdatePriorityTool;
 use App\Mcp\Tools\UpdateProjectTool;
+use App\Mcp\Tools\UpdateReleaseTool;
 use App\Mcp\Tools\UpdateSnippetTool;
 use App\Mcp\Tools\UpdateSprintTool;
 use App\Mcp\Tools\UpdateTaskTool;
@@ -109,6 +114,13 @@ board's backlog page. Confirm with the user before starting or completing a spri
 Gantt plans: list_plans / get_plan to read (rows, bars, dependencies, linked issues);
 update_plan applies a list of operations against expected_revision — on a revision
 conflict nothing changes: read the plan again before trying anything else.
+
+Releases (fix versions): list_releases / get_release to read (progress, notes as Markdown,
+issues with state); create_release (an existing name returns that release — safe to repeat;
+status released records a past release), update_release (fields, notes, status — shipping
+an unreleased one needs move_unfinished_to when issues are unfinished; confirm with the
+user first) and set_items_release (issue keys like BRAI-12 → a release, or release_id 0 to
+clear; one unknown key changes nothing).
 
 Setting up or migrating a project (e.g. from a Jira / Trello export the user gives you):
 1. create_workspace if needed, then create_project (key + columns = the statuses, in order,
@@ -233,6 +245,12 @@ class BrainitiveServer extends Server
         ListPlansTool::class,
         GetPlanTool::class,
         UpdatePlanTool::class,
+        // Releases / fix versions (shared rules with the web: ReleaseLifecycle)
+        ListReleasesTool::class,
+        GetReleaseTool::class,
+        CreateReleaseTool::class,
+        UpdateReleaseTool::class,
+        SetItemsReleaseTool::class,
         // Links between content (BRAI-432): related content, referenced by, linked issues
         ListContentLinksTool::class,
         LinkRelatedContentTool::class,
