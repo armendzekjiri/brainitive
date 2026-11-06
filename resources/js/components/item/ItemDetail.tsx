@@ -624,6 +624,20 @@ export function useItemDetail(args: UseItemDetailArgs) {
         }, { preserveScroll: true });
     };
 
+    // Subtask rows (BRAI): tick a subtask done / open again from the parent, like moving its card.
+    const toggleSubtaskDone = (subtask: Item) => {
+        if (!canEditItems) return;
+        const done = !!subtask.completed_at;
+        const target = done
+            ? columns.find((c) => !c.is_done_column)
+            : columns.find((c) => c.is_done_column);
+        if (!target) return;
+        router.patch(route('boards.items.move', [workspace.slug, project.slug, board.slug, subtask.id]), {
+            column_id: target.id,
+            position: 0,
+        }, { preserveScroll: true });
+    };
+
     const handleMoveToColumn = (newColId: string) => {
         const columnId = parseInt(newColId);
         // Done column + open subtasks below: ask first.
@@ -798,7 +812,7 @@ export function useItemDetail(args: UseItemDetailArgs) {
         // subtasks
         subtasks, doneSubtasks, subtaskTypeId, rootItemsForParent,
         newSubtaskTitle, setNewSubtaskTitle, handleCreateSubtask,
-        canHaveSubtasks, ancestors, openDescendants, completePrompt, setCompletePrompt, moveToColumn,
+        canHaveSubtasks, ancestors, openDescendants, completePrompt, setCompletePrompt, moveToColumn, toggleSubtaskDone,
         // watchers
         watcherIds, toggleWatcher,
         // file preview
@@ -1021,7 +1035,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
         editorContent, savedDescription, editorKey, isEditingDescription,
         handleEditorChange, startEditDescription, saveDescription, cancelDescription, handleCheckboxToggle,
         subtasks, doneSubtasks, subtaskTypeId, newSubtaskTitle, setNewSubtaskTitle, handleCreateSubtask, onOpenItem,
-        canHaveSubtasks, ancestors,
+        canHaveSubtasks, ancestors, toggleSubtaskDone, canEditItems,
         linkDialogOpen, setLinkDialogOpen, linkType, setLinkType, targetItemId, setTargetItemId,
         linkTypeOptions, inverseLinkType, linkableItems, handleCreateLink, handleDeleteLink,
         localAttachments, isUploading, fileInputRef, handleFileUpload, handleDeleteAttachment, setFilePreview,
@@ -1277,17 +1291,42 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                             {subtasks.map((st) => {
                                 const done = !!st.completed_at;
                                 return (
-                                    <button
-                                        key={st.id}
-                                        type="button"
-                                        onClick={() => onOpenItem(st)}
-                                        className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-muted/50"
-                                    >
-                                        <ItemTypeIcon type={st.item_type} className="size-4 shrink-0" />
-                                        <span className={cn('flex-1 truncate text-sm', done && 'line-through text-muted-foreground')}>{st.title}</span>
-                                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{st.key}</span>
-                                        <AssigneeAvatar user={st.assignee} size={20} />
-                                    </button>
+                                    <div key={st.id} className="flex items-center gap-1 pl-2 pr-3 transition-colors hover:bg-muted/50" data-testid="subtask-row">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleSubtaskDone(st)}
+                                            disabled={!canEditItems}
+                                            role="checkbox"
+                                            aria-checked={done}
+                                            aria-label={done ? `Reopen ${st.key}` : `Mark ${st.key} as done`}
+                                            title={done ? 'Reopen' : 'Mark as done'}
+                                            className={cn(
+                                                'flex size-6 shrink-0 items-center justify-center rounded-full disabled:cursor-default',
+                                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                                            )}
+                                        >
+                                            <span
+                                                className={cn(
+                                                    'flex size-4 items-center justify-center rounded-full border transition-colors',
+                                                    done
+                                                        ? 'border-green-600 bg-green-600 text-white'
+                                                        : 'border-muted-foreground/50 hover:border-green-600',
+                                                )}
+                                            >
+                                                {done && <Check className="size-3" strokeWidth={3} />}
+                                            </span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => onOpenItem(st)}
+                                            className="flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-1 text-left"
+                                        >
+                                            <ItemTypeIcon type={st.item_type} className="size-4 shrink-0" />
+                                            <span className={cn('flex-1 truncate text-sm', done && 'line-through text-muted-foreground')}>{st.title}</span>
+                                            <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{st.key}</span>
+                                            <AssigneeAvatar user={st.assignee} size={20} />
+                                        </button>
+                                    </div>
                                 );
                             })}
                         </div>

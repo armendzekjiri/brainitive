@@ -51,7 +51,7 @@ clicking **Create** twice never creates issues twice.
 ## Connect Claude, ChatGPT and other assistants (MCP)
 
 Brainitive has a built-in MCP server, so AI assistants that support MCP connectors can read and update your workspace:
-search, read and write docs, create and update issues, comment, plan sprints, edit Gantt plans, manage task lists and
+search, read and write docs, create and update issues, comment, plan sprints and releases, edit Gantt plans, manage task lists and
 look at your calendar.
 
 1. In your AI app, add a new custom connector (MCP server).

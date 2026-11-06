@@ -1,4 +1,5 @@
 import { ClipboardEvent, KeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
     ArrowDown, ArrowUp, CalendarCheck, ChevronDown, ChevronRight, Columns3, Copy, Diamond, ExternalLink, Filter, GripVertical,
     IndentDecrease, IndentIncrease, Kanban, Keyboard, Link2, ListPlus, Palette, Pencil, Plus, Redo2, RefreshCw, Rows3, Search, StickyNote,
@@ -1486,6 +1487,10 @@ function CellEditor({ col, initial, suggestions, listId, onDone }: {
         );
     }
 
+    if (col === 'who' && suggestions) {
+        return <WhoEditor initial={initial} suggestions={suggestions} className={className} onDone={onDone} />;
+    }
+
     const type = col === 'start' || col === 'end' ? 'date' : col === 'duration' || col === 'progress' ? 'number' : 'text';
     return (
         <input
@@ -1502,5 +1507,96 @@ function CellEditor({ col, initial, suggestions, listId, onDone }: {
             onKeyDown={onKeyDown}
             aria-label={col}
         />
+    );
+}
+
+/**
+ * The Who cell: type a name or pick a project member from a real list (the browser's <datalist>
+ * barely shows up, and not at all in some webviews). ↑/↓ choose, Enter / Tab take the highlighted
+ * name (or what was typed), Esc cancels. The list is portaled so the grid's overflow can't clip it.
+ */
+function WhoEditor({ initial, suggestions, className, onDone }: {
+    initial: string;
+    suggestions: string[];
+    className: string;
+    onDone: (value: string | null, move: 'down' | 'right' | 'left' | null) => void;
+}) {
+    const [value, setValue] = useState(initial);
+    const [active, setActive] = useState(-1);
+    const [rect, setRect] = useState<DOMRect | null>(null);
+    const done = useRef(false);
+    const ref = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        el.focus();
+        el.select();
+        setRect(el.getBoundingClientRect());
+    }, []);
+
+    const query = value.trim().toLowerCase();
+    const options = useMemo(() => {
+        const all = suggestions.filter((n) => !query || n.toLowerCase().includes(query));
+        // names starting with what was typed first
+        return all.sort((a, b) => Number(!a.toLowerCase().startsWith(query)) - Number(!b.toLowerCase().startsWith(query))).slice(0, 50);
+    }, [suggestions, query]);
+
+    const finish = (next: string | null, move: 'down' | 'right' | 'left' | null) => {
+        if (done.current) return;
+        done.current = true;
+        onDone(next, move);
+    };
+    const picked = () => (active >= 0 && options[active] !== undefined ? options[active] : value);
+
+    const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+        event.stopPropagation();
+        if (event.key === 'ArrowDown') { event.preventDefault(); setActive((i) => Math.min(i + 1, options.length - 1)); }
+        else if (event.key === 'ArrowUp') { event.preventDefault(); setActive((i) => Math.max(i - 1, -1)); }
+        else if (event.key === 'Enter') { event.preventDefault(); finish(picked(), 'down'); }
+        else if (event.key === 'Escape') { event.preventDefault(); finish(null, null); }
+        else if (event.key === 'Tab') { event.preventDefault(); finish(picked(), event.shiftKey ? 'left' : 'right'); }
+    };
+
+    return (
+        <>
+            <input
+                ref={ref}
+                type="text"
+                value={value}
+                maxLength={255}
+                className={className}
+                role="combobox"
+                aria-expanded={options.length > 0}
+                aria-autocomplete="list"
+                aria-label="who"
+                onChange={(e) => { setValue(e.target.value); setActive(-1); }}
+                onBlur={() => finish(value, null)}
+                onKeyDown={onKeyDown}
+            />
+            {rect && options.length > 0 && createPortal(
+                <ul
+                    role="listbox"
+                    aria-label="Project members"
+                    className="fixed z-[100] max-h-64 overflow-auto rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-md"
+                    style={{ top: rect.bottom + 2, left: rect.left, minWidth: Math.max(rect.width, 200) }}
+                >
+                    {options.map((name, i) => (
+                        <li
+                            key={name}
+                            role="option"
+                            aria-selected={i === active}
+                            className={cn('cursor-pointer truncate rounded-sm px-2 py-1.5', i === active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60')}
+                            // mousedown: pick before the input's blur commits what was typed
+                            onMouseDown={(e) => { e.preventDefault(); finish(name, null); }}
+                            onMouseEnter={() => setActive(i)}
+                        >
+                            {name}
+                        </li>
+                    ))}
+                </ul>,
+                document.body,
+            )}
+        </>
     );
 }

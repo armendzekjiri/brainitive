@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { router } from '@inertiajs/react';
-import { toast } from 'sonner';
 import {
     CalendarDays, CircleDot, Flag, Layers, Loader2, Shapes, Tag, Trash2, UserRound, X,
 } from 'lucide-react';
-import type { Board, BoardColumn, Item, ItemPriority, ItemType, Label as LabelType, PageProps, Project, User, Workspace } from '@/types';
+import type { Board, BoardColumn, Item, ItemPriority, ItemType, Label as LabelType, Project, User, Workspace } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,24 +11,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import {
-    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-    AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { ItemTypeIcon } from '@/components/ItemTypeIcon';
 import { AssigneeAvatar, LabelChip, PriorityIndicator, StatusLozenge, statusCategory } from '@/components/board/ItemPrimitives';
-
-/** What one bulk request may change (BoardBulkItemController). */
-export interface BulkChanges {
-    column_id?: number;
-    assigned_to?: number | null;
-    priority_id?: number;
-    item_type_id?: number;
-    sprint_id?: number | null;
-    due_date?: string | null;
-    add_label_ids?: number[];
-    remove_label_ids?: number[];
-}
+import { BulkDeleteDialog, issueNoun, useBulkItemEdit, type BulkChanges } from '@/components/board/bulkItemEdit';
 
 interface Props {
     workspace: Workspace;
@@ -61,34 +44,16 @@ const triggerClass = 'h-8 gap-1.5 px-2.5 text-[13px] font-medium shrink-0';
 export function BulkEditBar({
     workspace, project, board, items, columns, users, priorities, itemTypes, labels, sprints, deletableIds, onClear, onDeleted,
 }: Props) {
-    const [busy, setBusy] = useState(false);
+    const { busy, update, destroy } = useBulkItemEdit(workspace, project, board);
     const [assigneeOpen, setAssigneeOpen] = useState(false);
     const [dueOpen, setDueOpen] = useState(false);
     const [dueDate, setDueDate] = useState('');
     const [confirmDelete, setConfirmDelete] = useState(false);
     const count = items.length;
-    const noun = count === 1 ? 'issue' : 'issues';
-    const params = [workspace.slug, project.slug, board.slug];
-    const ids = items.map((item) => item.id);
+    const noun = issueNoun(count);
     const allDeletable = items.every((item) => deletableIds.has(item.id));
 
-    const options = (fallback: string, after?: () => void) => ({
-        preserveScroll: true,
-        preserveState: true,
-        onStart: () => setBusy(true),
-        onFinish: () => setBusy(false),
-        onSuccess: (page: { props: unknown }) => {
-            toast.success((page.props as PageProps).flash?.success ?? fallback);
-            after?.();
-        },
-        onError: (errors: Record<string, string>) => toast.error(Object.values(errors)[0] ?? 'Could not update the selected issues.'),
-    });
-
-    const apply = (changes: BulkChanges, what: string) =>
-        router.patch(route('boards.items.bulk.update', params), { item_ids: ids, changes: { ...changes } }, options(`${what} for ${count} ${noun}.`));
-
-    const destroy = () =>
-        router.delete(route('boards.items.bulk.destroy', params), { data: { item_ids: ids }, ...options(`Deleted ${count} ${noun}.`, onDeleted) });
+    const apply = (changes: BulkChanges, what: string) => update(items, changes, what);
 
     return (
         <div
@@ -281,23 +246,7 @@ export function BulkEditBar({
                 <X className="size-4" />
             </Button>
 
-            <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Delete {count} {noun}?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            {items.slice(0, 5).map((item) => item.key).join(', ')}{count > 5 ? ` and ${count - 5} more` : ''} will be deleted
-                            together with their subtasks.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={destroy}>
-                            Delete {count} {noun}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <BulkDeleteDialog open={confirmDelete} onOpenChange={setConfirmDelete} items={items} onConfirm={() => destroy(items, onDeleted)} />
         </div>
     );
 }

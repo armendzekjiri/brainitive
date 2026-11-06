@@ -437,6 +437,23 @@ board access (every policy check starts with BoardPolicy::view).
 - Compare views on normalized params: the server stores `quick` in its fixed order, so the client
   serializes it in the same order (`QUICK_FILTERS`), not click order.
 
+### Board column widths are personal: localStorage, not saved views (v1.51.0)
+- Timeline "Items" width and List column widths live in localStorage
+  (`board-<id>-u<userId>-timeline-widths`, `board-<id>-u<userId>-list-col-widths`, only resized
+  columns are stored), written on release / key / reset, never per pointer move. They apply in
+  every saved view: saved views are URL params compared on normalized values, so pixel widths
+  there would mark a view "modified" after every drag.
+- Not the PlanChart pattern on purpose: a plan's `settings.gridWidth` is shared document state
+  (everyone sees it, goes through `usePlanEditor`); board widths are one person's preference.
+- List: `table-layout: fixed`. Title has `default: null` (auto, fills the spare space, 200px
+  floor); once it's dragged it becomes fixed and an empty trailing filler column takes the spare
+  space — otherwise a fixed table spreads the excess over every column and the handle no longer
+  follows the pointer. Table `min-width` = sum of the columns → sideways scroll, never squeezing.
+- Phones get no handles (`useIsMobile`); the Timeline column is then min(288, 60% of the window).
+- **Trap:** `overflow-x-auto` makes `overflow-y` auto too. The board tab strip
+  (`BoardHeader`) had tabs with `-mb-px`, i.e. 1px of vertical overflow → a tiny ▲▼ scrollbar
+  next to the tabs. Keep `overflow-y-hidden` on horizontally scrolling strips.
+
 ### Bulk edit in the board list view goes through the model, once per issue (BRAI-108)
 `PATCH|DELETE boards/{board}/items/bulk` (`BoardBulkItemController` → `Support/Boards/BulkItemEdit`)
 changes up to 200 issues of **this** board (one query loads them; a missing, deleted or foreign
@@ -460,6 +477,22 @@ id fails `item_ids`, no per-id `exists` rule). Queries grow by a small constant 
   `ItemStatusChangedNotification` goes to watchers (≠ actor) after the commit, the same rule as
   `BoardController::moveItem` (`BulkItemEdit::notifyStatusChange()`).
 - `bulk` routes are registered **before** `items/{item}`; otherwise `bulk` would bind as an item id.
+
+### Right-click menu on issues (GitHub #143, v1.51.0)
+`ItemContextMenu` sends the bulk bar's requests (`useBulkItemEdit`), so permissions and history are
+the bulk edit's above. Decisions and traps:
+- **One menu per view**, not per row: the trigger is the `<tbody>` / board, and a capture-phase
+  `contextmenu` handler finds `[data-context-item]` under the pointer. Anything else — headers,
+  `a[href]`, text inputs, portaled popovers/dialogs (React events bubble through portals, so the
+  DOM `closest()` decides) — calls `stopPropagation()` there, which keeps Radix' bubble handler
+  from `preventDefault()`-ing: the browser's own menu shows.
+- **Targets like a file manager:** a selected row → the whole selection; an unselected row → only
+  that row, the selection is untouched. Targets are ids, resolved from props on every render (a
+  label toggle keeps the menu open and shows the reloaded state).
+- **Touch / coarse pointers: disabled.** Radix opens on a 700 ms long-press anywhere on the trigger
+  (here: the whole board) and would fight the cards' native drag; phones keep their own menu.
+- Kanban status moves go through the bulk endpoint: no "complete open subtasks?" prompt (as in bulk).
+- The Backlog page (`BacklogRow`) has no menu: it lacks users / priorities / types / labels props.
 
 ### Done column retention: defaults, completed_at, client-side hiding (BRAI-346, 2026-10-30)
 Jira's "hide completed issues older than…" for Kanban boards: `boards.settings.done_retention_days`.
@@ -2474,3 +2507,17 @@ Findings and tests: `docs/ai/tasks/release-v1.49.0.md` → Codex realtime review
 - **Log lines with client values** go through `realtime/src/log.js` `fields()`: escaped, truncated, `key="value"`.
 - **Deploy:** restart `brainitive-realtime` after the deploy (old server: the session push 404s — reported, harmless —
   and old tokens without `sid` keep working until they expire). New realtime env vars are optional (defaults above).
+
+### My Work filter bar (v1.51.0, feat/my-work-filters)
+- **Client-side on purpose:** `MyWorkController::index` returns every row of the scope + due chip (no pagination), so
+  search / project / source / priority / labels / status / sort run in the browser (`lib/myWorkFilters.ts`). If the
+  page ever gets paginated, these must move to server params (the App API's `/me/work` already has `status` / `due`).
+- **URL:** `scope` / `filter` stay server params; the client ones (`q`, `projects`, `source`, `priority`, `labels`,
+  `status`, `sort`, defaults left out) are written with `history.replaceState(history.state, …)` like the board's
+  filter bar. The scope / due chips visit with `preserveState` and carry them along.
+- **Status defaults to Open** (done rows used to be listed dimmed at the bottom). A task completed with the circle
+  while on Open stays listed (struck through) until the status filter changes or the page reloads (`keepVisible`).
+- **Counts:** the scope / due chips and the header stats stay server totals of the scope (they describe it, not the
+  narrowed view); "Done here" counts done rows matching the other filters; the bar shows "N of M tasks".
+- Priorities and labels are per project: the dropdowns group them by slug / lower-case name across projects. List
+  tasks have neither (a priority or label filter hides them; "No priority" matches them). My Day ignores the filters.

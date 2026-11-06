@@ -669,6 +669,8 @@ export interface MyWorkItem {
     description?: string | Record<string, any> | null;
     due_date?: string;
     completed_at?: string;
+    /** My Work filter bar: "Recently updated" sort */
+    updated_at?: string | null;
     status?: 'todo' | 'done';
     position: number;
     source: { type: 'board' | 'list' | 'external'; id: number; name: string; slug: string };
@@ -678,6 +680,8 @@ export interface MyWorkItem {
     column?: { id: number; name: string; is_done_column: boolean };
     item_type?: ItemType | null;
     priority?: ItemPriority | null;
+    /** board issues only (list tasks: []); My Work filters on them by name */
+    labels?: { id: number; name: string; color?: string | null }[];
     assignee?: User | null;
 }
 
