@@ -19,6 +19,9 @@ return new class extends Migration
             $table->foreignId('board_column_id')->unique()->constrained('board_columns')->cascadeOnDelete();
             // role keys (WorkflowRules::ROLES); [] = no role listed
             $table->json('allowed_roles')->nullable();
+            // the who-part restricts: set when members or roles were chosen. Stays set when the listed people are
+            // deleted / leave, so an emptied list means "only project admins", never "anyone"
+            $table->boolean('restrict_who')->default(false);
             $table->boolean('require_assignee')->default(false);
             $table->boolean('require_subtasks_done')->default(false);
             $table->boolean('require_due_date')->default(false);

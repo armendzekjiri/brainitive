@@ -51,7 +51,7 @@ export const EMPTY_RULE: WorkflowRuleSettings = {
 };
 
 export function isEmptyRule(rule: WorkflowRuleSettings): boolean {
-    return rule.allowed_user_ids.length === 0 && rule.allowed_roles.length === 0 && rule.allowed_from_column_ids.length === 0
+    return !rule.restrict_who && rule.allowed_user_ids.length === 0 && rule.allowed_roles.length === 0 && rule.allowed_from_column_ids.length === 0
         && !rule.require_assignee && !rule.require_subtasks_done && !rule.require_due_date;
 }
 
@@ -60,7 +60,7 @@ export function ruleKey(rule: WorkflowRuleSettings): string {
     const sorted = (ids: (number | string)[]) => [...ids].map(String).sort();
     return JSON.stringify([
         sorted(rule.allowed_user_ids), sorted(rule.allowed_roles), sorted(rule.allowed_from_column_ids),
-        rule.require_assignee, rule.require_subtasks_done, rule.require_due_date,
+        rule.require_assignee, rule.require_subtasks_done, rule.require_due_date, !!rule.restrict_who,
     ]);
 }
 
@@ -75,6 +75,8 @@ const ROLE_ORDER = Object.keys(ROLE_PHRASES);
 
 /** "Armend Zekjiri, Jane or project admins" — members by name, then roles (WorkflowRules::whoList). */
 export function whoList(rule: WorkflowRuleSettings, memberName: (id: number) => string): string {
+    // restricted with nobody left = only project admins (WorkflowGuard::LOCKED_ROLES)
+    if (rule.allowed_user_ids.length === 0 && rule.allowed_roles.length === 0) return ROLE_PHRASES.project_admin;
     const names = rule.allowed_user_ids.map(memberName).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
     const roles = ROLE_ORDER.filter((key) => rule.allowed_roles.includes(key)).map((key) => ROLE_PHRASES[key]);
     return orList([...names, ...roles]);
@@ -87,7 +89,7 @@ export function describeRule(rule: WorkflowRuleSettings, column: BoardColumn, co
         const names = columns.filter((c) => rule.allowed_from_column_ids.includes(c.id)).sort((a, b) => a.position - b.position).map((c) => c.name);
         lines.push(`Cards can enter ${column.name} only from ${orList(names)}.`);
     }
-    if (rule.allowed_user_ids.length > 0 || rule.allowed_roles.length > 0) {
+    if (rule.allowed_user_ids.length > 0 || rule.allowed_roles.length > 0 || rule.restrict_who) {
         lines.push(`Only ${whoList(rule, memberName)} can move cards here.`);
     }
     const requires = [

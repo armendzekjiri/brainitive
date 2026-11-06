@@ -18,6 +18,7 @@ class BoardColumnRule extends Model
         'board_id',
         'board_column_id',
         'allowed_roles',
+        'restrict_who',
         'require_assignee',
         'require_subtasks_done',
         'require_due_date',
@@ -27,6 +28,7 @@ class BoardColumnRule extends Model
     {
         return [
             'allowed_roles' => 'array',
+            'restrict_who' => 'boolean',
             'require_assignee' => 'boolean',
             'require_subtasks_done' => 'boolean',
             'require_due_date' => 'boolean',
@@ -64,7 +66,8 @@ class BoardColumnRule extends Model
     /** True when the rule restricts nothing (the editor deletes it instead of saving it). */
     public function isEmpty(): bool
     {
-        return $this->roles() === []
+        return ! $this->restrict_who
+            && $this->roles() === []
             && $this->users->isEmpty()
             && $this->fromColumns->isEmpty()
             && ! $this->require_assignee && ! $this->require_subtasks_done && ! $this->require_due_date;

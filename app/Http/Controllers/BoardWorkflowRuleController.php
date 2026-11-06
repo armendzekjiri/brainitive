@@ -11,13 +11,14 @@ use Illuminate\Http\Request;
 
 /**
  * Board settings → Workflow rules (v1.52.0): one rule per target column — who may move cards in, from which
- * columns, conditions. Board editors only (BoardPolicy::update); enforced by Support\Boards\WorkflowGuard.
+ * columns, conditions. Project admins and workspace admins only (ProjectPolicy::update) — the editors a rule restricts
+ * must not be able to lift it. Enforced by Support\Boards\WorkflowGuard; changes are logged on the board.
  */
 class BoardWorkflowRuleController extends Controller
 {
     public function update(Request $request, Workspace $workspace, Project $project, Board $board, BoardColumn $column)
     {
-        $this->authorize('update', $board);
+        $this->authorize('update', $project);
         abort_unless($column->board_id === $board->id, 404);
 
         $validated = $request->validate(WorkflowRules::rules($board));
@@ -28,7 +29,7 @@ class BoardWorkflowRuleController extends Controller
 
     public function destroy(Workspace $workspace, Project $project, Board $board, BoardColumn $column)
     {
-        $this->authorize('update', $board);
+        $this->authorize('update', $project);
         abort_unless($column->board_id === $board->id, 404);
 
         WorkflowRules::delete($column);

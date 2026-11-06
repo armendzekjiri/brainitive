@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import type { Board, BoardColumn, PageProps, Project, Workspace, WorkflowRuleMember, WorkflowRuleRole, WorkflowRuleSettings } from '@/types';
+import type { Board, BoardColumn, PageProps, Project, Workspace, WorkflowRuleChange, WorkflowRuleMember, WorkflowRuleRole, WorkflowRuleSettings } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,8 @@ interface Props extends PageProps {
     workflowRules: Record<number, WorkflowRuleSettings>;
     ruleMembers: WorkflowRuleMember[];
     ruleRoles: WorkflowRuleRole[];
+    canManageRules: boolean;
+    ruleHistory: WorkflowRuleChange[];
 }
 
 const SECTIONS = [
@@ -156,7 +158,7 @@ function DangerZone({ workspace, project, board }: { workspace: Workspace; proje
  * Board settings: a sectioned page like Project settings (left nav, scrolling tabs on phones, `?tab=` deep links) —
  * General, Columns & statuses, Workflow rules (v1.52.0), Swimlanes, Danger zone.
  */
-export default function BoardsEdit({ workspace, project, board, laneOptions, workflowRules, ruleMembers, ruleRoles }: Props) {
+export default function BoardsEdit({ workspace, project, board, laneOptions, workflowRules, ruleMembers, ruleRoles, canManageRules = false, ruleHistory = [] }: Props) {
     const pageUrl = usePage().url;
     const [tab, setTab] = useState<Section>(() => readTab(pageUrl));
     const rules = workflowRules ?? {};
@@ -234,6 +236,8 @@ export default function BoardsEdit({ workspace, project, board, laneOptions, wor
                                         rules={rules}
                                         members={ruleMembers ?? []}
                                         roles={ruleRoles ?? []}
+                                        canManage={canManageRules}
+                                        history={ruleHistory}
                                     />
                                 </TabsContent>
                                 <TabsContent value="swimlanes" className="mt-0 space-y-6">

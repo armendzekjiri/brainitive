@@ -108,6 +108,7 @@ const CHANGELOG = [
         items: [
             'Workflow rules: decide per column who may move cards into it (people and/or roles, e.g. “only Armend can move cards to Done”), from which columns (“Done only from Testing”) and what a card needs first (an assignee, all subtasks done, a due date).',
             'Rules apply everywhere cards move or are created — drag & drop, the issue dialog, bulk edits, the desktop and mobile apps, AI assistants (MCP) and automations. Nobody bypasses them, admins included; a refused move says why.',
+            'Only project admins change workflow rules (editors see them read-only), and every change is listed under “Rule changes”. GitHub merges respect the “from” and condition parts and show on the pull request when a card stayed.',
             'On the board, columns a dragged card can’t enter are dimmed with the reason, column headers show a lock with the rule, and the issue dialog’s status list marks statuses you can’t pick.',
             'Automations follow the rules too: a blocked “Move to column” shows the reason in the rule’s run history; recurring issues a rule refuses pause with the reason.',
             'A new board settings page: sections for General, Columns & statuses (rename, recolour, done flag and WIP limit right in the list, drag to reorder), Workflow rules, Swimlanes and Danger zone — on phones as scrolling tabs.',

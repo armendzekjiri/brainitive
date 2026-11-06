@@ -6,6 +6,7 @@ use App\Http\Controllers\ProjectGithubController;
 use App\Models\ActivityLog;
 use App\Models\AdminAuditLog;
 use App\Models\Board;
+use App\Models\BoardColumn;
 use App\Models\GithubApp;
 use App\Models\GithubAppDelivery;
 use App\Models\GithubConnection;
@@ -17,6 +18,7 @@ use App\Models\ItemDevLink;
 use App\Models\Project;
 use App\Models\User;
 use App\Notifications\GithubSyncFailedNotification;
+use App\Support\Boards\WorkflowRules;
 use App\Support\Github\GithubApi;
 use App\Support\Github\GithubAppConfig;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -511,6 +513,35 @@ class GithubAppTest extends TestCase
         $issue->update(['column_id' => $this->column('in-progress'), 'completed_at' => null]);
         $this->deliver('pull_request', $this->merged($issue, 7), 'merge-2');
         $this->assertSame($this->column('in-progress'), $issue->fresh()->column_id);
+    }
+
+    public function test_a_workflow_rule_keeps_the_card_and_the_reason_shows_on_the_pr(): void
+    {
+        $this->configureApp();
+        $this->appConnection();
+        $issue = $this->item(['column_id' => $this->column('to-do')]);
+        $this->setTransition('done');
+        // no person acts on a merge: the who-part is skipped, "allowed from" and conditions still apply
+        WorkflowRules::save(BoardColumn::findOrFail($this->column('done')), [
+            'allowed_user_ids' => [$this->editor->id], 'allowed_roles' => [], 'allowed_from_column_ids' => [$this->column('in-progress')],
+            'require_assignee' => false, 'require_subtasks_done' => false, 'require_due_date' => false,
+        ]);
+
+        $this->deliver('pull_request', $this->pr($issue, 9));
+        $this->deliver('pull_request', $this->merged($issue, 9), 'merge-9')->assertStatus(202);
+
+        $this->assertSame($this->column('to-do'), $issue->fresh()->column_id);
+        $link = ItemDevLink::where('identifier', '9')->sole();
+        $this->assertSame('blocked', $link->meta['merge_transition']['result']);
+        $this->assertSame('Cards can only move to Done from In Progress.', $link->meta['merge_transition']['message']);
+        $this->actingAs($this->editor)->getJson($this->itemRoute('boards.items.details', $issue))->assertOk()
+            ->assertJsonPath('development.pull_requests.0.merge_blocked', 'Cards can only move to Done from In Progress.');
+
+        // from an allowed column the merge moves it (the who-part doesn't apply to GitHub)
+        $other = $this->item(['column_id' => $this->column('in-progress')]);
+        $this->deliver('pull_request', $this->pr($other, 10));
+        $this->deliver('pull_request', $this->merged($other, 10), 'merge-10');
+        $this->assertSame($this->column('done'), $other->fresh()->column_id);
     }
 
     public function test_close_without_merge_and_secondary_prs_do_nothing(): void

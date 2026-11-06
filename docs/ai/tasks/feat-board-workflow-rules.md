@@ -31,8 +31,7 @@ column with an allowed-from list can't be created into ("Cards can't be created 
 only move there from Testing."). Strict on purpose — otherwise "create directly in Done" is a loophole.
 
 **No bypass** — workspace owners/admins are checked like everyone else (they can add themselves to
-the rule). The rule editor itself needs `BoardPolicy::update` (board editors / project admins /
-workspace admins).
+the rule). The rule editor itself needs `ProjectPolicy::update` (project / workspace admins; see Review fixes).
 
 ## Data
 - `board_column_rules`: id, `board_id` (FK cascade, indexed: one query loads a board's rules),
@@ -108,7 +107,7 @@ Paths (each gets a test unless marked):
   Require [all subtasks done]"; summary list of all rules at the top), **Danger zone**.
   Split into `components/board/settings/*` so the page stays small.
 - Routes: `PUT boards/{board}/columns/{column}/rule` (`boards.columns.rule.update`), `DELETE`
-  (`boards.columns.rule.destroy`), `BoardPolicy::update`.
+  (`boards.columns.rule.destroy`), `ProjectPolicy::update` (see Review fixes).
 
 ## MCP / App API
 - `get_board` and `get_project_config`: `workflow_rule` per column (one sentence, '' = none).
@@ -127,3 +126,16 @@ ARCHITECTURE (Kanban), KNOWLEDGE (decisions above), API.md, docs-site boards gui
 
 ## Not done / follow-ups
 - Rules don't travel with project templates / exports yet (members are personal; roles / from / conditions could).
+
+## Review fixes (security + database review, 2026-11-06)
+1. Rule editing needs `ProjectPolicy::update` (project / workspace admins); editors see rules read-only. Rule changes are logged
+   on the Board (`ActivityLog`, `workflow_rule_created|updated|deleted`) and listed on the settings tab. Deleting a column with a
+   rule or in another rule's "allowed from" needs the same right (web + MCP).
+2. Recurring templates: an update makes the editor the creator; store / update check the rules for that person (422).
+3. No signed-in user: only the who-part is skipped; GitHub merge transitions record `blocked` + reason on the PR.
+4. People who left the project are left out of summaries and messages (editor shows them as former).
+5. `allowed_from_column_ids`: max = the board's column count, intersected with the board's other columns.
+6. `restrict_who`: an emptied who-rule means only project admins, never anyone.
+7. Open subtasks precomputed per action (`WorkflowGuard::openSubtasks`, one query per level).
+8. Moving a subtree into another board's done column counts the subtree as done. Plus: empty rules pruned after column / user
+   deletes; automations use `ensure()`.

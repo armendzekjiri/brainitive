@@ -12,6 +12,7 @@ use App\Support\Imports\ImportScope;
 use Closure;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use WeakMap;
 
 /**
@@ -19,21 +20,28 @@ use WeakMap;
  *
  * Two layers:
  *  - explicit `ensure()` where a whole action must be refused up front with a clear message (drag & drop with
- *    "also complete the subtasks", bulk edit, move to another board, automations, recurring issues);
- *  - the backstop `onSaving()`, called by `Item::saving` for every create and every column change, as the
- *    signed-in user — so a write path nobody thought of can't skip a rule. Skipped without a signed-in user
- *    (webhooks), during imports (`ImportScope`) and inside `bypass()` (system writes made for someone else).
+ *    "also complete the subtasks", bulk edit, move to another board, automations, recurring issues, GitHub merges);
+ *  - the backstop `onSaving()`, called by `Item::saving` for every create and every column change — so a write path
+ *    nobody thought of can't skip a rule. With a signed-in user every part is checked; without one (webhooks,
+ *    console) the who-part is skipped but "allowed from" and the conditions still apply. Skipped entirely during
+ *    imports (`ImportScope`) and inside `bypass()` (system writes made for someone else).
  *
  * Creating an issue counts as entering its column from nowhere: the who-rule and the conditions apply, and a
  * column that can only be entered from certain columns can't be created into. No role bypasses a rule.
  *
- * One instance per request (rules and roles are cached; reset after each request / job).
+ * The who-part: listed members who can still open the project OR listed roles; a rule that listed people of whom
+ * none is left (deleted / left the project) means "only project admins" (`LOCKED_ROLES`), never "anyone".
+ *
+ * One instance per request (rules, members and roles are cached; forgotten on every routed request).
  */
 final class WorkflowGuard
 {
+    /** Who may move cards in when a rule restricts who but nobody listed is left. */
+    public const LOCKED_ROLES = ['project_admin'];
+
     private static int $bypass = 0;
 
-    /** @var array<int, array{project: Project|null, rules: Collection<int, BoardColumnRule>}> board id => setup */
+    /** @var array<int, array{project: Project|null, rules: Collection<int, BoardColumnRule>, members: array<int, true>}> board id => setup */
     private array $boards = [];
 
     /** @var array<string, list<string>> "user:project" => role keys */
@@ -81,20 +89,39 @@ final class WorkflowGuard
         return $this->rulesFor((int) $column->board_id)->get((int) $column->id);
     }
 
-    /** Rules changed (settings saved, a column deleted): read them again. */
+    /** Rules or memberships changed: read them again. */
     public function forget(int $boardId): void
     {
         unset($this->boards[$boardId]);
     }
 
     /**
-     * Why `$item` may not enter `$to` as `$actor` (null = it may). `$item` may be unsaved (a new issue).
-     * `$completingIds`: issues the same action moves into a done column too (the subtask cascade, a bulk edit) —
-     * they count as done for "all subtasks done".
+     * The who-part as it applies now: listed members who can still open the project, the listed roles, and whether
+     * it restricts at all. A restricting rule with nobody left falls back to LOCKED_ROLES (`locked`).
+     *
+     * @return array{restricts: bool, users: Collection<int, User>, roles: list<string>, locked: bool}
+     */
+    public function who(BoardColumnRule $rule): array
+    {
+        $members = $this->setup((int) $rule->board_id)['members'];
+        $users = $rule->users->filter(fn (User $u) => isset($members[$u->id]))->values();
+        $roles = $rule->roles();
+        $restricts = (bool) $rule->restrict_who || $users->isNotEmpty() || $roles !== [];
+        $locked = $restricts && $users->isEmpty() && $roles === [];
+
+        return ['restricts' => $restricts, 'users' => $users, 'roles' => $locked ? self::LOCKED_ROLES : $roles, 'locked' => $locked];
+    }
+
+    /**
+     * Why `$item` may not enter `$to` (null = it may). `$actor` null = no person acts (the who-part is skipped).
+     * `$item` may be unsaved (a new issue). `$completingIds`: issues the same action moves into a done column too
+     * (the subtask cascade, a bulk edit, a subtree moving along) — they count as done for "all subtasks done".
+     * `$openSubtasks`: this issue's open descendants, precomputed by `openSubtasks()` for a batch (null = ask).
      *
      * @param  list<int>  $completingIds
+     * @param  list<int>|null  $openSubtasks
      */
-    public function violation(Item $item, BoardColumn $to, User $actor, array $completingIds = []): ?WorkflowRuleViolation
+    public function violation(Item $item, BoardColumn $to, ?User $actor, array $completingIds = [], ?array $openSubtasks = null): ?WorkflowRuleViolation
     {
         $rule = $this->ruleFor($to);
         if (! $rule) {
@@ -110,7 +137,7 @@ final class WorkflowGuard
         }
 
         $project = $this->setup((int) $to->board_id)['project'];
-        if ($project && ! $this->actorAllowed($rule, $actor, $project)) {
+        if ($actor && $project && ! $this->actorAllowed($rule, $actor, $project)) {
             return WorkflowRuleViolation::make('actor', 'Only '.WorkflowRules::whoList($rule)." can move cards to {$to->name}.", $to, $item);
         }
 
@@ -129,8 +156,11 @@ final class WorkflowGuard
         if ($rule->require_due_date && empty($item->due_date)) {
             return WorkflowRuleViolation::make('due_date', "Cards need a due date before they can move to {$to->name}.", $to, $item);
         }
-        if ($rule->require_subtasks_done && $item->exists && $this->hasOpenSubtasks($item, $completingIds)) {
-            return WorkflowRuleViolation::make('subtasks', "All subtasks must be done before a card can move to {$to->name}.", $to, $item);
+        if ($rule->require_subtasks_done && $item->exists) {
+            $open = $openSubtasks ?? ($this->openSubtasks([(int) $item->id])[(int) $item->id] ?? []);
+            if (array_diff($open, $completingIds) !== []) {
+                return WorkflowRuleViolation::make('subtasks', "All subtasks must be done before a card can move to {$to->name}.", $to, $item);
+            }
         }
 
         return null;
@@ -141,22 +171,23 @@ final class WorkflowGuard
      * saved into that column.
      *
      * @param  list<int>  $completingIds
+     * @param  list<int>|null  $openSubtasks
      *
      * @throws WorkflowRuleViolation
      */
-    public function ensure(Item $item, BoardColumn $to, User $actor, array $completingIds = [], string $prefix = ''): void
+    public function ensure(Item $item, BoardColumn $to, ?User $actor, array $completingIds = [], string $prefix = '', ?array $openSubtasks = null): void
     {
         if ($this->skipped()) {
             return;
         }
-        if ($violation = $this->violation($item, $to, $actor, $completingIds)) {
+        if ($violation = $this->violation($item, $to, $actor, $completingIds, $openSubtasks)) {
             throw $prefix === '' ? $violation : $violation->about($prefix);
         }
         $this->cleared[$item] = (int) $to->id;
     }
 
     /**
-     * The backstop (`Item::saving`): a new issue or a column change, as the signed-in user.
+     * The backstop (`Item::saving`): a new issue or a column change, as the signed-in user (or nobody).
      *
      * @throws WorkflowRuleViolation
      */
@@ -168,10 +199,6 @@ final class WorkflowGuard
         if (! $item->column_id || ! $item->board_id || $this->skipped()) {
             return;
         }
-        $actor = Auth::user();
-        if (! $actor instanceof User) {
-            return; // no person acts (webhooks, console): see KNOWLEDGE → Workflow rules
-        }
         if (($this->cleared[$item] ?? null) === (int) $item->column_id) {
             unset($this->cleared[$item]);
 
@@ -179,23 +206,24 @@ final class WorkflowGuard
         }
 
         $rule = $this->rulesFor((int) $item->board_id)->get((int) $item->column_id);
-        if ($rule && $rule->column && ($violation = $this->violation($item, $rule->column, $actor))) {
+        $actor = Auth::user();
+        if ($rule && $rule->column && ($violation = $this->violation($item, $rule->column, $actor instanceof User ? $actor : null))) {
             throw $violation;
         }
     }
 
-    /** Whether `$actor` is one of the rule's members or holds one of its roles (no one listed = anyone who may edit). */
+    /** Whether `$actor` passes the who-part of the rule (nobody listed and not restricted = anyone who may edit). */
     public function actorAllowed(BoardColumnRule $rule, User $actor, Project $project): bool
     {
-        $roles = $rule->roles();
-        if ($rule->users->isEmpty() && $roles === []) {
+        $who = $this->who($rule);
+        if (! $who['restricts']) {
             return true;
         }
-        if ($rule->users->contains('id', $actor->id)) {
+        if ($who['users']->contains('id', $actor->id)) {
             return true;
         }
 
-        return array_intersect($roles, $this->rolesOf($actor, $project)) !== [];
+        return array_intersect($who['roles'], $this->rolesOf($actor, $project)) !== [];
     }
 
     /**
@@ -223,22 +251,55 @@ final class WorkflowGuard
         })();
     }
 
+    /**
+     * Open descendants (subtasks in a column that isn't done, all levels) of each issue, in one query per level
+     * for the whole batch. An issue that is a descendant of another one in the batch appears under both.
+     *
+     * @param  list<int>  $itemIds
+     * @return array<int, list<int>> issue id => open descendant ids
+     */
+    public function openSubtasks(array $itemIds): array
+    {
+        $result = array_fill_keys($itemIds, []);
+        $rootsOf = [];
+        foreach ($itemIds as $id) {
+            $rootsOf[$id][] = $id;
+        }
+        $frontier = $itemIds;
+        for ($level = 0; $level <= Item::MAX_DEPTH && $frontier !== []; $level++) {
+            $children = DB::table('items')
+                ->join('board_columns', 'board_columns.id', '=', 'items.column_id')
+                ->whereIn('items.parent_id', $frontier)
+                ->whereNull('items.deleted_at')
+                ->get(['items.id', 'items.parent_id', 'board_columns.is_done_column']);
+            $frontier = [];
+            foreach ($children as $child) {
+                $roots = $rootsOf[(int) $child->parent_id] ?? [];
+                foreach ($roots as $root) {
+                    if (! $child->is_done_column) {
+                        $result[$root][] = (int) $child->id;
+                    }
+                    $rootsOf[(int) $child->id][] = $root;
+                }
+                $frontier[] = (int) $child->id;
+            }
+        }
+
+        return $result;
+    }
+
+    /** Whether any rule of the board requires done subtasks (only then is `openSubtasks()` worth its queries). */
+    public function needsSubtasks(int $boardId): bool
+    {
+        return $this->rulesFor($boardId)->contains(fn (BoardColumnRule $rule) => $rule->require_subtasks_done);
+    }
+
     private function skipped(): bool
     {
         return self::$bypass > 0 || ImportScope::active();
     }
 
-    /** @param list<int> $completingIds */
-    private function hasOpenSubtasks(Item $item, array $completingIds): bool
-    {
-        $ids = array_values(array_diff($item->descendantIds(), $completingIds));
-
-        return $ids !== [] && Item::whereIn('id', $ids)
-            ->whereHas('column', fn ($q) => $q->where('is_done_column', false))
-            ->exists();
-    }
-
-    /** @return array{project: Project|null, rules: Collection<int, BoardColumnRule>} */
+    /** @return array{project: Project|null, rules: Collection<int, BoardColumnRule>, members: array<int, true>} */
     private function setup(int $boardId): array
     {
         if (! isset($this->boards[$boardId])) {
@@ -246,12 +307,33 @@ final class WorkflowGuard
                 ->with(['users:id,name', 'fromColumns:id,name,position', 'column'])
                 ->get()
                 ->keyBy('board_column_id');
+            $project = $rules->isEmpty() ? null : Board::withTrashed()->with('project.workspace')->find($boardId)?->project;
+            $listed = $rules->flatMap(fn (BoardColumnRule $r) => $r->users->pluck('id'))->unique()->values()->all();
             $this->boards[$boardId] = [
-                'project' => $rules->isEmpty() ? null : Board::withTrashed()->with('project.workspace')->find($boardId)?->project,
+                'project' => $project,
                 'rules' => $rules,
+                'members' => $project && $listed !== [] ? array_fill_keys(self::membersAmong($project, $listed), true) : [],
             ];
         }
 
         return $this->boards[$boardId];
+    }
+
+    /**
+     * Which of these users can still open the project: project members of a workspace they belong to, or workspace
+     * admins (User::hasProjectAccess, for a list at once).
+     *
+     * @param  list<int>  $userIds
+     * @return list<int>
+     */
+    private static function membersAmong(Project $project, array $userIds): array
+    {
+        $inWorkspace = DB::table('workspace_user')->where('workspace_id', $project->workspace_id)->whereIn('user_id', $userIds);
+        $admins = (clone $inWorkspace)->where('role', 'admin')->pluck('user_id')->all();
+        $members = DB::table('project_user')->where('project_id', $project->id)
+            ->whereIn('user_id', (clone $inWorkspace)->select('user_id'))
+            ->pluck('user_id')->all();
+
+        return array_values(array_unique(array_map('intval', [...$admins, ...$members])));
     }
 }

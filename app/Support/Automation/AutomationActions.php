@@ -161,7 +161,10 @@ final class AutomationActions
             return self::result(self::OK, "Already in {$column->name}.");
         }
         // the board's workflow rules (v1.52.0) apply to the rule's actor like to a person
-        if ($violation = WorkflowGuard::instance()->violation($subject, $column, $actor)) {
+        // ensure(): the save below isn't checked a second time by the model backstop
+        try {
+            WorkflowGuard::instance()->ensure($subject, $column, $actor);
+        } catch (WorkflowRuleViolation $violation) {
             return self::result(self::ERROR, self::blockedByRules($violation));
         }
 

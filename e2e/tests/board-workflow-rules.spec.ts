@@ -45,6 +45,13 @@ test('a rule on Done: only from Testing, only the owner — enforced on drag and
     await expect(page.getByRole('list', { name: 'Rules on this board' }))
         .toContainText('Cards can enter Done only from Testing. Only Erin Owner can move cards here.');
 
+    // Max (project editor) sees the rule but can't change it
+    await memberPage.goto(`${boardUrl}/edit?tab=workflow`);
+    await expect(memberPage.getByRole('list', { name: 'Rules on this board' })).toContainText('Only Erin Owner can move cards here.');
+    await expect(memberPage.getByText('Only project admins can change workflow rules.')).toBeVisible();
+    await expect(memberPage.getByRole('button', { name: /^Save rule for/ })).toHaveCount(0);
+    await expect(memberPage.getByRole('list', { name: 'Rule changes' })).toContainText('added a rule to Done');
+
     // Max can't drag his card to Done: the board says why and the card stays
     await memberPage.goto(boardUrl);
     await expect(column(memberPage, 'Done').getByRole('img', { name: /^Workflow rule:/ })).toBeVisible();

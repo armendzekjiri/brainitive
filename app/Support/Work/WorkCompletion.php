@@ -68,9 +68,11 @@ final class WorkCompletion
         // moves. Subtasks completed along count as done for "all subtasks done".
         $guard = WorkflowGuard::instance();
         $completing = $children->pluck('id')->map(fn ($id) => (int) $id)->all();
-        $guard->ensure($item, $column, $actor, $completing);
+        // open subtasks of the whole action in one query per level (only when a rule asks for them)
+        $open = $guard->needsSubtasks((int) $column->board_id) ? $guard->openSubtasks([(int) $item->id, ...$completing]) : [];
+        $guard->ensure($item, $column, $actor, $completing, '', $open[$item->id] ?? []);
         foreach ($children as $child) {
-            $guard->ensure($child, $column, $actor, $completing, "Subtask {$child->key}: ");
+            $guard->ensure($child, $column, $actor, $completing, "Subtask {$child->key}: ", $open[$child->id] ?? []);
         }
 
         DB::transaction(function () use ($item, $column, $position, $children) {

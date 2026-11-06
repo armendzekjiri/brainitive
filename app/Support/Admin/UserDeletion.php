@@ -7,6 +7,7 @@ use App\Models\DataExport;
 use App\Models\InstanceAdmin;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Boards\WorkflowRules;
 use App\Support\Entitlements\WorkspaceMembershipChanged;
 use App\Support\Webhooks\WebhookDispatcher;
 use Illuminate\Contracts\Encryption\DecryptException;
@@ -102,6 +103,8 @@ class UserDeletion
             // "Download my data" ZIPs: the rows cascade, the files must go too
             DataExport::where('user_id', $user->id)->get()->each->expire();
             $user->delete();
+            // rules whose only part was this person stay restricted (only project admins); others emptied → gone
+            WorkflowRules::pruneEmpty();
         });
 
         Workspace::whereIn('id', $leaves)->get()->each(fn (Workspace $workspace) => WorkspaceMembershipChanged::dispatch($workspace));

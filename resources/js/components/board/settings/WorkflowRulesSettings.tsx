@@ -5,13 +5,16 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { STATUS_CATEGORY_CLASSES, statusCategory } from '@/components/board/ItemPrimitives';
 import { cn } from '@/lib/utils';
 import { describeRule, EMPTY_RULE, isEmptyRule, ruleKey } from '@/lib/workflowRules';
-import type { Board, BoardColumn, PageProps, Project, Workspace, WorkflowRuleMember, WorkflowRuleRole, WorkflowRuleSettings } from '@/types';
+import type { Board, BoardColumn, PageProps, Project, Workspace, WorkflowRuleChange, WorkflowRuleMember, WorkflowRuleRole, WorkflowRuleSettings } from '@/types';
 import { router } from '@inertiajs/react';
-import { Check, ChevronDown, GitBranch, Lock, Plus, ShieldCheck, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, GitBranch, History, Lock, Plus, ShieldCheck, Undo2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 interface Props {
+    /** Project / workspace admins change rules; editors see them read-only. */
+    canManage: boolean;
+    history: WorkflowRuleChange[];
     workspace: Workspace;
     project: Project;
     board: Board & { columns: BoardColumn[] };
@@ -151,7 +154,9 @@ function RuleEditor({ workspace, project, board, column, saved, members, roles, 
             .map((m) => ({ value: `user:${m.id}`, label: m.name, hint: m.role, group: 'People' })),
     ];
     const whoSelected = [...draft.allowed_roles.map((r) => `role:${r}`), ...draft.allowed_user_ids.map((id) => `user:${id}`)];
-    const formerListed = members.filter((m) => !m.can_move && draft.allowed_user_ids.includes(m.id));
+    // the people this rule listed are gone: it stays restricted to project admins until someone picks people / roles
+    const locked = !!draft.restrict_who && whoSelected.length === 0;
+    const formerListed = members.filter((m) => (saved.former_user_ids ?? []).includes(m.id));
 
     const send = (rule: WorkflowRuleSettings) => {
         setSaving(true);
@@ -204,14 +209,21 @@ function RuleEditor({ workspace, project, board, column, saved, members, roles, 
                         Moved here by{' '}
                         <SlotPicker
                             label={`Who may move cards to ${column.name}`}
-                            placeholder="anyone who can edit cards"
+                            placeholder={locked ? 'nobody left — only project admins' : 'anyone who can edit cards'}
                             selected={whoSelected}
                             options={whoOptions}
                             onChange={(values) => set({
                                 allowed_roles: values.filter((v) => v.startsWith('role:')).map((v) => v.slice(5)),
                                 allowed_user_ids: values.filter((v) => v.startsWith('user:')).map((v) => Number(v.slice(5))),
+                                // clearing the list on purpose lets anyone who can edit cards move here again
+                                restrict_who: values.length > 0,
                             })}
                         />
+                        {locked && (
+                            <button type="button" onClick={() => set({ restrict_who: false })} className="ml-2 text-xs text-primary hover:underline">
+                                Let anyone who can edit cards move here
+                            </button>
+                        )}
                     </p>
                     <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                         <span>Only when the card has</span>
@@ -223,7 +235,7 @@ function RuleEditor({ workspace, project, board, column, saved, members, roles, 
 
                 {formerListed.length > 0 && (
                     <p className="text-xs text-amber-700 dark:text-amber-400">
-                        {formerListed.map((m) => m.name).join(', ')} can no longer edit cards in this project — they can't move cards here until they can again.
+                        {formerListed.map((m) => m.name).join(', ')} {formerListed.length === 1 ? 'is' : 'are'} no longer in the project and will be removed from this rule when you save it.
                     </p>
                 )}
 
@@ -268,7 +280,7 @@ function RuleEditor({ workspace, project, board, column, saved, members, roles, 
  * Board settings → Workflow rules (v1.52.0): per column, who may move cards in, from which columns and what a card
  * needs first — written as a sentence. The server enforces them everywhere (WorkflowGuard); nobody bypasses them.
  */
-export default function WorkflowRulesSettings({ workspace, project, board, rules, members, roles }: Props) {
+export default function WorkflowRulesSettings({ workspace, project, board, rules, members, roles, canManage, history }: Props) {
     const columns = board.columns;
     const names = new Map(members.map((m) => [m.id, m.name]));
     const memberName = (id: number) => names.get(id) ?? 'a former member';
@@ -307,7 +319,14 @@ export default function WorkflowRulesSettings({ workspace, project, board, rules
                 </CardContent>
             </Card>
 
-            {columns.map((column) => {
+            {!canManage && (
+                <p role="note" className="flex items-start gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                    <Lock className="mt-0.5 size-4 shrink-0" />
+                    Only project admins can change workflow rules.
+                </p>
+            )}
+
+            {canManage && columns.map((column) => {
                 const saved = rules[column.id] ?? EMPTY_RULE;
                 return (
                     <RuleEditor
@@ -323,6 +342,30 @@ export default function WorkflowRulesSettings({ workspace, project, board, rules
                     />
                 );
             })}
+            {history.length > 0 && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base"><History className="size-4" /> Rule changes</CardTitle>
+                        <CardDescription>Who changed the rules on this board, newest first.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ol className="space-y-3" aria-label="Rule changes">
+                            {history.map((change) => (
+                                <li key={change.id} className="text-sm">
+                                    <div>
+                                        <span className="font-medium">{change.user ?? 'Someone'}</span>{' '}
+                                        {change.action === 'workflow_rule_created' ? 'added a rule to' : change.action === 'workflow_rule_deleted' ? 'removed the rule of' : 'changed the rule of'}{' '}
+                                        <span className="font-medium">{change.column}</span>
+                                        <span className="text-muted-foreground"> · {new Date(change.at).toLocaleString()}</span>
+                                    </div>
+                                    {change.before && <div className="text-xs text-muted-foreground line-through">{change.before}</div>}
+                                    {change.after && <div className="text-xs text-muted-foreground">{change.after}</div>}
+                                </li>
+                            ))}
+                        </ol>
+                    </CardContent>
+                </Card>
+            )}
         </div>
     );
 }

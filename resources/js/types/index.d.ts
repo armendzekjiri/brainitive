@@ -252,6 +252,12 @@ export interface WorkflowRuleSettings {
     allowed_user_ids: number[];
     allowed_roles: string[];
     allowed_from_column_ids: number[];
+    /** The who-part restricts even with nobody listed (the listed people left): only project admins. */
+    restrict_who?: boolean;
+    /** Restricted with nobody left (server-computed). */
+    locked?: boolean;
+    /** Listed people who can no longer open the project (dropped on the next save). */
+    former_user_ids?: number[];
     require_assignee: boolean;
     require_subtasks_done: boolean;
     require_due_date: boolean;
@@ -266,6 +272,17 @@ export interface WorkflowRuleMember {
     can_move: boolean;
     /** Listed in a rule but no longer in the project. */
     former: boolean;
+}
+
+/** A change to a board's workflow rules (board history, WorkflowRules::history). */
+export interface WorkflowRuleChange {
+    id: number;
+    action: 'workflow_rule_created' | 'workflow_rule_updated' | 'workflow_rule_deleted';
+    column: string;
+    before: string;
+    after: string;
+    user: string | null;
+    at: string;
 }
 
 export interface WorkflowRuleRole {

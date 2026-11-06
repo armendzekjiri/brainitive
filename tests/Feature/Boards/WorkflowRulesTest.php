@@ -21,6 +21,7 @@ use App\Support\RecurringIssues\RecurringIssueRunner;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Testing\Fluent\AssertableJson;
 use Inertia\Testing\AssertableInertia;
@@ -191,7 +192,7 @@ class WorkflowRulesTest extends TestCase
         $this->rule('done', ['allowed_user_ids' => [$this->max->id]]);
         $item = $this->item(['column_id' => $this->column('to-do')]);
 
-        // no signed-in person (webhooks, console): not checked
+        // no signed-in person (webhooks, console): the who-part isn't checked
         $item->update(['column_id' => $this->column('in-progress')]);
 
         Auth::setUser($this->editor);
@@ -207,6 +208,111 @@ class WorkflowRulesTest extends TestCase
         // explicitly bypassed system writes (booking cards for the host)
         WorkflowGuard::bypass(fn () => $item->update(['column_id' => $this->column('done')]));
         $this->assertSame('done', $this->columnOf($item));
+    }
+
+    public function test_without_a_signed_in_user_allowed_from_and_conditions_still_apply(): void
+    {
+        $this->rule('done', ['allowed_user_ids' => [$this->max->id], 'allowed_from_column_ids' => [$this->column('in-progress')], 'require_assignee' => true]);
+        $item = $this->item(['column_id' => $this->column('to-do')]);
+        $this->assertNull(Auth::user());
+
+        try {
+            $item->update(['column_id' => $this->column('done')]);
+            $this->fail('allowed-from was skipped without an actor');
+        } catch (WorkflowRuleViolation $e) {
+            $this->assertSame('from', $e->reason);
+        }
+        $item->update(['column_id' => $this->column('in-progress')]);
+        try {
+            $item->update(['column_id' => $this->column('done')]);
+            $this->fail('the condition was skipped without an actor');
+        } catch (WorkflowRuleViolation $e) {
+            $this->assertSame('assignee', $e->reason);
+        }
+
+        // only the who-part is skipped: nobody acts
+        $item->update(['assigned_to' => $this->editor->id]);
+        $item->update(['column_id' => $this->column('done')]);
+        $this->assertSame('done', $this->columnOf($item));
+    }
+
+    public function test_subtask_checks_cost_a_fixed_number_of_queries_in_bulk(): void
+    {
+        $this->rule('done', ['require_subtasks_done' => true]);
+        $url = route('boards.items.bulk.update', [$this->workspace->slug, $this->project->slug, $this->board->slug]);
+        $make = function (int $count) {
+            $ids = [];
+            for ($i = 0; $i < $count; $i++) {
+                $parent = $this->item(['column_id' => $this->column('in-progress')]);
+                $child = $this->item(['column_id' => $this->column('done'), 'parent_id' => $parent->id]);
+                $this->item(['column_id' => $this->column('done'), 'parent_id' => $child->id]);
+                $ids[] = $parent->id;
+            }
+
+            return $ids;
+        };
+        $queriesFor = function (array $ids) use ($url) {
+            $this->actingAs($this->editor);
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->from($this->boardUrl())->patch($url, ['item_ids' => $ids, 'changes' => ['column_id' => $this->column('done')]])->assertSessionHasNoErrors();
+            DB::disableQueryLog();
+
+            return collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], '"parent_id" in'))->count();
+        };
+
+        $few = $queriesFor($make(2));
+        $many = $queriesFor($make(8));
+        $this->assertSame($few, $many, 'subtask lookups grew with the number of issues');
+        $this->assertLessThanOrEqual(Item::MAX_DEPTH + 1, $many);
+    }
+
+    public function test_moving_a_subtree_to_another_boards_done_column_counts_the_subtasks_as_done(): void
+    {
+        $other = Board::factory()->create(['project_id' => $this->project->id]);
+        $otherDone = BoardColumn::where('board_id', $other->id)->where('slug', 'done')->firstOrFail();
+        WorkflowRules::save($otherDone, [
+            'allowed_user_ids' => [], 'allowed_roles' => [], 'allowed_from_column_ids' => [],
+            'require_assignee' => false, 'require_subtasks_done' => true, 'require_due_date' => false,
+        ]);
+        $parent = $this->item(['column_id' => $this->column('in-progress')]);
+        $child = $this->item(['column_id' => $this->column('to-do'), 'parent_id' => $parent->id]);
+        $this->item(['column_id' => $this->column('to-do'), 'parent_id' => $child->id]);
+
+        // the whole subtree lands in Done with it
+        $this->actingAs($this->editor)->from($this->boardUrl())
+            ->patch($this->itemRoute('boards.items.move-to-board', $parent), ['target_board_id' => $other->id, 'target_column_id' => $otherDone->id])
+            ->assertSessionHasNoErrors();
+        $this->assertSame($otherDone->id, $parent->fresh()->column_id);
+        $this->assertSame($otherDone->id, $child->fresh()->column_id);
+    }
+
+    public function test_recurring_templates_run_as_whoever_saved_them_and_are_checked_on_save(): void
+    {
+        $this->rule('in-progress', ['allowed_user_ids' => [$this->max->id]]);
+        $url = fn (string $name, ?RecurringIssue $t = null) => route($name, array_filter([$this->workspace->slug, $this->project->slug, $this->board->slug, $t?->id]));
+        $payload = ['title' => 'Weekly report', 'frequency' => 'weekly', 'interval' => 1, 'weekdays' => [1], 'start_date' => '2026-10-26'];
+
+        // refused for the editor at save time, with the reason
+        $this->actingAs($this->editor)->postJson($url('recurring-issues.store'), $payload + ['column_id' => $this->column('in-progress')])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.column_id.0', "Issues this template creates would be refused: Only {$this->max->name} can move cards to In Progress.");
+
+        // Max may: his template
+        $id = $this->actingAs($this->max)->postJson($url('recurring-issues.store'), $payload + ['column_id' => $this->column('in-progress')])
+            ->assertCreated()->json('template.id');
+        $template = RecurringIssue::findOrFail($id);
+        $this->assertSame($this->max->id, $template->created_by);
+
+        // the editor can't keep it running into In Progress under Max's rights …
+        $this->actingAs($this->editor)->putJson($url('recurring-issues.update', $template), $payload + ['column_id' => $this->column('in-progress'), 'title' => 'Mine now'])
+            ->assertUnprocessable();
+        $this->assertSame($this->max->id, $template->fresh()->created_by);
+
+        // … any accepted change makes the editor its creator
+        $this->actingAs($this->editor)->putJson($url('recurring-issues.update', $template), $payload + ['column_id' => $this->column('to-do')])
+            ->assertOk()->assertJsonPath('template.creator.id', $this->editor->id);
+        $this->assertSame($this->editor->id, $template->fresh()->created_by);
     }
 
     public function test_bulk_edit_checks_every_issue_and_changes_nothing_when_one_is_refused(): void

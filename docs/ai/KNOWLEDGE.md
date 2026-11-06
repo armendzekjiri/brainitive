@@ -495,13 +495,32 @@ Rules per target column (who / allowed from / conditions), enforced by `Support\
   `Item::saving`** for every create and every `column_id` change, as `Auth::user()`. A new write path is covered without
   touching it — but a write that runs while *someone unrelated* is signed in (a guest booking a slot while logged in) must run
   in `WorkflowGuard::bypass()`. Query-builder column writes skip the backstop: check them explicitly (`moveItemToBoard`'s subtree).
-- **Not checked:** no signed-in user (GitHub merge transitions, webhooks, console without an actor), `ImportScope::active()`
+- **Who edits rules: project admins + workspace admins (`ProjectPolicy::update`), not board editors** — the editors a rule
+  restricts must not be able to lift it (review finding). Editors see the rules read-only. Deleting a column that has a rule
+  or is in another rule's "allowed from" is a rule change too: `WorkflowRules::columnDeletionBlocker()` (web + MCP
+  `delete_board_column`). Every create / update / delete is an `ActivityLog` entry on the **Board** (`workflow_rule_*`,
+  sentence before / after, column in metadata), listed under "Rule changes" on the settings tab.
+- **Without a signed-in user only the who-part is skipped** (GitHub merge transitions, webhooks, console): "allowed from"
+  and conditions still apply. `MergeTransitions::move` checks `violation($item, $column, null)` and records result `blocked`
+  + `message` on the PR link (`meta.merge_transition`), shown in the issue's Development panel.
+- **An emptied who-rule is locked, never "anyone".** `restrict_who` is stored when people / roles were chosen; when the
+  listed people are deleted or leave the project, the rule reads "Only project admins …" (`WorkflowGuard::LOCKED_ROLES`) and
+  the editor shows "nobody left — only project admins" until an admin picks people or clears it on purpose. People who
+  left are dropped from summaries / messages (`WorkflowGuard::who()` intersects with current members) and offered as
+  `former_user_ids` in the editor. Rules that restrict nothing after a column delete are pruned (`pruneEmpty()`).
+- **Recurring templates run as whoever saved them last.** `RecurringIssueController::update` sets `created_by` to the editor
+  (like resume), and store / update check the rule for that person on a probe issue (422 on `column_id`), so nobody routes
+  issues through someone else's rights.
+- **Subtask checks are batched:** callers that check many issues (bulk, cascade, move to board) precompute
+  `WorkflowGuard::openSubtasks($ids)` (one query per level) when `needsSubtasks()`; moving a subtree into a done column counts
+  the subtree as completing.
+- **Not checked:** `ImportScope::active()`
   (Jira / Trello / Notion / archive imports reproduce existing data), `bypass()` (booking cards for the host). Template
   instantiation creates a new project, which has no rules yet. Rules don't travel with templates / exports (follow-up).
 - **Creating = entering from nowhere.** Who-rule and conditions apply; a column with an allowed-from list can't be created
   into (duplicate and "move to another board" count as creating). Strict on purpose: otherwise "create directly in Done" is
   the loophole. A reorder inside the column isn't entering it.
-- **No bypass for anyone** (workspace owner / admins included) — the requester wanted it strict; they can list themselves.
+- **No bypass for anyone** (workspace owner / admins included) — the requester wanted it strict; admins can list themselves.
 - **One refused issue = nothing changes.** Cascade and bulk check every issue first and run in a transaction; issues completed
   by the same action count as done for "all subtasks done" (`$completingIds`). An `ensure()`d model instance is remembered
   (`WeakMap`) so the backstop doesn't check it twice — and doesn't re-evaluate "subtasks done" before the subtasks moved.
