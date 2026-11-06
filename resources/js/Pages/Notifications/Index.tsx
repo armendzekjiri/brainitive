@@ -203,7 +203,7 @@ export default function NotificationsIndex({ feed: initialFeed, filter: initialF
                 <Tabs value={filter} onValueChange={(v) => changeView({ filter: v as NotificationFilter })}>
                     <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                         <div className="flex items-end justify-between gap-2 border-b px-4">
-                            <TabsList className="h-auto min-w-0 justify-start gap-3 overflow-x-auto rounded-none bg-transparent p-0 sm:gap-4">
+                            <TabsList className="h-auto min-w-0 justify-start gap-3 overflow-x-auto overflow-y-hidden rounded-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-transparent p-0 sm:gap-4">
                                 {FILTER_TABS.map((tab) => (
                                     <TabsTrigger
                                         key={tab.value}
