@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Resizable columns in the board Timeline and List views](./feat-resizable-columns.md) | done |
 | [Mobile push: Expo push receipts + "Send a test notification"](./feat-mobile-push-receipts.md) | done |
 | [Revoke the Apple authorization when an account is deleted](./feat-apple-revoke-on-delete.md) | done |
 | [Release v1.51.0: live whiteboards + poll votes for the mobile app (server side)](./release-v1.51.0.md) | in progress |
