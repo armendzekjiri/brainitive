@@ -10,6 +10,8 @@ use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Project;
 use App\Models\Workspace;
+use App\Support\Boards\WorkflowGuard;
+use App\Support\Boards\WorkflowRules;
 use App\Support\Entitlements\LimitReached;
 use App\Support\Mcp\RequestIdConflict;
 use App\Support\Mcp\ToolError;
@@ -322,6 +324,7 @@ trait InteractsWithBrainitive
             'wip_limit' => $column->wip_limit,
             'is_done' => (bool) $column->is_done_column,
             'position' => (int) $column->position,
+            'workflow_rule' => WorkflowRules::sentence(WorkflowGuard::instance()->ruleFor($column)),
         ];
     }
 
@@ -335,6 +338,7 @@ trait InteractsWithBrainitive
             'wip_limit' => $schema->integer()->nullable(),
             'is_done' => $schema->boolean()->description('Cards here count as done.'),
             'position' => $schema->integer(),
+            'workflow_rule' => $schema->string()->description('The board\'s workflow rule for moving cards into this column (who / from which columns / conditions); empty = none. Moves and creates that break it are refused with the reason.'),
         ]);
     }
 }

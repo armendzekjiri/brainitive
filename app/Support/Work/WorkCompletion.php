@@ -7,6 +7,8 @@ use App\Models\Item;
 use App\Models\TaskListItem;
 use App\Models\User;
 use App\Notifications\ItemStatusChangedNotification;
+use App\Support\Boards\WorkflowGuard;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -56,14 +58,25 @@ final class WorkCompletion
     {
         $oldColumn = $item->column;
 
-        $item->moveToColumn($column, $position);
-
-        if ($withSubtasks && $column->is_done_column) {
-            Item::whereIn('id', $item->descendantIds())
+        $children = $withSubtasks && $column->is_done_column
+            ? Item::whereIn('id', $item->descendantIds())
                 ->whereHas('column', fn ($q) => $q->where('is_done_column', false))
                 ->get()
-                ->each(fn (Item $child) => $child->moveToColumn($column, 0));
+            : collect();
+
+        // The board's workflow rules (v1.52.0) decide for the whole action up front: one blocked subtask = nothing
+        // moves. Subtasks completed along count as done for "all subtasks done".
+        $guard = WorkflowGuard::instance();
+        $completing = $children->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $guard->ensure($item, $column, $actor, $completing);
+        foreach ($children as $child) {
+            $guard->ensure($child, $column, $actor, $completing, "Subtask {$child->key}: ");
         }
+
+        DB::transaction(function () use ($item, $column, $position, $children) {
+            $item->moveToColumn($column, $position);
+            $children->each(fn (Item $child) => $child->moveToColumn($column, 0));
+        });
 
         if (! $oldColumn || $oldColumn->id === $column->id) {
             return;

@@ -13,7 +13,7 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('Move a board item to a different column (e.g. to mark it In Progress or Done). Provide the item id and the target column_id (both from get_board). Moving into a "done" column marks it complete (with_subtasks: its open subtasks too); watchers are notified of the new status, as on the board.')]
+#[Description('Move a board item to a different column (e.g. to mark it In Progress or Done). Provide the item id and the target column_id (both from get_board). Moving into a "done" column marks it complete (with_subtasks: its open subtasks too); watchers are notified of the new status, as on the board. The board\'s workflow rules apply (see workflow_rule in get_board): a move they refuse returns the reason and changes nothing.')]
 class MoveBoardItemTool extends Tool
 {
     use InteractsWithBrainitive;
@@ -59,15 +59,18 @@ class MoveBoardItemTool extends Tool
             return Response::error($e->getMessage());
         }
 
-        // the board's drag & drop: move (+ the open subtasks into a done column) and notify the watchers
-        WorkCompletion::moveIssue($item, $column, (int) ($validated['position'] ?? 0), $user, (bool) ($validated['with_subtasks'] ?? false));
+        // the board's drag & drop: move (+ the open subtasks into a done column) and notify the watchers;
+        // a board workflow rule that refuses it answers with its reason (guard → ValidationException)
+        return $this->guard(function () use ($item, $column, $validated, $user) {
+            WorkCompletion::moveIssue($item, $column, (int) ($validated['position'] ?? 0), $user, (bool) ($validated['with_subtasks'] ?? false));
 
-        return Response::structured([
-            'moved' => true,
-            'item_key' => $item->key,
-            'column' => $column->name,
-            'location' => ResourceLocator::locate($item->fresh()),
-        ]);
+            return Response::structured([
+                'moved' => true,
+                'item_key' => $item->key,
+                'column' => $column->name,
+                'location' => ResourceLocator::locate($item->fresh()),
+            ]);
+        });
     }
 
     /**

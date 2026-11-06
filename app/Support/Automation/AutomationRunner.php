@@ -7,6 +7,7 @@ use App\Models\Item;
 use App\Models\Project;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Support\Boards\WorkflowRuleViolation;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -141,6 +142,10 @@ final class AutomationRunner
                         $results[$i] = ['action' => $action['type'], 'label' => $label, 'status' => $plan['status'], 'message' => $message];
                         $run->forceFill(['results' => $results])->save();
                     });
+                } catch (WorkflowRuleViolation $e) {
+                    // the board's workflow rules apply to automations as to their actor (v1.52.0)
+                    $results[$i] = ['action' => $action['type'], 'label' => $label, 'status' => AutomationActions::ERROR, 'message' => AutomationActions::blockedByRules($e)];
+                    $run->forceFill(['results' => $results])->save();
                 } catch (Throwable $e) {
                     report($e);
                     $results[$i] = ['action' => $action['type'], 'label' => $label, 'status' => AutomationActions::ERROR, 'message' => 'Unexpected error: nothing of this action was saved.'];

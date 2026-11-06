@@ -17,6 +17,8 @@ use App\Notifications\ItemStatusChangedNotification;
 use App\Notifications\TicketAssignedNotification;
 use App\Support\Boards\ItemComments;
 use App\Support\Boards\ProjectIssues;
+use App\Support\Boards\WorkflowGuard;
+use App\Support\Boards\WorkflowRuleViolation;
 use App\Support\Live\BoardLive;
 use App\Support\References\ContentReferences;
 use Closure;
@@ -82,6 +84,12 @@ final class AutomationActions
     private static function result(string $status, string $message, ?Closure $apply = null): array
     {
         return ['status' => $status, 'message' => $message, 'apply' => $apply];
+    }
+
+    /** The run log's text for an action a board's workflow rule refused. */
+    public static function blockedByRules(WorkflowRuleViolation $violation): string
+    {
+        return "Blocked by the board's workflow rules: {$violation->text()}";
     }
 
     private static function denied(User $actor, Item|Ticket $subject): array
@@ -151,6 +159,10 @@ final class AutomationActions
         }
         if ((int) $subject->column_id === $column->id) {
             return self::result(self::OK, "Already in {$column->name}.");
+        }
+        // the board's workflow rules (v1.52.0) apply to the rule's actor like to a person
+        if ($violation = WorkflowGuard::instance()->violation($subject, $column, $actor)) {
+            return self::result(self::ERROR, self::blockedByRules($violation));
         }
 
         return self::result(self::OK, "Moved to {$column->name}.", function () use ($subject, $column, $actor, $project) {
