@@ -112,6 +112,7 @@ const CHANGELOG = [
             'Poll votes: a vote is always counted for the right doc or issue, however the address is written, and a malformed address answers “not found” instead of an error.',
             'Markdown tables written by AI assistants (MCP) or the mobile app now become real tables in docs and issue descriptions, and read back as Markdown tables.',
             'Self-hosted: docs and issues that already show tables as “| a | b |” text can be repaired once with php artisan pages:repair-markdown-tables --items (a dry run; add --force to write).',
+            'AI assistants (MCP) can now list, create and update releases and link issues to them.',
             'Privacy policy 2.5: the mobile app only uses the photo picker, never the camera.',
             'Docs site: updated its build tool (security fix for the local preview server).',
         ]
