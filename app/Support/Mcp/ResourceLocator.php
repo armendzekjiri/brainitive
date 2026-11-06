@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\Page;
 use App\Models\Plan;
 use App\Models\Project;
+use App\Models\Release;
 use App\Models\Snippet;
 use App\Models\SnippetCollection;
 use App\Models\TaskList;
@@ -36,6 +37,7 @@ class ResourceLocator
             $model instanceof Board => self::board($model),
             $model instanceof Item => self::boardItem($model),
             $model instanceof Plan => self::plan($model),
+            $model instanceof Release => self::release($model),
             $model instanceof Ticket => self::ticket($model),
             $model instanceof TaskList => self::taskList($model),
             $model instanceof TaskListItem => self::taskListItem($model),
@@ -99,6 +101,14 @@ class ResourceLocator
             $project,
             $workspace ? route('plans.show', [$workspace->slug, $project->slug, $plan->slug]) : url('/'),
         );
+    }
+
+    private static function release(Release $release): array
+    {
+        $project = $release->project;
+        $workspace = $project->workspace;
+
+        return self::build('release', $release->name, $workspace, $project, route('releases.show', [$workspace->slug, $project->slug, $release->id]), 'Releases');
     }
 
     private static function ticket(Ticket $ticket): array

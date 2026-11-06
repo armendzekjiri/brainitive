@@ -3,6 +3,7 @@ import { usePage } from '@inertiajs/react';
 import { toast } from 'sonner';
 import { Loader2, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { isDesktop } from '@/lib/desktop';
 import { PageProps, PushDevice, PushTestResult } from '@/types';
 import {
     currentEndpoint,
@@ -18,7 +19,7 @@ import {
 } from '@/lib/push';
 import PushDevices from './PushDevices';
 
-type Reason = 'ok' | 'insecure' | 'unsupported' | 'unconfigured';
+type Reason = 'ok' | 'desktop' | 'insecure' | 'unsupported' | 'unconfigured';
 
 /**
  * Browser push for this device + every registered device (BRAI-154): turn push on / off here,
@@ -49,7 +50,9 @@ export default function NotificationSettingsForm({ className = '' }: { className
 
     useEffect(() => {
         // Service workers + Push require a secure context (HTTPS, or localhost).
-        if (typeof window !== 'undefined' && window.isSecureContext === false) setReason('insecure');
+        // Brainitive Desktop shows its own system notifications (tray poller), never browser push
+        if (isDesktop()) setReason('desktop');
+        else if (typeof window !== 'undefined' && window.isSecureContext === false) setReason('insecure');
         else if (!isPushSupported()) setReason('unsupported');
         else if (!vapidPublicKey) setReason('unconfigured');
         else setReason('ok');
@@ -130,13 +133,15 @@ export default function NotificationSettingsForm({ className = '' }: { className
     }
 
     const unavailable =
-        reason === 'insecure'
-            ? 'Push notifications need a secure connection (HTTPS). Open this site over https:// and try again.'
-            : reason === 'unconfigured'
-              ? 'Push notifications aren’t set up on the server yet. Ask an administrator to configure the VAPID keys.'
-              : reason === 'unsupported'
-                ? 'This browser doesn’t support push notifications. On iPhone / iPad, add Brainitive to the Home Screen (iOS 16.4+) and open it from there.'
-                : null;
+        reason === 'desktop'
+            ? 'Brainitive Desktop shows notifications itself, nothing to register here: new notifications appear as system notifications within about a minute while the app runs (also from the tray, not while its window is in front). If none arrive, allow notifications for Brainitive in your system settings.'
+            : reason === 'insecure'
+              ? 'Push notifications need a secure connection (HTTPS). Open this site over https:// and try again.'
+              : reason === 'unconfigured'
+                ? 'Push notifications aren’t set up on the server yet. Ask an administrator to configure the VAPID keys.'
+                : reason === 'unsupported'
+                  ? 'This browser doesn’t support push notifications. On iPhone / iPad, add Brainitive to the Home Screen (iOS 16.4+) and open it from there.'
+                  : null;
 
     return (
         <div className={className} data-testid="push-settings">

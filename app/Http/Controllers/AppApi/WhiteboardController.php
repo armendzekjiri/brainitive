@@ -12,9 +12,9 @@ use Illuminate\Http\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * App API v1 — whiteboards, read-only (BRAI-414). A whiteboard is a page with an Excalidraw scene (PagePolicy:
- * an unpublished one is its author's and the admins'). Drawing, templates and turning stickies into issues run in
- * the web's editor (the desktop app's webview); the apps show the scene.
+ * App API v1 — whiteboards (BRAI-414). A whiteboard is a page with an Excalidraw scene (PagePolicy: an unpublished
+ * one is its author's and the admins'). The apps show the scene and draw live through WhiteboardCollabController;
+ * templates and turning stickies into issues run in the web's editor (the desktop app's webview).
  */
 #[Group('Whiteboards', weight: 240)]
 class WhiteboardController extends Controller
@@ -22,12 +22,13 @@ class WhiteboardController extends Controller
     use ResolvesVisible;
 
     /**
-     * A whiteboard's scene (Excalidraw elements, canvas settings, images) to show it read-only.
+     * A whiteboard's scene (Excalidraw elements, canvas settings, images) to show it.
      *
      * Render `scene.elements` with Excalidraw (or as a picture: `preview_image_url`, the last "Save & exit" —
      * it can be older than the scene). Answers an `ETag`; send it back as `If-None-Match` to get 304 while nothing
      * changed (live drawing saves every few seconds). The tree and other pages: `GET /projects/{id}/pages`
-     * (`kind: whiteboard`). Its history: `GET /pages/{uuid}/versions`.
+     * (`kind: whiteboard`). Its history: `GET /pages/{uuid}/versions`. `live: edit|view` → draw or watch live
+     * (`POST /whiteboards/{uuid}/collab-token`).
      *
      * @throws NotFoundHttpException not a whiteboard, or the user can't see it (404)
      */

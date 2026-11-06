@@ -31,6 +31,7 @@ use App\Http\Controllers\AppApi\NotificationController;
 use App\Http\Controllers\AppApi\PageCollabController;
 use App\Http\Controllers\AppApi\PageController;
 use App\Http\Controllers\AppApi\PlanController;
+use App\Http\Controllers\AppApi\PollController;
 use App\Http\Controllers\AppApi\PortalController;
 use App\Http\Controllers\AppApi\ProjectController;
 use App\Http\Controllers\AppApi\RealtimeController;
@@ -43,6 +44,7 @@ use App\Http\Controllers\AppApi\TaskListController;
 use App\Http\Controllers\AppApi\TimerController;
 use App\Http\Controllers\AppApi\TodayController;
 use App\Http\Controllers\AppApi\UploadController;
+use App\Http\Controllers\AppApi\WhiteboardCollabController;
 use App\Http\Controllers\AppApi\WhiteboardController;
 use App\Http\Controllers\AppApi\WorkLogController;
 use App\Http\Controllers\AppApi\WorkspaceController;
@@ -343,8 +345,17 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class, EnsureAppClientA
         Route::post('pages/{uuid}/collab/bootstrap', [PageCollabController::class, 'bootstrap'])->middleware('throttle:30,1,app.pages.collab.bootstrap')->name('pages.collab.bootstrap');
         Route::put('pages/{uuid}/collab/draft', [PageCollabController::class, 'save'])->middleware('throttle:180,1,app.pages.collab.save')->name('pages.collab.save');
 
-        // ── Whiteboards: the scene, read-only (drawing, templates, stickies → issues: web / desktop webview) ──
+        // ── Whiteboards: the scene; live drawing (templates, stickies → issues: web / desktop webview) ──
         Route::get('whiteboards/{uuid}', [WhiteboardController::class, 'show'])->whereUuid('uuid')->name('whiteboards.show');
+        // live drawing for native clients (tablets): the browser's three calls (WhiteboardCollab), same throttles as the web
+        Route::post('whiteboards/{uuid}/collab-token', [WhiteboardCollabController::class, 'token'])->middleware('throttle:60,1,app.whiteboards.collab.token')->name('whiteboards.collab.token');
+        Route::post('whiteboards/{uuid}/collab/bootstrap', [WhiteboardCollabController::class, 'bootstrap'])->middleware('throttle:30,1,app.whiteboards.collab.bootstrap')->name('whiteboards.collab.bootstrap');
+        Route::put('whiteboards/{uuid}/collab/scene', [WhiteboardCollabController::class, 'scene'])->middleware('throttle:120,1,app.whiteboards.collab.scene')->name('whiteboards.collab.scene');
+        // Poll votes inside docs / issue descriptions (the web's /polls/…)
+        Route::get('polls/{scopeType}/{scopeId}/{pollId}', [PollController::class, 'show'])
+            ->whereIn('scopeType', ['page', 'item'])->where('pollId', '[A-Za-z0-9:_-]{1,120}')->name('polls.show');
+        Route::post('polls/{scopeType}/{scopeId}/{pollId}', [PollController::class, 'vote'])
+            ->whereIn('scopeType', ['page', 'item'])->where('pollId', '[A-Za-z0-9:_-]{1,120}')->middleware('throttle:60,1,app.polls.vote')->name('polls.vote');
 
         // ── Gantt plans + releases, read-only (PlanReader: shared with the MCP; editing: web only) ──────
         Route::get('projects/{project}/plans', [PlanController::class, 'index'])->whereNumber('project')->name('plans.index');

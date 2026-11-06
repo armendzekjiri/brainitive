@@ -46,7 +46,7 @@ export function BoardHeader({
     const isScrum = board.type === 'scrum';
 
     const tabClass = (active: boolean) => cn(
-        'relative -mb-px inline-flex items-center gap-1.5 pb-2 pt-1 text-[14px] font-medium border-b-2 transition-colors whitespace-nowrap',
+        'relative inline-flex items-center gap-1.5 pb-2 pt-1 text-[14px] font-medium border-b-2 transition-colors whitespace-nowrap',
         active ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
     );
 
@@ -92,7 +92,7 @@ export function BoardHeader({
                 </div>
             </div>
 
-            <div className="flex items-center gap-4 mt-3 border-b border-border overflow-x-auto" role="tablist">
+            <div className="flex items-center gap-4 mt-3 border-b border-border overflow-x-auto overflow-y-hidden" role="tablist">
                 {isScrum && (
                     <Link href={route('boards.backlog', params)} role="tab" aria-selected={activeTab === 'backlog'} className={tabClass(activeTab === 'backlog')}>
                         <ListOrdered className="size-3.5" />Backlog

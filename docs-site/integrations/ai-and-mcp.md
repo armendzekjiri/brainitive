@@ -43,6 +43,7 @@ The AI app can only see and change what **you** can access in Brainitive. To see
 | Boards and issues | List boards, read a board or an issue, create, update, move and delete issues — with type, priority, labels, story points, parent and custom fields — create up to 100 issues in one call, read and add comments |
 | Sprints | List, read, create, update, start and complete sprints, and move issues into a sprint |
 | Plans (Gantt) | List, read and update plans |
+| Releases | List and read releases (progress, notes, issues), create and update them (also record past releases, ship, archive), and put issues into a release by key |
 | Links | Read, add and remove **Related content** between issues, docs, whiteboards, tickets and plans of a project, read **Referenced by** (incl. automatic links from smart links, plan rows and whiteboard cards), read, add and remove **Linked issues** (blocks, is blocked by, relates to, duplicates, clones). Reading an issue or a doc includes its links |
 | Task lists | List and read task lists, create and update tasks |
 | Snippets and bookmarks | List, create and update snippets and collections, list bookmarks, add bookmarks |

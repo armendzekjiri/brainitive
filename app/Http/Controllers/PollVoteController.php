@@ -4,68 +4,35 @@ namespace App\Http\Controllers;
 
 use App\Models\Item;
 use App\Models\Page;
-use App\Models\PollVote;
-use App\Support\Polls\PollDocuments;
+use App\Support\Polls\PollVotes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 
 /**
- * Votes for polls in rich text. Anyone who can view the doc / issue can vote (voting
- * doesn't edit the document); one vote per person, changeable or removable.
+ * Votes for polls in rich text (the logic: Support\Polls\PollVotes, shared with the App API).
  */
 class PollVoteController extends Controller
 {
     public function show(Request $request, string $scopeType, string $scopeId, string $pollId): JsonResponse
     {
-        $this->authorizeScope($request, $scopeType, $scopeId);
+        $scope = $this->authorizeScope($request, $scopeType, $scopeId);
 
-        return response()->json($this->results($request, $scopeType, $scopeId, $pollId));
+        return response()->json(PollVotes::results($request->user(), $scope, $scopeType, $pollId));
     }
 
     public function vote(Request $request, string $scopeType, string $scopeId, string $pollId): JsonResponse
     {
         $scope = $this->authorizeScope($request, $scopeType, $scopeId);
-        $validated = $request->validate(['option_uid' => ['nullable', 'string', 'max:40', 'regex:/^[A-Za-z0-9_-]+$/']]);
-        // only polls and options of the saved doc / issue (Codex web review E): no made-up vote rows
-        if (! empty($validated['option_uid']) && ! PollDocuments::allows($scope, $request->user(), $pollId, $validated['option_uid'])) {
-            throw ValidationException::withMessages(['option_uid' => 'This poll or option doesn’t exist (any more). Reload the page.']);
-        }
+        $validated = $request->validate(PollVotes::rules());
+        PollVotes::vote($scope, $request->user(), $scopeType, $pollId, $validated['option_uid'] ?? null);
 
-        $key = ['scope_type' => $scopeType, 'scope_id' => $scopeId, 'poll_id' => $pollId, 'user_id' => $request->user()->id];
-        if (empty($validated['option_uid'])) {
-            PollVote::where($key)->delete();
-        } else {
-            PollVote::updateOrCreate($key, ['option_uid' => $validated['option_uid']]);
-        }
-
-        return response()->json($this->results($request, $scopeType, $scopeId, $pollId));
-    }
-
-    /**
-     * @return array{counts: array<string, int>, total: int, my_vote: ?string}
-     */
-    private function results(Request $request, string $scopeType, string $scopeId, string $pollId): array
-    {
-        $votes = PollVote::where(['scope_type' => $scopeType, 'scope_id' => $scopeId, 'poll_id' => $pollId]);
-        $counts = (clone $votes)->selectRaw('option_uid, count(*) as total')->groupBy('option_uid')->pluck('total', 'option_uid')->map(fn ($n) => (int) $n);
-
-        return [
-            'counts' => (object) $counts->all(),
-            'total' => (int) $counts->sum(),
-            'my_vote' => (clone $votes)->where('user_id', $request->user()->id)->value('option_uid'),
-        ];
+        return response()->json(PollVotes::results($request->user(), $scope, $scopeType, $pollId));
     }
 
     private function authorizeScope(Request $request, string $scopeType, string $scopeId): Page|Item
     {
-        $model = match ($scopeType) {
-            'page' => Page::where('uuid', $scopeId)->first(),
-            'item' => ctype_digit($scopeId) ? Item::find((int) $scopeId) : null,
-            default => null,
-        };
-
-        abort_unless($model && $request->user()->can('view', $model), 404);
+        $model = PollVotes::scope($request->user(), $scopeType, $scopeId);
+        abort_unless($model !== null, 404);
 
         return $model;
     }

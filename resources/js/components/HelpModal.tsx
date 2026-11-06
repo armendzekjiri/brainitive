@@ -101,6 +101,26 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.51.0',
+        title: 'Live whiteboards and polls in the mobile app',
+        tag: 'Feature',
+        date: '2026-11-05',
+        items: [
+            'Brainitive Mobile (coming soon): draw on whiteboards live with your team from a tablet — the same live drawing as in the browser, signed in per device and stopped at once when the device is signed out.',
+            'Brainitive Mobile: vote in polls inside docs and issue descriptions, like on the web.',
+            'Brainitive Mobile: a notification opens on the server that sent it, also when the app is signed in to several servers.',
+            'Poll votes: a vote is always counted for the right doc or issue, however the address is written, and a malformed address answers “not found” instead of an error.',
+            'Markdown tables written by AI assistants (MCP) or the mobile app now become real tables in docs and issue descriptions, and read back as Markdown tables.',
+            'Self-hosted: docs and issues that already show tables as “| a | b |” text can be repaired once with php artisan pages:repair-markdown-tables --items (a dry run; add --force to write).',
+            'Boards: drag the edge of a column to resize it — the Items column on the Timeline (like in plans) and every column in the List, which no longer squeezes columns together and scrolls sideways instead. Arrow keys work too, double-click resets, and your widths are remembered per board.',
+            'AI assistants (MCP) can now list, create and update releases and link issues to them.',
+            'Boards: right-click an issue in the list or a card on the board for Open, Copy link / key, Status, Assignee, Priority, Type, Due date, Labels and Delete. In the list, right-clicking a selected row changes all selected issues (thanks for the request on GitHub!).',
+            'My Work: real filters — search by title or key, filter by project, source (boards / task lists), priority, labels and status (open by default), sort by due date, priority, recently updated or project; kept in the address so reload and back keep them.',
+            'Privacy policy 2.5: the mobile app only uses the photo picker, never the camera.',
+            'Docs site: updated its build tool (security fix for the local preview server).',
+        ]
+    },
+    {
         version: 'v1.50.0',
         title: 'Sign in with Apple and push notifications on your phone',
         tag: 'Feature',
@@ -119,7 +139,7 @@ const CHANGELOG = [
     {
         version: 'v1.49.0',
         title: 'Desktop app support, app sign-in and a public API',
-        tag: 'Feature',
+        tag: 'Major Feature',
         date: '2026-11-02',
         items: [
             'Brainitive Desktop (beta, coming soon): the server side is ready. The app signs you in through your browser, whether you use Brainitive Cloud or your own server, so Google, Microsoft and GitHub sign-in work as usual.',
