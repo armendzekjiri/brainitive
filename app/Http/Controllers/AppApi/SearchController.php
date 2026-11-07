@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\AppApi\SearchRequest;
 use App\Http\Resources\AppApi\SearchPlaceResource;
 use App\Http\Resources\AppApi\SearchResultResource;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Search\PlaceSearch;
 use App\Support\Search\SearchService;
 use Dedoc\Scramble\Attributes\Group;
@@ -42,7 +43,7 @@ class SearchController extends Controller
         $workspaceIds = [];
         if (! empty($validated['workspace'])) {
             $workspace = $user->workspaces()->where('workspaces.slug', $validated['workspace'])->first();
-            abort_unless($workspace !== null, 404);
+            abort_unless($workspace !== null && $user->hasWorkspaceAccess($workspace), 404);
             $workspaceIds = [$workspace->id];
         }
 
@@ -59,7 +60,8 @@ class SearchController extends Controller
         ], $user, $request->limit()));
 
         $text = trim((string) ($validated['q'] ?? ''));
-        $places = $request->page() === 1 && $request->unfiltered() && mb_strlen($text) >= 2
+        // places (names of workspaces, projects, boards …) are left out for personal API keys: they aren't scoped
+        $places = $request->page() === 1 && $request->unfiltered() && mb_strlen($text) >= 2 && ApiKeyAccess::forUser($user) === null
             ? collect(PlaceSearch::find($user, $text, 0))->flatten(1)->values()->all()
             : [];
 

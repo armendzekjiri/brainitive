@@ -20,6 +20,7 @@ use App\Models\Item;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Release;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Boards\BoardCards;
 use App\Support\Boards\BoardFilters;
 use App\Support\Boards\BoardViewConfig;
@@ -52,8 +53,12 @@ class BoardController extends Controller
         $project = $this->visibleProject($request, $project);
         $since = $request->updatedSince();
 
+        $boards = ApiKeyAccess::forUser($request->user())?->boardIds();
+
         $page = Board::query()
             ->where('project_id', $project->id)
+            // a personal API key limited to boards: those boards only
+            ->when($boards !== null, fn ($q) => $q->whereIn('id', $boards))
             ->when($since, fn ($q) => $q->where('updated_at', '>=', $since))
             ->orderBy('position')
             ->orderBy('id')

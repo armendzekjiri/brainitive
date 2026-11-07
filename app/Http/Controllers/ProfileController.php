@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Http\Resources\AppApi\DeviceResource;
+use App\Models\ApiKey;
 use App\Models\InstanceSettings;
 use App\Notifications\NotificationCatalog;
 use App\Support\Admin\UserDeletion;
+use App\Support\ApiKeys\ApiKeys;
 use App\Support\Portal\PortalAuth;
 use App\Support\Profile\Avatar;
 use App\Support\Profile\ConnectedApps;
@@ -35,6 +37,18 @@ class ProfileController extends Controller
             'notificationCategories' => NotificationCatalog::forUser($request->user()),
             // signed-in desktop / mobile installs (App API v1, BRAI-385), same fields as GET /api/v1/devices
             'appDevices' => DeviceResource::collection($request->user()->appDevices()->active()->recentFirst()->get())->resolve($request),
+            // personal API keys (Developer API, v1.52.0): listed under Connected apps; managed on /profile/api-keys
+            'apiKeys' => $request->user()->apiKeys()->active()->orderByDesc('created_at')->orderByDesc('id')
+                ->get(['id', 'name', 'prefix', 'last_used_at', 'expires_at', 'created_at'])
+                ->map(fn (ApiKey $key) => [
+                    'id' => $key->id,
+                    'name' => $key->name,
+                    'prefix' => $key->prefix,
+                    'last_used_at' => $key->last_used_at?->toIso8601String(),
+                    'expires_at' => $key->expires_at?->toIso8601String(),
+                    'created_at' => $key->created_at?->toIso8601String(),
+                ])->values(),
+            'apiKeysEnabled' => ApiKeys::enabled(),
         ]);
     }
 

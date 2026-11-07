@@ -6,6 +6,7 @@ use App\Models\Item;
 use App\Models\MyDayEntry;
 use App\Models\TaskListItem;
 use App\Models\User;
+use App\Support\ApiKeys\ApiKeyAccess;
 use Illuminate\Support\Collection;
 
 /**
@@ -115,7 +116,7 @@ class MyDayPlan
         }
         $projectIds = $user->accessibleProjectIds();
 
-        $board = Item::whereIn('id', $entries->where('work_type', 'board')->pluck('work_id'))
+        $board = ApiKeyAccess::limitIssues($user, Item::whereIn('id', $entries->where('work_type', 'board')->pluck('work_id')))
             ->whereHas('board', fn ($q) => $q->whereIn('project_id', $projectIds))
             ->with($boardWith ?: ['board:id,project_id,slug'])
             ->get()->keyBy('id');

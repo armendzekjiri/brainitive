@@ -48,6 +48,7 @@ use App\Http\Controllers\AppApi\WhiteboardCollabController;
 use App\Http\Controllers\AppApi\WhiteboardController;
 use App\Http\Controllers\AppApi\WorkLogController;
 use App\Http\Controllers\AppApi\WorkspaceController;
+use App\Http\Middleware\AuthorizeApiKey;
 use App\Http\Middleware\EnsureAppClientAbility;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use Illuminate\Support\Facades\Route;
@@ -60,7 +61,8 @@ use Illuminate\Support\Facades\Route;
 | no session, no CSRF, no CORS). Separate from the MCP / CLI / extension APIs: only `app` tokens
 | (App\Support\AppApi\AppTokens) pass `auth:app`.
 |
-| Every endpoint: Form Request in, Resource out, policies, tests incl. "Passport token → 401",
+| Every endpoint: Form Request in, Resource out, policies, tests incl. "Passport token → 401", its
+| personal-API-key area in App\Support\ApiKeys\ApiKeyRoutes (ApiKeyRoutesTest),
 | OpenAPI regenerated, a row in docs/ai/API.md, and the `## API` section on its mobile card.
 | Recipe: docs/ai/skills/add-app-api-endpoint.md
 */
@@ -80,7 +82,8 @@ Route::post('auth/device', [DeviceAuthController::class, 'start'])->middleware('
 Route::post('auth/device/token', [DeviceAuthController::class, 'token'])->middleware('throttle:app-device-poll')->name('auth.device.token');
 
 // EnsureAppClientAbility: the client's `abilities` (config/app-api.php) — the TV's narrow scope (BRAI-377)
-Route::middleware(['auth:app', EnsureUserIsNotSuspended::class, EnsureAppClientAbility::class])->group(function () {
+// AuthorizeApiKey: personal API keys (Developer API) — every route here is declared in App\Support\ApiKeys\ApiKeyRoutes
+Route::middleware(['auth:app', EnsureUserIsNotSuspended::class, EnsureAppClientAbility::class, AuthorizeApiKey::class])->group(function () {
 
     // ── Auth: sign out, webview session ──────────────────────────────────────────────────────
 

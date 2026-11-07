@@ -11,6 +11,8 @@ use App\Http\Resources\AppApi\ProjectDetailResource;
 use App\Http\Resources\AppApi\ProjectResource;
 use App\Http\Resources\AppApi\ProjectTemplateResource;
 use App\Models\Workspace;
+use App\Support\ApiKeys\ApiKeyAccess;
+use App\Support\ApiKeys\ApiKeyAreas;
 use App\Support\Entitlements\LimitReached;
 use App\Support\Projects\ProjectCreator;
 use App\Support\Templates\TemplateRuns;
@@ -39,8 +41,12 @@ class ProjectController extends Controller
         $user = $request->user();
         $since = $request->updatedSince();
 
+        $scoped = ApiKeyAccess::forUser($user)?->projectIds();
+
         $page = $workspace->projects()
             ->with('workspace:id,slug,name')
+            // a personal API key limited to projects / boards: those projects only
+            ->when($scoped !== null, fn ($q) => $q->whereIn('projects.id', $scoped))
             // workspace admins see all projects; others only the projects they are members of
             ->when($user->workspaceRole($workspace) !== 'admin', fn ($q) => $q->whereHas('users', fn ($u) => $u->where('user_id', $user->id)))
             ->when($since, fn ($q) => $q->where('projects.updated_at', '>=', $since))
@@ -60,6 +66,19 @@ class ProjectController extends Controller
     {
         $project = $this->visibleProject($request, $project);
         $project->load(['boards', 'taskLists', 'plans', 'helpdesks', 'leadForms']);
+
+        // a personal API key sees the sections of the areas it can read, and only its boards
+        if (($key = ApiKeyAccess::forUser($request->user())) !== null) {
+            $boards = $key->boardIds();
+            $project->setRelation('boards', $key->can('issues', ApiKeyAreas::READ)
+                ? $project->boards->filter(fn ($board) => $boards === null || in_array((int) $board->id, $boards, true))->values()
+                : $project->boards->take(0));
+            foreach (['taskLists' => 'work', 'plans' => 'plans', 'helpdesks' => 'helpdesk', 'leadForms' => 'helpdesk'] as $relation => $area) {
+                if (! $key->can($area, ApiKeyAreas::READ)) {
+                    $project->setRelation($relation, $project->getRelation($relation)->take(0));
+                }
+            }
+        }
 
         return new ProjectDetailResource($project);
     }

@@ -3,6 +3,8 @@
 namespace App\Support\Calendar;
 
 use App\Models\User;
+use App\Support\ApiKeys\ApiKeyAccess;
+use App\Support\ApiKeys\ApiKeyAreas;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 
@@ -49,7 +51,21 @@ final class AgendaEvent
 
         $events = collect($result['events'])
             ->map(fn (array $event) => self::from($event, $zone))
-            ->filter(fn (?array $event) => $event !== null && self::within($event, $from, $to, $zone))
+            ->filter(fn (?array $event) => $event !== null && self::within($event, $from, $to, $zone));
+
+        // a personal API key: issues only with Issues & boards read (and its boards), to-dos only with My Work read
+        if (($key = ApiKeyAccess::forUser($user)) !== null) {
+            $issueIds = $events->where('type', 'issue')->map(fn (array $e) => (int) substr((string) $e['work_id'], 6))->values()->all();
+            $visible = array_flip(ApiKeyAccess::visibleIssueIds($user, $issueIds));
+            $tasks = $key->can('work', ApiKeyAreas::READ);
+            $events = $events->filter(fn (array $e) => match ($e['type']) {
+                'issue' => isset($visible[(int) substr((string) $e['work_id'], 6)]),
+                'task' => $tasks,
+                default => true,
+            });
+        }
+
+        $events = $events
             // by local day; on a day all-day ones first, then by start time; ties by id (a stable order)
             ->sortBy(fn (array $event) => $event['all_day']
                 ? [$event['start_date'], 0, '', $event['id']]

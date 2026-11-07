@@ -2,10 +2,13 @@
 
 namespace App\Providers;
 
+use App\Support\ApiKeys\ApiKeyGate;
+use App\Support\ApiKeys\ApiKeys;
 use App\Support\AppApi\AppTokens;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -20,9 +23,24 @@ class AppApiServiceProvider extends ServiceProvider
         // guard `app` (config/auth.php): opaque device tokens, never Passport ones
         Auth::viaRequest('app-token', fn (Request $request) => AppTokens::userFromRequest($request));
 
+        // personal API keys (Developer API, v1.52.0): deny-only — a key's user may do less, never more
+        Gate::before(fn ($user, string $ability, array $arguments = []) => ApiKeyGate::before($user, $ability, $arguments));
+
         // throttle:app-api — every /api/v1 request: per token and per IP
         RateLimiter::for('app-api', function (Request $request) {
             $token = $request->bearerToken();
+
+            // personal API keys (Developer API): per key, reads and writes apart (config/api-keys.php)
+            if (ApiKeys::looksLike($token)) {
+                $write = ! in_array($request->method(), ['GET', 'HEAD', 'OPTIONS'], true);
+                $kind = $write ? 'write' : 'read';
+
+                // the key's limit last: its numbers are the X-RateLimit-* headers the caller sees
+                return [
+                    Limit::perMinute(600)->by('app-api:ip:'.$request->ip()),
+                    Limit::perMinute(max(1, (int) config('api-keys.rate_limits.'.$kind)))->by('api-key:'.$kind.':'.substr(ApiKeys::hash($token), 0, 32)),
+                ];
+            }
 
             return [
                 Limit::perMinute(240)->by('app-api:token:'.($token ? substr(AppTokens::hash($token), 0, 24) : $request->ip())),

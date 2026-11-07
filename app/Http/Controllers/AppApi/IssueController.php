@@ -15,6 +15,7 @@ use App\Http\Resources\AppApi\IssueResource;
 use App\Models\Board;
 use App\Models\Item;
 use App\Models\Project;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Boards\Issues;
 use App\Support\Entitlements\LimitReached;
 use Carbon\CarbonImmutable;
@@ -159,7 +160,10 @@ class IssueController extends Controller
     public function dated(ListDatedIssuesRequest $request, string $project): IssueCollection
     {
         $project = $this->visibleProject($request, $project);
-        $boards = Board::where('project_id', $project->id)->with('project.workspace')->get()->keyBy('id');
+        $scoped = ApiKeyAccess::forUser($request->user())?->boardIds();
+        // a personal API key limited to boards: those boards only
+        $boards = Board::where('project_id', $project->id)->when($scoped !== null, fn ($q) => $q->whereIn('id', $scoped))
+            ->with('project.workspace')->get()->keyBy('id');
         $boardId = $request->board();
         if ($boardId !== null && ! $boards->has($boardId)) {
             throw ValidationException::withMessages(['board' => 'That board is not in this project.']);

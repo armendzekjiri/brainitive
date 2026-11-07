@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\ApiKeys\ApiKeys;
 use App\Support\AppApi\AppApiErrors;
 use App\Support\AppApi\AppClients;
 use App\Support\AppApi\AppTokens;
@@ -19,6 +20,11 @@ class EnsureAppClientAbility
 {
     public function handle(Request $request, Closure $next): Response
     {
+        // personal API keys have no device: AuthorizeApiKey decides what they may call (Developer API, v1.52.0)
+        if (ApiKeys::looksLike($request->bearerToken())) {
+            return $next($request);
+        }
+
         // the guard puts the device on the request when it resolves the token; a guard that already knew the
         // user (one app instance serving several requests, as in tests) didn't — look it up then
         $device = AppTokens::currentDevice($request) ?? AppTokens::deviceForAccessToken($request->bearerToken());

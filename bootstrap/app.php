@@ -3,6 +3,7 @@
 use App\Http\Middleware\AddCorsHeaders;
 use App\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use App\Http\Middleware\AppApiJson;
+use App\Http\Middleware\AuthorizeApiKey;
 use App\Http\Middleware\DeferAutomations;
 use App\Http\Middleware\EndRevokedAppDeviceSessions;
 use App\Http\Middleware\EnsureAppClientAbility;
@@ -68,6 +69,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // the App API client's abilities (BRAI-377) are checked before route-model binding: a TV probing
         // an endpoint it may not use gets 403 `client_not_allowed`, never a 404 that says whether a record exists
         $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: EnsureAppClientAbility::class);
+        // personal API keys (Developer API): area, level and scope before binding too — an out-of-scope id is a
+        // 403 `key_scope_denied` (or the usual 404 when the user can't open it), never a lookup through the key
+        $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: AuthorizeApiKey::class);
 
         $middleware->alias([
             'cors' => AddCorsHeaders::class,
