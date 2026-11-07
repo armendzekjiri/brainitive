@@ -34,8 +34,9 @@ class ApiKeyCreatedNotification extends Notification
             ->line('The API key “'.$this->key->name.'” ('.$this->key->prefix.'…) '.$what.' on your Brainitive account'
                 .($this->key->created_from_ip ? ' from the network '.self::coarse($this->key->created_from_ip) : '').'.')
             ->line('Scripts and apps can use it to work with your content through the Brainitive API, within the workspaces and areas you chose.')
-            ->action('Review your API keys', BrandedMail::appRoute('profile.api-keys.index'))
-            ->line('If you don’t recognise this, revoke the key and change your password: that also revokes every API key.');
+            // account mail never links to the profile (that link means "manage notifications")
+            ->action('Open Brainitive', BrandedMail::appRoute('dashboard'))
+            ->line('Review your keys under Profile → API keys. If you don’t recognise this one, revoke it and change your password: that also revokes every API key.');
     }
 
     /** 203.0.113.x / the first three groups of an IPv6 address: where, without the whole address. */
