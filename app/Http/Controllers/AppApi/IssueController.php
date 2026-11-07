@@ -94,11 +94,16 @@ class IssueController extends Controller
         $projects = Project::query()->whereIn('id', $request->user()->accessibleProjectIds())
             ->when($request->workspaceSlug(), fn ($q, $slug) => $q->whereHas('workspace', fn ($w) => $w->where('slug', $slug)))
             ->select('id');
-        $items = Item::query()
+        $user = $request->user();
+        // a personal API key: only its boards (explicit here, next to the Item model's key scope)
+        $items = ApiKeyAccess::limitIssues($user, Item::query()
             ->where('key', $key)
-            ->whereIn('board_id', Board::whereIn('project_id', $projects)->select('id'))
+            ->whereIn('board_id', Board::whereIn('project_id', $projects)->select('id')))
             ->limit(2)
-            ->get();
+            ->get()
+            // and the view policy (ApiKeyGate runs on it): an issue the key can't see is the same 404 as a missing key
+            ->filter(fn (Item $item) => $user->can('view', $item))
+            ->values();
 
         abort_if($items->isEmpty(), 404);
         abort_if($items->count() > 1, 409, 'This key exists in several of your workspaces: pass ?workspace=<slug>.');

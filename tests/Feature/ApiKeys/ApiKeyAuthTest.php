@@ -5,8 +5,10 @@ namespace Tests\Feature\ApiKeys;
 use App\Models\ApiKey;
 use App\Models\User;
 use App\Support\ApiKeys\ApiKeys;
+use App\Support\AppApi\AppSignInGeneration;
 use App\Support\SignOutEverywhere;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\Feature\ApiKeys\Concerns\UsesApiKeys;
 use Tests\Feature\AppApi\Concerns\ActsAsAppClient;
 use Tests\Feature\AppApi\Concerns\ForgetsGuardsBetweenRequests;
@@ -113,6 +115,51 @@ class ApiKeyAuthTest extends TestCase
 
         $this->assertNotNull($key->refresh()->revoked_at);
         $this->getJson('/api/v1/me', $this->keyHeaders($secret))->assertUnauthorized()->assertJsonPath('code', 'api_key_revoked');
+    }
+
+    public function test_a_create_that_started_before_signing_out_everywhere_is_refused(): void
+    {
+        // the stolen-session race: the request reads the generation, then the victim changes the password
+        $generation = AppSignInGeneration::current($this->editor);
+        SignOutEverywhere::run($this->editor->fresh(), null, 'password_changed');
+
+        try {
+            ApiKeys::create($this->editor->fresh(), 'Late key', 'all', [], ['issues' => 'read'], false, null, null, $generation);
+            $this->fail('A create from before the sign-out must be refused.');
+        } catch (HttpException $e) {
+            $this->assertSame(409, $e->getStatusCode());
+        }
+        $this->assertDatabaseCount('api_keys', 0);
+    }
+
+    public function test_a_regenerate_that_started_before_signing_out_everywhere_is_refused(): void
+    {
+        ['key' => $key, 'secret' => $secret] = $this->makeApiKey($this->editor, ['issues' => 'read']);
+        $generation = AppSignInGeneration::current($this->editor);
+        $hash = $key->token_hash;
+        AppSignInGeneration::bump($this->editor);
+
+        try {
+            ApiKeys::regenerate($key->fresh(), null, $generation);
+            $this->fail('A regenerate from before the sign-out must be refused.');
+        } catch (HttpException $e) {
+            $this->assertSame(409, $e->getStatusCode());
+        }
+        $this->assertSame($hash, $key->fresh()->token_hash);
+    }
+
+    public function test_a_key_older_than_the_last_sign_out_everywhere_is_refused_even_if_not_revoked(): void
+    {
+        // second line of defence: a key saved after the revoke ran but from before the bump
+        ['key' => $key, 'secret' => $secret] = $this->makeApiKey($this->editor, ['issues' => 'read']);
+        $this->getJson('/api/v1/me', $this->keyHeaders($secret))->assertOk();
+
+        AppSignInGeneration::bump($this->editor);
+        $this->assertNull($key->fresh()->revoked_at);
+        $this->getJson('/api/v1/me', $this->keyHeaders($secret))->assertUnauthorized()->assertJsonPath('code', 'api_key_revoked');
+
+        // a key made now carries the new generation and works
+        $this->getJson('/api/v1/me', $this->keyHeaders($this->apiKey($this->editor->fresh(), ['issues' => 'read'])))->assertOk();
     }
 
     public function test_device_tokens_are_unaffected_and_keys_never_work_on_passport_routes(): void

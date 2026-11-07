@@ -1439,6 +1439,9 @@ also wait for read / archive actions in flight (a page older than the action is 
   Each part needs its own area check (`ApiKeyAccess::readable`, `ApiKeyGate::allows($key, 'view', [$model])`), and a
   source the key can't read is not even queried. A new aggregate endpoint: declare all its areas (`areas` in
   `ApiKeyRoutes`) or filter per part.
+- **The create / revoke-all race** (Codex review): keys store `credential_generation` = `users.app_auth_generation`
+  (the counter SignOutEverywhere bumps, shared with app sign-ins). Create / regenerate read it when the request starts,
+  then lock the user row and refuse with 409 if it moved; auth treats a key with an older generation as revoked.
 - **Password change, reset, suspension revoke every key** (`SignOutEverywhere`): a key created with a stolen session
   must not survive the victim's password change. Creation and regeneration email the user.
 

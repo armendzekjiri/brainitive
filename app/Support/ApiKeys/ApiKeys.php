@@ -6,6 +6,7 @@ use App\Models\ApiKey;
 use App\Models\User;
 use App\Notifications\ApiKeyCreatedNotification;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
@@ -56,22 +57,29 @@ final class ApiKeys
      * @param  list<int>  $scopeIds
      * @return array{key: ApiKey, secret: string}
      */
-    public static function create(User $user, string $name, string $scopeType, array $scopeIds, array $abilities, bool $canDelete, ?int $expiresInDays, ?string $ip): array
+    public static function create(User $user, string $name, string $scopeType, array $scopeIds, array $abilities, bool $canDelete, ?int $expiresInDays, ?string $ip, ?int $generation = null): array
     {
         $secret = self::newSecret();
 
-        $key = new ApiKey(['name' => $name]);
-        $key->forceFill([
-            'user_id' => $user->id,
-            'prefix' => substr($secret, 0, 13),
-            'token_hash' => self::hash($secret),
-            'scope_type' => $scopeType,
-            'scope_ids' => $scopeType === ApiKey::SCOPE_ALL ? null : array_values(array_unique(array_map('intval', $scopeIds))),
-            'abilities' => ApiKeyAreas::normalize($abilities),
-            'can_delete' => $canDelete,
-            'expires_at' => $expiresInDays === null ? null : now()->addDays($expiresInDays),
-            'created_from_ip' => $ip,
-        ])->save();
+        $key = DB::transaction(function () use ($user, $name, $scopeType, $scopeIds, $abilities, $canDelete, $expiresInDays, $ip, $secret, $generation) {
+            $current = self::lockGeneration($user, $generation);
+
+            $key = new ApiKey(['name' => $name]);
+            $key->forceFill([
+                'credential_generation' => $current,
+                'user_id' => $user->id,
+                'prefix' => substr($secret, 0, 13),
+                'token_hash' => self::hash($secret),
+                'scope_type' => $scopeType,
+                'scope_ids' => $scopeType === ApiKey::SCOPE_ALL ? null : array_values(array_unique(array_map('intval', $scopeIds))),
+                'abilities' => ApiKeyAreas::normalize($abilities),
+                'can_delete' => $canDelete,
+                'expires_at' => $expiresInDays === null ? null : now()->addDays($expiresInDays),
+                'created_from_ip' => $ip,
+            ])->save();
+
+            return $key;
+        });
 
         self::notify($user, $key, regenerated: false);
 
@@ -83,20 +91,45 @@ final class ApiKeys
      *
      * @return array{key: ApiKey, secret: string}
      */
-    public static function regenerate(ApiKey $key, ?string $ip): array
+    public static function regenerate(ApiKey $key, ?string $ip, ?int $generation = null): array
     {
         $secret = self::newSecret();
-        $key->forceFill([
-            'prefix' => substr($secret, 0, 13),
-            'token_hash' => self::hash($secret),
-            'last_used_at' => null,
-            'last_used_ip' => null,
-            'created_from_ip' => $ip,
-        ])->save();
+        DB::transaction(function () use ($key, $ip, $secret, $generation) {
+            $current = self::lockGeneration($key->user, $generation);
+            // revoked meanwhile (sign out everywhere got the lock first): nothing to renew
+            abort_unless(ApiKey::query()->whereKey($key->id)->whereNull('revoked_at')->exists(), 409, self::STALE_SESSION);
+            $key->forceFill([
+                'credential_generation' => $current,
+                'prefix' => substr($secret, 0, 13),
+                'token_hash' => self::hash($secret),
+                'last_used_at' => null,
+                'last_used_ip' => null,
+                'created_from_ip' => $ip,
+            ])->save();
+        });
 
         self::notify($key->user, $key, regenerated: true);
 
         return ['key' => $key, 'secret' => $secret];
+    }
+
+    public const STALE_SESSION = 'You were signed out everywhere (password change or reset, or by an admin) while this was being saved. Sign in again and create the key again.';
+
+    /**
+     * The race with "sign out everywhere" (Codex review): a create / regenerate on a stolen session can pass validation
+     * just before the password change revokes every key. Both serialize on the user row: under its lock, the user's
+     * `app_auth_generation` (bumped by SignOutEverywhere, AppSignInGeneration) must still be the one read when the
+     * request started — else 409 and nothing is saved. If the create wins the lock, the sign-out's revokeAllFor
+     * revokes the new key right after; and a key whose generation is older than the user's is refused at sign-in
+     * anyway (resolve()).
+     */
+    private static function lockGeneration(User $user, ?int $expected): int
+    {
+        $locked = User::query()->whereKey($user->id)->lockForUpdate()->first(['id', 'app_auth_generation']);
+        $current = (int) $locked?->app_auth_generation;
+        abort_if($locked === null || ($expected !== null && $expected !== $current), 409, self::STALE_SESSION);
+
+        return $current;
     }
 
     public static function revoke(ApiKey $key, string $reason = 'user'): void
@@ -151,7 +184,8 @@ final class ApiKeys
         if (! $key instanceof ApiKey || ! hash_equals($key->token_hash, $hash) || $key->user === null) {
             return null;
         }
-        if ($key->revoked_at !== null) {
+        // revoked, or made before the user was last signed out everywhere (second line of defence for the race above)
+        if ($key->revoked_at !== null || (int) $key->credential_generation !== (int) $key->user->app_auth_generation) {
             $request->attributes->set(self::FAILURE_ATTRIBUTE, 'api_key_revoked');
 
             return null;

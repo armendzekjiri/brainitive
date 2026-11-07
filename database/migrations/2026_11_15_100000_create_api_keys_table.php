@@ -24,6 +24,8 @@ return new class extends Migration
             // what: {area: none|read|write}; delete is its own flag
             $table->json('abilities');
             $table->boolean('can_delete')->default(false);
+            // users.app_auth_generation when the key was made: an older one = signed out everywhere since (revoked)
+            $table->unsignedInteger('credential_generation')->default(0);
             $table->timestamp('expires_at')->nullable();
             $table->timestamp('last_used_at')->nullable();
             $table->string('last_used_ip', 45)->nullable();

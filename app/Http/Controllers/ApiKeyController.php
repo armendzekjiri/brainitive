@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Support\ApiKeys\ApiKeyAreas;
 use App\Support\ApiKeys\ApiKeys;
+use App\Support\AppApi\AppSignInGeneration;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -42,6 +43,7 @@ class ApiKeyController extends Controller
             (bool) ($validated['can_delete'] ?? false),
             $request->expiresInDays(),
             $request->ip(),
+            $request->generation(),
         );
 
         return $this->secretResponse($created['key'], $created['secret']);
@@ -49,13 +51,15 @@ class ApiKeyController extends Controller
 
     public function regenerate(Request $request, int $apiKey): JsonResponse
     {
+        // the user's sign-out generation as this request started (ApiKeys::lockGeneration)
+        $generation = AppSignInGeneration::current($request->user());
         abort_unless(ApiKeys::enabled(), 403, 'API keys are turned off on this server.');
         $key = $this->own($request->user(), $apiKey);
         if (! $key->isActive()) {
             return response()->json(['message' => 'Only an active key can get a new secret. Create a new key instead.'], 422);
         }
 
-        $regenerated = ApiKeys::regenerate($key, $request->ip());
+        $regenerated = ApiKeys::regenerate($key, $request->ip(), $generation);
 
         return $this->secretResponse($regenerated['key'], $regenerated['secret']);
     }

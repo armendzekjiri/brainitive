@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property list<int>|null $scope_ids
  * @property array<string, string> $abilities area => none | read | write
  * @property bool $can_delete
+ * @property int $credential_generation users.app_auth_generation at creation / regeneration
  * @property Carbon|null $expires_at
  * @property Carbon|null $last_used_at
  * @property string|null $last_used_ip
@@ -54,6 +55,7 @@ class ApiKey extends Model
             'scope_ids' => 'array',
             'abilities' => 'array',
             'can_delete' => 'boolean',
+            'credential_generation' => 'integer',
             'expires_at' => 'datetime',
             'last_used_at' => 'datetime',
             'revoked_at' => 'datetime',

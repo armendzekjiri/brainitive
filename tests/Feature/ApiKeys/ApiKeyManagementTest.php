@@ -7,6 +7,7 @@ use App\Models\Board;
 use App\Models\User;
 use App\Notifications\ApiKeyCreatedNotification;
 use App\Support\ApiKeys\ApiKeys;
+use App\Support\AppApi\AppSignInGeneration;
 use App\Support\Mail\EmailPreviews;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
@@ -82,6 +83,14 @@ class ApiKeyManagementTest extends TestCase
 
         // and it works
         $this->getJson("/api/v1/boards/{$this->board->id}", $this->keyHeaders($secret))->assertOk();
+    }
+
+    public function test_the_web_create_reads_the_generation_and_stores_it(): void
+    {
+        AppSignInGeneration::bump($this->editor);
+        $this->actingAs($this->editor)->postJson(route('profile.api-keys.store'), ['name' => 'x', 'scope_type' => 'all', 'abilities' => ['issues' => 'read'], 'expires_in_days' => 30])
+            ->assertCreated();
+        $this->assertSame(1, ApiKey::query()->sole()->credential_generation);
     }
 
     public function test_the_scope_can_only_name_what_the_user_can_open(): void

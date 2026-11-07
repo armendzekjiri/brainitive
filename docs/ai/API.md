@@ -177,7 +177,8 @@ once). Public guide: `docs-site/integrations/developer-api.md`; public reference
   (`workspaces.api_keys_enabled`, workspace settings → Legal → Developer API), `key_endpoint_not_allowed`.
 - **Limits:** per key 120 reads + 60 writes / min (`API_KEYS_READ_PER_MINUTE`, `API_KEYS_WRITE_PER_MINUTE`) + 600 / min
   per IP; the key's limit is the one in `X-RateLimit-*`.
-- **Lifecycle:** revoke / regenerate on the web (also `DELETE /me/connected-apps/api_key:<id>` from the apps); password
+- **Lifecycle:** a key carries the user's sign-out generation (`credential_generation`); a create racing a password
+  change is refused (409) and a key from before the last sign-out-everywhere is 401 `api_key_revoked`. Revoke / regenerate on the web (also `DELETE /me/connected-apps/api_key:<id>` from the apps); password
   change / reset / suspension revoke all keys; an email on create / regenerate; `last_used_at` / `last_used_ip` at most
   once a minute. Max 50 active keys per user.
 

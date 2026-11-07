@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Http\Controllers\ApiKeyController;
 use App\Models\ApiKey;
 use App\Support\ApiKeys\ApiKeyAreas;
+use App\Support\AppApi\AppSignInGeneration;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -15,9 +16,22 @@ use Illuminate\Validation\Validator;
  */
 class StoreApiKeyRequest extends FormRequest
 {
+    /** The user's sign-out generation as this request started, before validation (ApiKeys::lockGeneration). */
+    private ?int $generation = null;
+
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        if ($this->user() === null) {
+            return false;
+        }
+        $this->generation = AppSignInGeneration::current($this->user());
+
+        return true;
+    }
+
+    public function generation(): ?int
+    {
+        return $this->generation;
     }
 
     /** @return array<string, mixed> */
