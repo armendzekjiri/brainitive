@@ -1,7 +1,7 @@
 # Developer API: personal API keys for the App API
 
 **Branch:** feat/developer-api-keys (from `pre-release`)
-**Status:** in-progress
+**Status:** done (2026-11-07; local commits on feat/developer-api-keys, not pushed)
 **Started:** 2026-11-07
 **Release:** v1.52.0 (together with feat/board-workflow-rules)
 **Board card:** none yet (MCP not used from this worktree; the lead creates / links it)
@@ -147,5 +147,15 @@ API.md (Developer API section + conventions), ARCHITECTURE (module entry), KNOWL
 key-aware user helpers, why sync / realtime / collab are excluded), CONVENTIONS (new App API route → declare it
 in `ApiKeyRoutes`), skill add-app-api-endpoint (step: declare the area).
 
+## Outcome
+- Built as planned. Extra decisions made while building: search answers `places: []` for keys (place names aren't
+  scoped); the 403 names the widest place out of scope (workspace, else project, else board); the create / regenerate
+  response carries the secret with `Cache-Control: no-store` and Inertia history encryption; the workspace switch lives
+  in Workspace settings → Legal → "Developer API"; the public reference is Scalar 1.75.1 (pinned, jsDelivr) on
+  `docs-site/api.md`, fed by `docs-site/public/openapi.json`.
+- Tests: `tests/Feature/ApiKeys/*` (auth, routes declared / excluded, areas × levels, scopes, workspace switch, rate
+  limits, management, email), `OpenApiSpecTest` (scheme + extension + docs-site copy), e2e `api-keys.spec.ts`.
+
 ## Open questions
 - Plans & releases are read-only in the App API today, so "Read + write" there grants nothing more yet.
+- A Brainitive board card was not created from this worktree (no MCP use here); the lead links it.
