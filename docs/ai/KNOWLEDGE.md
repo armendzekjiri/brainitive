@@ -1398,6 +1398,30 @@ also wait for read / archive actions in flight (a page older than the action is 
 
 ## Architectural decisions
 
+### Developer API: personal API keys (v1.52.0)
+- **Keys share the `app` guard and `/api/v1`, not Passport:** `brai_` bearers resolve in `ApiKeys::userFromRequest`
+  (from `AppTokens::userFromRequest`). `brai_` never collides with device tokens (`bra_` / `brr_`: the 4th character
+  differs). Only the sha256 is stored, looked up on a unique index.
+- **One declaration per route (`ApiKeyRoutes::MAP`), deny by default.** Route names, not paths, like the TV's
+  `clients.*.abilities`. `AuthorizeApiKey` runs before route-model binding, so an out-of-scope id is a 403 without a
+  model lookup, and **a place the user can't open is the controller's 404** — the 403 message only ever names
+  projects / boards / workspaces the user can see.
+- **A deny-only `Gate::before` (`ApiKeyGate`) is deliberate**, not the forbidden "admin bypass" pattern: it returns
+  `false` or `null`, never `true`, and only for the key's own user. It is what stops ids in bodies (link target, move to
+  sprint, capture destination, meeting subject, timer issue) from leaving the scope or the granted areas.
+- **The user's access helpers are key-aware** (`hasWorkspaceAccess`, `hasProjectAccess`, `accessibleProjectIds`,
+  `adminProjectIds`, through `ApiKeyAccess::forUser`) so every list built on them is filtered in SQL. Things that read
+  `$user->workspaces()` or a project's relations directly need an explicit filter (see ARCHITECTURE). The board level
+  isn't in those helpers: lists of issues across boards use `ApiKeyAccess::limitIssues()`.
+- **Tests:** the request guard caches the user between requests in a test, and `Authenticate` switches the default
+  guard to `app` — use `ForgetsGuardsBetweenRequests` and `shouldUse('web')` before a web call in the same test.
+  `ApiKeyAccess::current()` reads the *current* request's attributes, so it's naturally per request.
+- **Excluded on purpose:** realtime and live co-editing tokens (an open socket would outlive a revoked key), offline
+  sync (its change feed and appliers span every area; re-scoping it was not worth the risk), notifications (titles from
+  every workspace), the calendar feed link (a credential), and anything account / session / device / key management.
+- **Password change, reset, suspension revoke every key** (`SignOutEverywhere`): a key created with a stolen session
+  must not survive the victim's password change. Creation and regeneration email the user.
+
 ### Cloud plan limits: traps (v1.46.0, BRAI-160)
 - **Package binding wins through `singletonIf`:** package providers register before `bootstrap/providers.php`, so
   `EntitlementsServiceProvider` must never use `singleton()` for `Entitlements`. With brainitive/cloud installed,

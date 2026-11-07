@@ -23,7 +23,7 @@ logic underneath (Support services, policies) is shared.
 
 | | |
 |---|---|
-| Auth | `Authorization: Bearer bra_…` (access, 15 min). Refresh `brr_…` (60 days, single use). Tokens never in URLs. |
+| Auth | `Authorization: Bearer bra_…` (access, 15 min). Refresh `brr_…` (60 days, single use). Tokens never in URLs. Personal API keys `brai_…`: see "Developer API". |
 | Responses | Wrapped: `{data: {...}}` (API Resources' default); lists `{data: [...], next_cursor}`. **DELETE → 204** No Content when it removes a resource; removing a *part* of one (e.g. `DELETE /me/avatar`) answers 200 with the updated parent instead. Only unwrapped exception: the OAuth token responses of `POST /auth/exchange` and `POST /auth/refresh` are unwrapped (`{token_type, access_token, expires_in, refresh_token, refresh_expires_in, device}`). Resources list their fields explicitly, never a model's `toArray()`. |
 | Errors | `{"message": "…", "code": "…", "errors"?: {field: [..]}}` — 400 `bad_request` / `invalid_grant`, 401 `unauthenticated`, 402 `limit_reached` (+ `limit` object, see Invitations), 403 `forbidden`, 403 `client_not_allowed` (this app may not call the endpoint at all: the TV's scope, see "TV: what it may call"), 404 `not_found`, 405 `method_not_allowed`, 409 `conflict`, 410 `gone`, 422 `validation_failed`, 429 `rate_limited`, 500 `server_error`. 404 instead of 403 when the user must not learn that something exists. Documented once for all endpoints (`App\Support\AppApi\OpenApi`); a 402 needs `@throws LimitReached` on the controller method. |
 | Polling | `GET /me/today`, `/me/my-day`, `/me/timer`, `/me/work`, `/notifications` (first page, no `cursor`), `/notifications/unread-count` and `/capture-destinations` answer an `ETag` (hash of the answer + the user): send it as `If-None-Match` → 304 without body. Shared `AnswersWithETag` trait; a new polled endpoint uses it. |
@@ -142,6 +142,40 @@ devices and connected apps (no signing other devices out), invitations / creatin
 `/me/data-export`, `/me/calendar-feed`, profile changes (`PATCH /me`, avatar, notification preferences),
 `/uploads`, every other read (workspaces, projects, boards, docs, search, sync …) and every other write.
 A new endpoint is closed to the TV until its route name is added to the list (`AppClientAbilitiesTest` pins it).
+
+## Developer API: personal API keys
+**v1.52.0.** Users create keys under **Profile → API keys** (`/profile/api-keys`, web only) and call this API from
+their own scripts: `Authorization: Bearer brai_…` (`brai_` + 43 base62 chars; only the sha256 is stored, the key is shown
+once). Public guide: `docs-site/integrations/developer-api.md`; public reference: `docs.brainitive.app/api` (Scalar,
+`docs-site/public/openapi.json` = copy of `docs/api/openapi.json`, written by `composer openapi`, checked by
+`OpenApiSpecTest`). Plan + decisions: [`tasks/feat-developer-api-keys.md`](./tasks/feat-developer-api-keys.md).
+- **Where (scope):** `all` (every workspace of the user that allows keys, incl. later ones) / `workspaces` / `projects`
+  (no workspace-wide content: snippets, bookmarks, workspace members, workspace insights) / `boards` (Issues & boards only
+  those boards; other granted areas the whole projects of those boards; no health / workload / search). Always ∩ the
+  user's own access; policies still run as the user.
+- **What (areas):** `issues`, `docs`, `plans`, `work` (My Work, task lists, captures), `time`, `calendar` (incl.
+  bookings, meetings), `helpdesk` (+ leads, portals), `library` (snippets, bookmarks), `members` (read only) — each
+  `none | read | write`; **delete** is a separate flag. GET/HEAD = read, POST/PUT/PATCH = write, DELETE = write + delete
+  (unwatch, unlink, take off My Day = write). No area: `GET /me`, `/workspaces`, `/workspaces/{slug}`,
+  `/workspaces/{slug}/projects`, `/projects/{id}` (read only, filtered). `POST /uploads`: write on issues or docs.
+  `GET /search`: read on every content area, not a boards key; `places` is always empty for keys.
+- **Declared per route** in `App\Support\ApiKeys\ApiKeyRoutes::MAP` (route name → area / `null` / `false`); an undeclared
+  route is refused and `ApiKeyRoutesTest` fails. The spec shows it per operation: `x-brainitive-key-ability`
+  (`{available, areas, level, delete?, scope?}`) and an "**API keys:** …" line; unavailable operations list only the
+  `appToken` scheme.
+- **Never with a key** (403 `key_endpoint_not_allowed`): `auth.logout`, `auth.web-session`, `PATCH /me`, avatar, devices,
+  invitations, `POST /workspaces`, `POST /workspaces/{slug}/projects`, project templates, `POST …/invitations`,
+  navigation / pins, all notifications + preferences, `/me/calendar-feed*`, connected apps, data export, realtime,
+  `pages|whiteboards/{uuid}/collab*`, `/sync*`.
+- **Errors:** 401 `api_key_revoked` / `api_key_expired` / `api_keys_disabled` (instance switch `API_KEYS_ENABLED`);
+  403 `key_ability_denied` ("This key can’t write issues & boards."), `key_scope_denied` ("This key has no access to
+  project ToolExpert." — only for places the user can open, else the usual 404), `workspace_api_keys_disabled`
+  (`workspaces.api_keys_enabled`, workspace settings → Legal → Developer API), `key_endpoint_not_allowed`.
+- **Limits:** per key 120 reads + 60 writes / min (`API_KEYS_READ_PER_MINUTE`, `API_KEYS_WRITE_PER_MINUTE`) + 600 / min
+  per IP; the key's limit is the one in `X-RateLimit-*`.
+- **Lifecycle:** revoke / regenerate on the web (also `DELETE /me/connected-apps/api_key:<id>` from the apps); password
+  change / reset / suspension revoke all keys; an email on create / regenerate; `last_used_at` / `last_used_ip` at most
+  once a minute. Max 50 active keys per user.
 
 ## The `## API (ready)` section on a mobile card
 
@@ -457,9 +491,10 @@ the instance sets `MOBILE_PUSH_ENABLED=false`. The Expo message:
 | `GET /api/v1/me/data-export` | app + verified | "Download my data": `{data: {latest, exports: [≤ 5], available_in}}` (seconds until a new request is allowed) | Request export | BRAI-262 | ready (v1.49.0, BRAI-394) |
 | `POST /api/v1/me/data-export` | app + verified, `throttle:5,1` | Request the ZIP (prepared in the background; notification + email when ready) → 202 with the same shape. Already being prepared / within the hour → 422 `export` | Request export | BRAI-262 | ready (v1.49.0, BRAI-394) |
 
-Connected app: `{id, kind: desktop|mobile|tv|mcp|cli|extension|oauth, name, platform, app_version,
+Connected app: `{id, kind: desktop|mobile|tv|mcp|cli|extension|oauth|api_key, name, platform, app_version,
 scopes, current, connected_at, last_used_at, expires_at}` — never a token, hash, IP or push token.
-Passport tokens are grouped per client (one row each, as on the web): the CLI and tokens from
+Personal API keys (v1.52.0) come last: `id: api_key:<id>`, `scopes: ["issues:write", …, "delete"?]`, `last_used_at`,
+`expires_at`; DELETE revokes the key. Passport tokens are grouped per client (one row each, as on the web): the CLI and tokens from
 `php artisan mcp:get-token` share the personal access client and show as `cli`.
 
 Export: `{id (uuid), status: queued|running|ready|failed|expired, file_size, counts, error,

@@ -590,6 +590,32 @@ extension: own tokens, guard, throttles; only Support services and policies are 
 - **Tests:** `tests/Feature/AppApi/*` (helper `Concerns\ActsAsAppClient`: `appToken()`, `appHeaders()`,
   `passportToken()`). Public docs for self-hosters: `docs-site/self-hosting/desktop-and-mobile-apps.md`.
 
+
+### Developer API — personal API keys (v1.52.0)
+Users create **personal API keys** (`brai_…`) and call the App API `/api/v1` from their own scripts. Plan:
+[`tasks/feat-developer-api-keys.md`](./tasks/feat-developer-api-keys.md); rules: [`API.md` → Developer API](./API.md#developer-api-personal-api-keys).
+- **Model:** `ApiKey` (`api_keys`, `User::apiKeys()`): name, `prefix` (first 13 chars), `token_hash` (sha256, unique),
+  `scope_type` (`all|workspaces|projects|boards`) + `scope_ids` (json), `abilities` (json area → none/read/write),
+  `can_delete`, `expires_at`, `last_used_at/_ip`, `revoked_at/_reason`, `created_from_ip`. `workspaces.api_keys_enabled`
+  (workspace admins' switch). Config `config/api-keys.php` (`API_KEYS_ENABLED`, per-key read / write limits).
+- **Support (`app/Support/ApiKeys/`):** `ApiKeys` (create / regenerate / revoke / revokeAllFor, the guard resolver for
+  `brai_` bearers, failure codes), `ApiKeyAreas` (the areas + levels), `ApiKeyRoutes` (**every `/api/v1` route name →
+  area / level / scope rule, `false` = never with a key**), `ApiKeyAccess` (the request's key: scope sets, `forUser()`,
+  `limitIssues()`), `ApiKeyLocator` (route param / model → workspace / project / board + area), `ApiKeyGate` (deny-only
+  `Gate::before`).
+- **Request path:** guard `app` (`AppTokens::userFromRequest` → `ApiKeys::userFromRequest`) → `EnsureAppClientAbility`
+  (lets keys through) → `AuthorizeApiKey` (priority before `SubstituteBindings`: endpoint, area level + delete flag,
+  route-param scope → 403 `key_*` / `workspace_api_keys_disabled`, 404 when the user can't open it) → controller; policies
+  pass `ApiKeyGate`; `User::hasWorkspaceAccess / hasProjectAccess / accessibleProjectIds / adminProjectIds` narrow to the
+  key's scope (only for the key's own user). Explicit list filters: workspaces, projects of a workspace, boards of a
+  project, dated issues, project detail sections, `/me` workspaces, search viewer, My Work / My Day / agenda issues.
+- **Web:** `ApiKeyController` (`/profile/api-keys`, Inertia `Profile/ApiKeys` + `components/api-keys/*`; the key is only
+  in the create / regenerate response, history-encrypted, `no-store`), `PATCH /workspaces/{workspace}/api-keys`
+  (`components/workspaces/WorkspaceApiKeysSetting.tsx`, Legal tab). Keys also in Profile → Connected apps and
+  `GET /api/v1/me/connected-apps` (`api_key:<id>`). Email `ApiKeyCreatedNotification`.
+- **Docs:** OpenAPI `x-brainitive-key-ability` + "API keys:" line per operation and the `apiKey` scheme
+  (`AppApiDocsServiceProvider`); public reference `docs-site/api.md` (Scalar, from `docs-site/public/openapi.json`, a
+  copy `composer openapi` writes); guide `docs-site/integrations/developer-api.md`.
 ### Browser extension (Chrome, Edge, Firefox)
 - **Extension source:** `browser-extension/` (WXT + React + TS, own `package.json`, not part of
   the app build) — see its `README.md`. `entrypoints/` = popup, side panel, options, background

@@ -101,6 +101,19 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.52.0',
+        title: 'Developer API and workflow rules for boards',
+        tag: 'Major Feature',
+        date: '2026-11-07',
+        items: [
+            'Developer API: create your own API keys under Profile → API keys and use the Brainitive API from your scripts and apps — the same API the desktop and mobile apps use. Free on every plan and on self-hosted servers.',
+            'Fine-grained keys: choose where a key works (all your workspaces, chosen workspaces, projects or boards) and what it may do per area (issues & boards, docs, plans, My Work, time, calendar, helpdesk, snippets, members: none, read or read & write). Deleting is a separate permission, off by default.',
+            'A key acts as you and never reaches more than you can; the key is shown once, you get an email when one is created, and revoking it stops it at once. Changing your password revokes all your keys.',
+            'Workspace admins can turn API keys off for their workspace (Workspace settings → Legal → Developer API); self-hosted admins for the whole server (API_KEYS_ENABLED).',
+            'Public API reference at docs.brainitive.app/api, showing for every endpoint what a key needs, and a Developer API guide with curl, JavaScript and Python examples. API keys are also listed under Connected apps.',
+        ],
+    },
+    {
         version: 'v1.51.0',
         title: 'Live whiteboards and polls in the mobile app',
         tag: 'Feature',
