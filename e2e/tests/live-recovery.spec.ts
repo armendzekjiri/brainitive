@@ -15,6 +15,9 @@ import { addProjectContent, docEditor, docReader, draftSaved } from '../helpers/
  * Own realtime server on REC_PORT (`X-E2E-Collab-Port`); serial: the tests stop / start it.
  */
 test.describe.configure({ mode: 'serial' });
+// the session-request journey fakes a 503 with route(); with a service worker controlling the page, WebKit
+// sends its requests past Playwright's routing. Nothing here needs the worker.
+test.use({ serviceWorkers: 'block' });
 
 const REC_PORT = COLLAB.port + 5;
 let server: ChildProcess | null = null;

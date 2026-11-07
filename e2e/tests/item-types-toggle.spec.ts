@@ -67,7 +67,10 @@ test('turn off two item types: they stay off, pickers skip them, old cards keep 
     await expect(page.getByRole('option', { name: 'Epic', exact: true })).toBeVisible();
     await expect(page.getByRole('option', { name: 'Bug', exact: true })).toHaveCount(0);
     await expect(page.getByRole('option', { name: 'Story', exact: true })).toHaveCount(0);
+    // the first Escape closes the type list, the second the dialog — only once the list is gone (Firefox
+    // still had the closing list focused when both came back to back, and the dialog stayed open)
     await page.keyboard.press('Escape');
+    await expect(page.getByRole('listbox')).toBeHidden();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
 

@@ -54,6 +54,19 @@ Details in `e2e/README.md`; this lists what isn't obvious.
 - **Mail.** e2e mail goes to `storage/e2e/mail-<port>.log` (the `mail` log channel), and
   `mail.ts` follows invite and verification links. Laravel's log transport has already decoded
   quoted-printable bodies, so don't decode again (it corrupts `=17…` in links).
+- **Nightly Firefox / WebKit traps (fix/nightly-e2e-browsers, v1.51).**
+  - `page.route` + a service worker: Chromium still sees the requests of a controlled page, WebKit
+    doesn't — a spec that answers app requests with `route()` passes in the per-push Chromium run and
+    hangs or fails only nightly. Every such spec needs `test.use({ serviceWorkers: 'block' })`.
+  - WebKit without GPU compositing (Playwright, WebKitGTK) repaints large `filter: blur()` layers and
+    every `backdrop-filter` element on each frame. The homepage (an animated 120 px blurred background
+    + ~15 backdrop-blurred cards) dropped to 0–3 frames per second, so every click waited for
+    "element is stable" until the test timed out. The homepage uses radial gradients and no card
+    backdrop blur now; keep `backdrop-filter` to bars that overlay scrolling content.
+  - Debounced Inertia visits (search fields) that fire after the test moved on interrupt the next
+    `page.goto` in WebKit: wait for the URL the visit produces first.
+  - Two Escapes back to back (close a Radix Select, then its dialog): wait for the listbox to be gone
+    in between — while it is closing it is still the top dismissable layer and eats the second Escape.
 - **Every button.** The crawler (`crawler.ts`, project `crawl`) clicks every control on every
   page it can reach, plus their menus and dialogs, and fills and submits form dialogs. Destructive
   requests are answered with a reload (`409` + `X-Inertia-Location`). `networkidle` returns at

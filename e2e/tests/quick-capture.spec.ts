@@ -39,6 +39,9 @@ test.describe('quick capture', () => {
         await search.pressSequentially('cc');
         await expect(search).toHaveValue('cc');
         await expect(captureDialog(page)).toBeHidden();
+        // the search is a debounced visit: let it land before leaving, or it interrupts the next
+        // page.goto (WebKit aborts the pending navigation)
+        await expect(page).toHaveURL(/[?&]q=cc(&|$)/);
 
         // …nor inside the doc editor: the letters stay in the text
         const word = `${uid('doc')}cact`;

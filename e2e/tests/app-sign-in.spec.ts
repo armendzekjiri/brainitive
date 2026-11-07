@@ -49,6 +49,10 @@ function authorizePath(challenge: string, state: string): string {
     return `/app/authorize?${query}`;
 }
 
+// the decision's answer is caught with route(); with a service worker controlling the page, WebKit
+// sends its requests past Playwright's routing. Nothing here needs the worker.
+test.use({ serviceWorkers: 'block' });
+
 /**
  * Where the decision sends the browser: the app's custom-scheme callback. The answer is
  * intercepted and handed to the page unchanged; the URL resolves once it arrived.
