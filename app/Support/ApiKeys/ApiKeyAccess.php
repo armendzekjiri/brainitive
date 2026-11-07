@@ -4,11 +4,18 @@ namespace App\Support\ApiKeys;
 
 use App\Models\ApiKey;
 use App\Models\Board;
+use App\Models\Booking;
+use App\Models\BookingPage;
+use App\Models\Bookmark;
+use App\Models\BookmarkItem;
 use App\Models\Item;
 use App\Models\Project;
+use App\Models\Snippet;
+use App\Models\SnippetCollection;
 use App\Models\TimeEntry;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -226,7 +233,46 @@ final class ApiKeyAccess
         };
     }
 
-    // ── Central query scopes (Item + TimeEntry global scopes, while a key's request runs) ─────────
+    // ── Central query scopes (ScopedToApiKey global scope, while a key's request runs) ──────────────
+
+    /**
+     * The one rule for models with the ScopedToApiKey trait:
+     *  - project / board level: issues (key's boards, or boards of its projects / workspaces), work logs;
+     *  - WORKSPACE level (snippet collections + snippets, bookmark groups + links, booking pages + bookings): only
+     *    for keys over whole workspaces (all / chosen workspaces) — a key limited to projects or boards gets none.
+     * Personal content without a workspace (captures, calendar connections, the timer) is the user's own: only the
+     * area decides. Project-level content (task lists, docs, helpdesks, lead forms, portals, plans …) is checked
+     * through its project (AuthorizeApiKey, ApiKeyGate, the key-aware User helpers).
+     *
+     * @param  Builder<Model>  $query
+     */
+    public function scopeModel($query): void
+    {
+        $model = $query->getModel();
+        $whole = $this->wholeWorkspaceIds();
+
+        match (true) {
+            $model instanceof Item => $this->scopeItems($query),
+            $model instanceof TimeEntry => $this->scopeTimeEntries($query),
+            $model instanceof SnippetCollection, $model instanceof Bookmark, $model instanceof BookingPage => $query->whereIn($query->qualifyColumn('workspace_id'), $whole),
+            $model instanceof Snippet => $query->whereIn($query->qualifyColumn('collection_id'), DB::table('snippet_collections')->select('id')->whereIn('workspace_id', $whole)),
+            $model instanceof BookmarkItem => $query->whereIn($query->qualifyColumn('bookmark_id'), DB::table('bookmarks')->select('id')->whereIn('workspace_id', $whole)),
+            $model instanceof Booking => $query->whereIn($query->qualifyColumn('booking_type_id'), DB::table('booking_types')->select('booking_types.id')
+                ->join('booking_pages', 'booking_pages.id', '=', 'booking_types.booking_page_id')->whereIn('booking_pages.workspace_id', $whole)),
+            default => $query->whereRaw('1 = 0'), // a model with the trait but no rule here: nothing
+        };
+    }
+
+    /**
+     * Workspaces whose workspace-level content the key reaches: its workspaces when it covers whole workspaces, none
+     * when it is limited to projects or boards.
+     *
+     * @return list<int>
+     */
+    public function wholeWorkspaceIds(): array
+    {
+        return $this->coversWholeWorkspaces() ? $this->workspaceIds() : [];
+    }
 
     /**
      * Every Item query of an API-key request: only issues on boards the key reaches (its boards; or every board of

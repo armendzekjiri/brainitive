@@ -150,7 +150,7 @@ once). Public guide: `docs-site/integrations/developer-api.md`; public reference
 `docs-site/public/openapi.json` = copy of `docs/api/openapi.json`, written by `composer openapi`, checked by
 `OpenApiSpecTest`). Plan + decisions: [`tasks/feat-developer-api-keys.md`](./tasks/feat-developer-api-keys.md).
 - **Where (scope):** `all` (every workspace of the user that allows keys, incl. later ones) / `workspaces` / `projects`
-  (no workspace-wide content: snippets, bookmarks, workspace members, workspace insights) / `boards` (Issues & boards only
+  (no workspace-wide content: snippets, bookmarks, booking pages + bookings, workspace members, workspace insights) / `boards` (Issues & boards only
   those boards; other granted areas the whole projects of those boards; no health / workload / search). Always ∩ the
   user's own access; policies still run as the user.
 - **What (areas):** `issues`, `docs`, `plans`, `work` (My Work, task lists, captures), `time`, `calendar` (incl.

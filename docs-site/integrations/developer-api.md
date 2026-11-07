@@ -28,12 +28,12 @@ You get an email whenever a key is created or regenerated on your account. Keep 
 |---|---|
 | **All my workspaces** | Every workspace you belong to, including ones you join later |
 | **Chosen workspaces** | Only those workspaces |
-| **Chosen projects** | Only those projects. Workspace-wide content (snippets, bookmarks, workspace members and insights) is not included; the workspace itself can be read so its projects can be listed |
+| **Chosen projects** | Only those projects. Workspace-wide content (snippets, bookmarks, booking pages and bookings, workspace members and insights) is not included; the workspace itself can be read so its projects can be listed |
 | **Chosen boards** | **Issues & boards** only sees those boards (board lists, issues, sprints, backlog, dated issues). Other areas you grant see the whole projects those boards belong to — for example their docs or task lists. Project-wide issue summaries (health, workload) and search are not available to such a key |
 
 A key never reaches more than you can: it acts as you, and every permission check of the web app still applies (a viewer's key can't edit issues). If you lose access to a project, your keys lose it too.
 
-Your personal data — your capture inbox, calendar, bookings and timer — belongs to no workspace: for those only the area counts.
+Your personal data — your capture inbox, connected calendars and timer — belongs to no workspace: for those only the area counts. Booking pages and their bookings belong to a workspace, so only keys over whole workspaces see them (also in the calendar and Today).
 
 ## What: areas and levels
 
@@ -63,14 +63,15 @@ These stay with the Brainitive apps and the web, whatever a key is allowed: sign
 
 ## Your first request
 
-Keep the key in an environment variable (or your CI's secret settings) rather than in commands or scripts, where it ends up in shell history and process lists. Then send it as a bearer token:
+Keep the key out of commands and scripts: a key typed on the command line ends up in your shell history, and one passed as a program argument is visible to other users in the process list (`ps`). Read it into a variable instead (or use your CI's secret settings), and give curl the header on **stdin**:
 
 ```bash
-# paste the key when asked; it never shows up in your shell history
-read -rs BRAINITIVE_API_KEY && export BRAINITIVE_API_KEY
+# bash: paste the key when asked — it isn't echoed or saved in your history
+read -rs BRAINITIVE_API_KEY
 
-curl https://www.brainitive.app/api/v1/me \
-  -H "Authorization: Bearer $BRAINITIVE_API_KEY"
+# -H @- reads the header from stdin (curl 7.55+); the here-string is a bash builtin, so the key
+# is never one of curl's arguments
+curl -H @- https://www.brainitive.app/api/v1/me <<<"Authorization: Bearer $BRAINITIVE_API_KEY"
 ```
 
 The answer tells you who the key acts as and which workspaces it reaches:
@@ -85,20 +86,19 @@ Requests and answers are JSON (send `Content-Type: application/json` with a body
 
 ```bash
 API=https://www.brainitive.app/api/v1
-KEY=$BRAINITIVE_API_KEY
+# curl with the key header on stdin (never in curl's arguments)
+bcurl() { curl -sS -H @- "$@" <<<"Authorization: Bearer $BRAINITIVE_API_KEY"; }
 
 # the boards of project 42, then the issues of board 7
-curl "$API/projects/42/boards" -H "Authorization: Bearer $KEY"
-curl "$API/boards/7/items?limit=50" -H "Authorization: Bearer $KEY"
+bcurl "$API/projects/42/boards"
+bcurl "$API/boards/7/items?limit=50"
 
 # create an issue on board 7
-curl -X POST "$API/boards/7/items" -H "Authorization: Bearer $KEY" \
-  -H "Content-Type: application/json" \
+bcurl -X POST "$API/boards/7/items" -H "Content-Type: application/json" \
   -d '{"title": "Deploy 2.4.0 failed", "description": "See the CI log."}'
 
 # move issue 1234 to column 31 (GET /boards/7 lists the columns)
-curl -X POST "$API/items/1234/move" -H "Authorization: Bearer $KEY" \
-  -H "Content-Type: application/json" -d '{"column_id": 31}'
+bcurl -X POST "$API/items/1234/move" -H "Content-Type: application/json" -d '{"column_id": 31}'
 ```
 
 ### JavaScript (fetch)

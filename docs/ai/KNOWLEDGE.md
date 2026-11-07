@@ -1419,6 +1419,14 @@ also wait for read / archive actions in flight (a page older than the action is 
 - **Excluded on purpose:** realtime and live co-editing tokens (an open socket would outlive a revoked key), offline
   sync (its change feed and appliers span every area; re-scoping it was not worth the risk), notifications (titles from
   every workspace), the calendar feed link (a credential), and anything account / session / device / key management.
+- **One rule for workspace-level content** (Codex review: bookings): models with the `ScopedToApiKey` trait are
+  filtered by `ApiKeyAccess::scopeModel()` during a key's request — issues and work logs by board / project /
+  workspace, and WORKSPACE-level models (snippet collections + snippets, bookmark groups + links, booking pages +
+  bookings) only for keys over whole workspaces. A new workspace-level model gets the trait and a line in
+  `scopeModel` (a trait without a line there matches nothing). `ApiKeyWorkspaceLevelTest` sweeps them with project- and
+  board-scoped keys.
+- **The new key's secret is never an Inertia prop** (Codex review): create / regenerate answer JSON to an axios
+  request (`no-store`); the page keeps it in component state only, so it never lands in history state or the session.
 - **Board scope is a global scope, not per-endpoint checks** (Codex re-review: timer, issue by key): during a key's
   request `Item` and `TimeEntry` carry an `api-key` global scope (`ApiKeyAccess::scopeItems` / `scopeTimeEntries`), so
   every Eloquent load of an issue or work log — by id, key, relation, list, aggregate — only sees the key's boards /

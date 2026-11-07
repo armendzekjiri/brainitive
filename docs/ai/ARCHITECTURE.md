@@ -607,11 +607,12 @@ Users create **personal API keys** (`brai_…`) and call the App API `/api/v1` f
   (lets keys through) → `AuthorizeApiKey` (priority before `SubstituteBindings`: endpoint, area level + delete flag,
   route-param scope → 403 `key_*` / `workspace_api_keys_disabled`, 404 when the user can't open it) → controller; policies
   pass `ApiKeyGate`; `User::hasWorkspaceAccess / hasProjectAccess / accessibleProjectIds / adminProjectIds` narrow to the
-  key's scope (only for the key's own user). `Item` and `TimeEntry` have an `api-key` global scope during a key's request
-  (`ApiKeyAccess::scopeItems` / `scopeTimeEntries`; ended after the controller by `AuthorizeApiKey`). Explicit list filters: workspaces, projects of a workspace, boards of a
+  key's scope (only for the key's own user). Models with the `ScopedToApiKey` trait (`Item`, `TimeEntry`, snippet collections /
+  snippets, bookmarks / bookmark items, booking pages / bookings) get an `api-key` global scope during a key's request
+  (`ApiKeyAccess::scopeModel`; ended after the controller by `AuthorizeApiKey`). Explicit list filters: workspaces, projects of a workspace, boards of a
   project, dated issues, project detail sections, `/me` workspaces, search viewer, My Work / My Day / agenda issues.
-- **Web:** `ApiKeyController` (`/profile/api-keys`, Inertia `Profile/ApiKeys` + `components/api-keys/*`; the key is only
-  in the create / regenerate response, history-encrypted, `no-store`), `PATCH /workspaces/{workspace}/api-keys`
+- **Web:** `ApiKeyController` (`/profile/api-keys`, Inertia `Profile/ApiKeys` + `components/api-keys/*`; create / regenerate
+  answer JSON to an axios request, `no-store` — the key lives in component state only), `PATCH /workspaces/{workspace}/api-keys`
   (`components/workspaces/WorkspaceApiKeysSetting.tsx`, Legal tab). Keys also in Profile → Connected apps and
   `GET /api/v1/me/connected-apps` (`api_key:<id>`). Email `ApiKeyCreatedNotification`.
 - **Docs:** OpenAPI `x-brainitive-key-ability` + "API keys:" line per operation and the `apiKey` scheme

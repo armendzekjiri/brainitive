@@ -51,28 +51,31 @@ class ApiKeyManagementTest extends TestCase
     {
         Notification::fake();
 
-        $response = $this->actingAs($this->editor)->post(route('profile.api-keys.store'), $this->payload())
-            ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->component('Profile/ApiKeys')
-                ->where('created.key.name', 'Deploy script')
-                ->where('created.key.scope_type', 'boards')
-                ->where('created.key.scope.0.name', $this->board->name)
-                ->where('created.key.abilities.issues', 'write')
-                ->where('created.key.abilities.members', 'none')
-                ->where('created.key.can_delete', false)
-                ->where('created.key.status', 'active'));
+        // a plain JSON answer to the page's own request — never an Inertia page (props, history, session)
+        $response = $this->actingAs($this->editor)->postJson(route('profile.api-keys.store'), $this->payload())
+            ->assertCreated()
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertJsonPath('key.name', 'Deploy script')
+            ->assertJsonPath('key.scope_type', 'boards')
+            ->assertJsonPath('key.scope.0.name', $this->board->name)
+            ->assertJsonPath('key.abilities.issues', 'write')
+            ->assertJsonPath('key.abilities.members', 'none')
+            ->assertJsonPath('key.can_delete', false)
+            ->assertJsonPath('key.status', 'active');
+        $this->assertNull($response->headers->get('X-Inertia'));
 
-        $secret = $response->viewData('page')['props']['created']['secret'];
+        $secret = $response->json('secret');
         $key = ApiKey::query()->sole();
         $this->assertSame(hash('sha256', $secret), $key->token_hash);
         $this->assertSame($this->editor->id, $key->user_id);
         $this->assertEqualsWithDelta(now()->addDays(90)->timestamp, $key->expires_at->timestamp, 5);
         $this->assertNull(session('created'));
+        $this->assertStringNotContainsString($secret, (string) json_encode(session()->all()));
         Notification::assertSentTo($this->editor, ApiKeyCreatedNotification::class, fn ($n) => $n->key->is($key));
 
         // never again: the list has the prefix, not the secret
         $index = $this->actingAs($this->editor)->get(route('profile.api-keys.index'))->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->component('Profile/ApiKeys')->where('created', null)->has('apiKeys', 1)
+            ->assertInertia(fn (Assert $page) => $page->component('Profile/ApiKeys')->missing('created')->has('apiKeys', 1)
                 ->where('apiKeys.0.prefix', $key->prefix));
         $this->assertStringNotContainsString($secret, $index->getContent());
         $this->assertStringNotContainsString($key->token_hash, $index->getContent());
@@ -98,7 +101,7 @@ class ApiKeyManagementTest extends TestCase
         $this->assertDatabaseCount('api_keys', 0);
 
         // unknown areas are dropped, read-only areas capped
-        $this->actingAs($this->editor)->post(route('profile.api-keys.store'), $this->payload(['scope_type' => 'all', 'abilities' => ['issues' => 'read', 'members' => 'write', 'billing' => 'write']]))->assertOk();
+        $this->actingAs($this->editor)->postJson(route('profile.api-keys.store'), $this->payload(['scope_type' => 'all', 'abilities' => ['issues' => 'read', 'members' => 'write', 'billing' => 'write']]))->assertCreated();
         $this->assertSame('read', ApiKey::query()->sole()->abilities['members']);
         $this->assertArrayNotHasKey('billing', ApiKey::query()->sole()->abilities);
         $this->assertNull(ApiKey::query()->sole()->scope_ids);
@@ -112,8 +115,8 @@ class ApiKeyManagementTest extends TestCase
         $this->actingAs($this->viewer)->post(route('profile.api-keys.regenerate', $key->id))->assertNotFound();
         $this->assertNull($key->fresh()->revoked_at);
 
-        $response = $this->actingAs($this->editor)->post(route('profile.api-keys.regenerate', $key->id))->assertOk();
-        $new = $response->viewData('page')['props']['created']['secret'];
+        $response = $this->actingAs($this->editor)->postJson(route('profile.api-keys.regenerate', $key->id))->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
+        $new = $response->json('secret');
         $this->assertNotSame($old, $new);
         $this->getJson('/api/v1/me', $this->keyHeaders($old))->assertUnauthorized();
         $this->app['auth']->forgetGuards();
@@ -167,7 +170,7 @@ class ApiKeyManagementTest extends TestCase
 
         $this->actingAs($this->editor)->get(route('profile.api-keys.index'))->assertOk()
             ->assertInertia(fn (Assert $page) => $page->where('enabled', false));
-        $this->actingAs($this->editor)->post(route('profile.api-keys.store'), $this->payload())->assertForbidden();
+        $this->actingAs($this->editor)->postJson(route('profile.api-keys.store'), $this->payload())->assertForbidden();
         $this->assertDatabaseCount('api_keys', 0);
     }
 

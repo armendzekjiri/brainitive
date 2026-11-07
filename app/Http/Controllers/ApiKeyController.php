@@ -10,16 +10,16 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Support\ApiKeys\ApiKeyAreas;
 use App\Support\ApiKeys\ApiKeys;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 /**
- * Profile → API keys (Developer API, v1.52.0): personal API keys for the App API /api/v1. Create (the key is shown
- * once, in the response of the create / regenerate request itself — never put in the session), list, regenerate,
- * revoke. Web only: an API key can't manage keys.
+ * Profile → API keys (Developer API, v1.52.0): personal API keys for the App API /api/v1. Create and regenerate answer
+ * JSON to the page's own request (the key is shown once from component state — never in Inertia props, history or the
+ * session), list, revoke. Web only: an API key can't manage keys.
  */
 class ApiKeyController extends Controller
 {
@@ -28,7 +28,7 @@ class ApiKeyController extends Controller
         return $this->page($request);
     }
 
-    public function store(StoreApiKeyRequest $request): SymfonyResponse
+    public function store(StoreApiKeyRequest $request): JsonResponse
     {
         abort_unless(ApiKeys::enabled(), 403, 'API keys are turned off on this server.');
         $validated = $request->validated();
@@ -44,20 +44,20 @@ class ApiKeyController extends Controller
             $request->ip(),
         );
 
-        return $this->secretPage($request, $created['key'], $created['secret']);
+        return $this->secretResponse($created['key'], $created['secret']);
     }
 
-    public function regenerate(Request $request, int $apiKey): SymfonyResponse
+    public function regenerate(Request $request, int $apiKey): JsonResponse
     {
         abort_unless(ApiKeys::enabled(), 403, 'API keys are turned off on this server.');
         $key = $this->own($request->user(), $apiKey);
         if (! $key->isActive()) {
-            return redirect()->route('profile.api-keys.index')->with('error', 'Only an active key can get a new secret. Create a new key instead.');
+            return response()->json(['message' => 'Only an active key can get a new secret. Create a new key instead.'], 422);
         }
 
         $regenerated = ApiKeys::regenerate($key, $request->ip());
 
-        return $this->secretPage($request, $regenerated['key'], $regenerated['secret']);
+        return $this->secretResponse($regenerated['key'], $regenerated['secret']);
     }
 
     public function destroy(Request $request, int $apiKey): RedirectResponse
@@ -86,14 +86,8 @@ class ApiKeyController extends Controller
         return $key;
     }
 
-    private function page(Request $request, ?ApiKey $created = null, ?string $secret = null): Response
+    private function page(Request $request): Response
     {
-        if ($secret !== null) {
-            // the one response carrying the key: encrypted in the browser history (Back can't show it in clear
-            // text later; the key is cleared when the session ends) and never cached
-            Inertia::encryptHistory();
-        }
-
         $user = $request->user();
         $options = self::options($user);
 
@@ -114,20 +108,20 @@ class ApiKeyController extends Controller
             'expiryDays' => config('api-keys.expiry_days'),
             'enabled' => ApiKeys::enabled(),
             'rateLimits' => config('api-keys.rate_limits'),
-            'created' => $created === null ? null : ['key' => self::present($created, $options), 'secret' => $secret],
             'apiBaseUrl' => rtrim((string) config('app.url'), '/').'/api/v1',
         ]);
 
         return $page;
     }
 
-    /** The response carrying a new key: never stored by a cache. */
-    private function secretPage(Request $request, ApiKey $key, string $secret): SymfonyResponse
+    /**
+     * The one response that carries a new key: plain JSON for the page's own request (never an Inertia page, so it
+     * is never in page props, the browser history or the session), not cached.
+     */
+    private function secretResponse(ApiKey $key, string $secret): JsonResponse
     {
-        $response = $this->page($request, $key, $secret)->toResponse($request);
-        $response->headers->set('Cache-Control', 'no-store, private');
-
-        return $response;
+        return response()->json(['key' => self::present($key, self::options($key->user)), 'secret' => $secret], 201)
+            ->header('Cache-Control', 'no-store, private');
     }
 
     /**

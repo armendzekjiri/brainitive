@@ -4,6 +4,8 @@ namespace App\Support\ApiKeys;
 
 use App\Models\Attachment;
 use App\Models\Board;
+use App\Models\Booking;
+use App\Models\BookingPage;
 use App\Models\Bookmark;
 use App\Models\BookmarkItem;
 use App\Models\ClientDeliverable;
@@ -74,6 +76,8 @@ final class ApiKeyLocator
         Snippet::class => 'library',
         Bookmark::class => 'library',
         BookmarkItem::class => 'library',
+        BookingPage::class => 'calendar',
+        Booking::class => 'calendar',
     ];
 
     /** @var array<int, int> */
@@ -122,6 +126,9 @@ final class ApiKeyLocator
             $model instanceof SnippetCollection, $model instanceof Bookmark => ($ws = $id('workspace_id')) === null ? null : new ApiKeyLocation($ws, workspaceWide: true),
             $model instanceof Snippet => self::wide('snippet_collections', $id('collection_id')),
             $model instanceof BookmarkItem => self::wide('bookmarks', $id('bookmark_id')),
+            // booking pages are workspace-level content: whole workspaces only
+            $model instanceof BookingPage => ($ws = $id('workspace_id')) === null ? null : new ApiKeyLocation($ws, workspaceWide: true),
+            $model instanceof Booking => self::wide('booking_pages', self::int((string) DB::table('booking_types')->where('id', (int) $model->getAttribute('booking_type_id'))->value('booking_page_id'))),
             default => null,
         };
     }

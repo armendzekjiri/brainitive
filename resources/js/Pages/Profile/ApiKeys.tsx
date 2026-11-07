@@ -1,10 +1,11 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { useState } from 'react';
 import { ArrowLeft, BookOpen, ExternalLink, Plus } from 'lucide-react';
 import AppLayout from '@/Layouts/AppLayout';
 import { ApiKeyList } from '@/components/api-keys/ApiKeyList';
 import { ApiKeySecret } from '@/components/api-keys/ApiKeySecret';
 import { CreateApiKeyDialog } from '@/components/api-keys/CreateApiKeyDialog';
+import type { CreatedApiKey } from '@/components/api-keys/secretRequest';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { ApiKeyArea, ApiKeyOptions, ApiKeyRow, PageProps } from '@/types';
@@ -16,7 +17,6 @@ type Props = PageProps<{
     expiryDays: (number | null)[];
     enabled: boolean;
     rateLimits: { read: number; write: number };
-    created: null | { key: ApiKeyRow; secret: string };
     apiBaseUrl: string;
 }>;
 
@@ -24,17 +24,12 @@ const DOCS_URL = 'https://docs.brainitive.app/integrations/developer-api';
 const REFERENCE_URL = 'https://docs.brainitive.app/api';
 
 /** Profile → API keys (Developer API): personal keys for the Brainitive API /api/v1. */
-export default function ApiKeys({ apiKeys, options, areas, expiryDays, enabled, rateLimits, created, apiBaseUrl }: Props) {
+export default function ApiKeys({ apiKeys, options, areas, expiryDays, enabled, rateLimits, apiBaseUrl }: Props) {
     const [creating, setCreating] = useState(false);
-    // the secret of the last create / regenerate response; hidden by "Done" (never stored anywhere)
-    const [hiddenSecret, setHiddenSecret] = useState<string | null>(null);
-    const showSecret = created !== null && created.secret !== hiddenSecret;
-
-    const done = () => {
-        if (created) setHiddenSecret(created.secret);
-        // replace the history entry so Back doesn't bring the secret back
-        router.visit(route('profile.api-keys.index'), { replace: true, preserveScroll: true });
-    };
+    // the secret of the last create / regenerate (a plain JSON answer): component state only — never page props,
+    // history or storage; "Done" drops it for good
+    const [created, setCreated] = useState<CreatedApiKey | null>(null);
+    const done = () => setCreated(null);
 
     return (
         <AppLayout>
@@ -55,7 +50,7 @@ export default function ApiKeys({ apiKeys, options, areas, expiryDays, enabled, 
                     </p>
                 </div>
 
-                {showSecret && created && <ApiKeySecret apiKey={created.key} secret={created.secret} apiBaseUrl={apiBaseUrl} onDone={done} />}
+                {created && <ApiKeySecret apiKey={created.key} secret={created.secret} apiBaseUrl={apiBaseUrl} onDone={done} />}
 
                 <Card>
                     <CardHeader>
@@ -108,12 +103,14 @@ export default function ApiKeys({ apiKeys, options, areas, expiryDays, enabled, 
                                 API keys are turned off on this server by its administrator.
                             </p>
                         )}
-                        <ApiKeyList apiKeys={apiKeys} areas={areas} />
+                        <ApiKeyList apiKeys={apiKeys} areas={areas} onRegenerated={setCreated} />
                     </CardContent>
                 </Card>
             </div>
 
-            {enabled && <CreateApiKeyDialog open={creating} onOpenChange={setCreating} options={options} areas={areas} expiryDays={expiryDays} />}
+            {enabled && (
+                <CreateApiKeyDialog open={creating} onOpenChange={setCreating} options={options} areas={areas} expiryDays={expiryDays} onCreated={setCreated} />
+            )}
         </AppLayout>
     );
 }

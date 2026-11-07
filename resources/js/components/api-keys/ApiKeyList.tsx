@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { ApiKeyArea, ApiKeyRow, PageProps } from '@/types';
 import { ago, expirySummary, whatSummary, whereSummary } from './format';
+import { type CreatedApiKey, errorMessage, requestSecret } from './secretRequest';
 
 const STATUS: Record<ApiKeyRow['status'], { label: string; className: string }> = {
     active: { label: 'Active', className: 'border-transparent bg-primary/10 text-primary' },
@@ -27,7 +28,7 @@ const STATUS: Record<ApiKeyRow['status'], { label: string; className: string }> 
 type Pending = { action: 'revoke' | 'regenerate'; key: ApiKeyRow } | null;
 
 /** The user's API keys: active first, then the ones revoked / expired in the last 30 days. */
-export function ApiKeyList({ apiKeys, areas }: { apiKeys: ApiKeyRow[]; areas: ApiKeyArea[] }) {
+export function ApiKeyList({ apiKeys, areas, onRegenerated }: { apiKeys: ApiKeyRow[]; areas: ApiKeyArea[]; onRegenerated: (created: CreatedApiKey) => void }) {
     // kept after closing so the dialog text doesn't change while it animates out
     const [pending, setPending] = useState<Pending>(null);
     const [open, setOpen] = useState(false);
@@ -52,7 +53,13 @@ export function ApiKeyList({ apiKeys, areas }: { apiKeys: ApiKeyRow[]; areas: Ap
                 onSuccess: (page) => toast.success((page.props as PageProps).flash?.success ?? 'API key revoked.'),
             });
         } else {
-            router.post(route('profile.api-keys.regenerate', key.id), {}, options);
+            requestSecret(route('profile.api-keys.regenerate', key.id))
+                .then((created) => {
+                    onRegenerated(created);
+                    router.reload({ only: ['apiKeys'] });
+                })
+                .catch((error) => toast.error(errorMessage(error, 'Could not regenerate the key.')))
+                .finally(() => setBusy(null));
         }
         setOpen(false);
     };

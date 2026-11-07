@@ -3,8 +3,8 @@
 namespace App\Models;
 
 use App\Models\Concerns\GuardsContentGrowth;
+use App\Models\Concerns\ScopedToApiKey;
 use App\Observers\ItemObserver;
-use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Collab\ItemCollab;
 use App\Support\Imports\ImportScope;
 use App\Support\Live\BoardLive;
@@ -27,6 +27,7 @@ use Illuminate\Support\Str;
 class Item extends Model
 {
     use GuardsContentGrowth, HasFactory, SoftDeletes;
+    use ScopedToApiKey;
 
     /** Set while a live description save writes (BRAI-151): that one doesn't reset the live document. */
     public bool $collabWrite = false;
@@ -76,9 +77,6 @@ class Item extends Model
     protected static function boot(): void
     {
         parent::boot();
-
-        // a personal API key's request: only issues of boards the key reaches (Developer API, ApiKeyAccess)
-        static::addGlobalScope('api-key', fn (Builder $query) => ApiKeyAccess::current()?->scopeItems($query));
 
         static::creating(function (Item $item) {
             if (empty($item->uuid)) {

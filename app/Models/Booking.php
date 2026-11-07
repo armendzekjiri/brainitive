@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ScopedToApiKey;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -16,6 +17,8 @@ use Illuminate\Support\Str;
  */
 class Booking extends Model
 {
+    use ScopedToApiKey;
+
     public const CONFIRMED = 'confirmed';
 
     public const CANCELLED = 'cancelled';

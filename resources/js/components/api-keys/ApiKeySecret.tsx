@@ -21,8 +21,9 @@ async function copy(text: string, what: string) {
  */
 export function ApiKeySecret({ apiKey, secret, apiBaseUrl, onDone }: { apiKey: ApiKeyRow; secret: string; apiBaseUrl: string; onDone: () => void }) {
     const ref = useRef<HTMLDivElement>(null);
-    // the example never contains the key (shell history, process lists): it reads it from an environment variable
-    const curl = `curl -H "Authorization: Bearer $BRAINITIVE_API_KEY" ${apiBaseUrl}/me`;
+    // the key never appears in the command: not in shell history, and not in curl's arguments (process lists) — the
+    // header comes on stdin through a bash here-string (curl -H @-, curl 7.55+)
+    const curl = `curl -H @- ${apiBaseUrl}/me <<<"Authorization: Bearer $BRAINITIVE_API_KEY"`;
 
     useEffect(() => {
         ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -68,9 +69,10 @@ export function ApiKeySecret({ apiKey, secret, apiBaseUrl, onDone }: { apiKey: A
                             </Button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            Put the key in an environment variable first, never in a command or script (shell history, process lists): run{' '}
-                            <code className="font-mono">read -rs BRAINITIVE_API_KEY &amp;&amp; export BRAINITIVE_API_KEY</code> and paste the
-                            key, or use your CI's secret settings. Then:
+                            Keep the key out of commands and scripts. In bash, run{' '}
+                            <code className="font-mono">read -rs BRAINITIVE_API_KEY</code> and paste it (nothing is echoed or saved in your
+                            history), or use your CI's secret settings. The example passes the header on stdin, so the key isn't in curl's
+                            arguments either (visible to other users in process lists):
                         </p>
                         <pre className="overflow-x-auto rounded-md border bg-muted p-3 font-mono text-xs">
                             <code>{curl}</code>

@@ -1,5 +1,6 @@
-import { useForm } from '@inertiajs/react';
-import type { FormEvent } from 'react';
+import { router, useForm } from '@inertiajs/react';
+import { useState, type FormEvent } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -8,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { ApiKeyArea, ApiKeyLevel, ApiKeyOptions, ApiKeyScopeType } from '@/types';
 import { ApiKeyScopePicker } from './ApiKeyScopePicker';
 import { expiryLabel } from './format';
+import { type CreatedApiKey, errorMessage, requestSecret, validationErrors } from './secretRequest';
 
 const SCOPES: { value: ApiKeyScopeType; label: string }[] = [
     { value: 'all', label: 'All my workspaces' },
@@ -42,9 +44,11 @@ export function CreateApiKeyDialog({
     options,
     areas,
     expiryDays,
+    onCreated,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onCreated: (created: CreatedApiKey) => void;
     options: ApiKeyOptions;
     areas: ApiKeyArea[];
     expiryDays: (number | null)[];
@@ -73,21 +77,30 @@ export function CreateApiKeyDialog({
         form.setData('abilities', Object.fromEntries(areas.map((a) => [a.key, level])));
     };
 
-    const submit = (e: FormEvent) => {
+    const [processing, setProcessing] = useState(false);
+
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
-        form.transform((d) => (d.scope_type === 'all' ? { ...d, scope_ids: [] } : d));
-        form.post(route('profile.api-keys.store'), {
-            preserveScroll: true,
-            onSuccess: () => {
-                form.reset();
-                form.clearErrors();
-                onOpenChange(false);
-            },
-        });
+        setProcessing(true);
+        form.clearErrors();
+        try {
+            const data = form.data.scope_type === 'all' ? { ...form.data, scope_ids: [] } : form.data;
+            const created = await requestSecret(route('profile.api-keys.store'), data);
+            form.reset();
+            onOpenChange(false);
+            onCreated(created);
+            router.reload({ only: ['apiKeys'] });
+        } catch (error) {
+            const fields = validationErrors(error);
+            if (fields) form.setError(fields as never);
+            else toast.error(errorMessage(error, 'Could not create the key.'));
+        } finally {
+            setProcessing(false);
+        }
     };
 
     const close = (next: boolean) => {
-        if (!next && form.processing) return;
+        if (!next && processing) return;
         onOpenChange(next);
     };
 
@@ -234,10 +247,10 @@ export function CreateApiKeyDialog({
                     </div>
 
                     <DialogFooter className="gap-2">
-                        <Button type="button" variant="outline" onClick={() => close(false)} disabled={form.processing}>
+                        <Button type="button" variant="outline" onClick={() => close(false)} disabled={processing}>
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={form.processing}>
+                        <Button type="submit" disabled={processing}>
                             Create key
                         </Button>
                     </DialogFooter>
