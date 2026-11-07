@@ -30,7 +30,11 @@ class ItemDevelopment
             'state' => $l->state,
             'author' => $l->author,
             'occurred_at' => $l->occurred_at?->toIso8601String(),
-        ] + ($kind === 'pull_request' ? ['primary' => $l->id === $primaryId] : []))->values()->all();
+        ] + ($kind === 'pull_request' ? [
+            'primary' => $l->id === $primaryId,
+            // a merge whose card move a board workflow rule refused (v1.52.0): the reason
+            'merge_blocked' => ($l->meta['merge_transition']['result'] ?? null) === 'blocked' ? (string) ($l->meta['merge_transition']['message'] ?? '') : null,
+        ] : []))->values()->all();
 
         return [
             'connected' => $connected,

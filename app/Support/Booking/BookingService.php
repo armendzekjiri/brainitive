@@ -13,6 +13,7 @@ use App\Notifications\BookingCancelledNotification;
 use App\Notifications\BookingCreatedNotification;
 use App\Notifications\BookingGuestNotification;
 use App\Support\Boards\ItemComments;
+use App\Support\Boards\WorkflowGuard;
 use App\Support\Calendar\CalendarProviders;
 use App\Support\Meetings\MeetingCalendars;
 use Carbon\CarbonImmutable;
@@ -103,7 +104,8 @@ final class BookingService
         }
 
         self::writeCalendarEvent($booking);
-        self::createCard($booking);
+        // a card made for the host from a public page: the board's workflow rules don't apply (the host chose the column)
+        WorkflowGuard::bypass(fn () => self::createCard($booking));
 
         $booking->load('type.page.user', 'type.page.workspace');
         $page->user->notify(new BookingCreatedNotification($booking, $replaces));

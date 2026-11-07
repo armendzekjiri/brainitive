@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\GuardsContentGrowth;
 use App\Observers\ItemObserver;
+use App\Support\Boards\WorkflowGuard;
 use App\Support\Collab\ItemCollab;
 use App\Support\Imports\ImportScope;
 use App\Support\Live\BoardLive;
@@ -83,6 +84,9 @@ class Item extends Model
 
         // completed_at follows the column on every write path (BRAI-346: done retention needs it)
         static::saving(fn (Item $item) => $item->syncCompletedAtWithColumn());
+
+        // the board's workflow rules (v1.52.0): every create and column change, as the signed-in user
+        static::saving(fn (Item $item) => WorkflowGuard::instance()->onSaving($item));
 
         // Auto-watch: add reporter to watchers after creation
         static::created(function (Item $item) {

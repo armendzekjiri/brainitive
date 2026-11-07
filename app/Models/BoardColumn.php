@@ -6,6 +6,7 @@ use App\Support\Live\BoardLive;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 class BoardColumn extends Model
@@ -72,6 +73,14 @@ class BoardColumn extends Model
     public function items(): HasMany
     {
         return $this->hasMany(Item::class, 'column_id')->orderBy('position');
+    }
+
+    /**
+     * The column's workflow rule (who may move cards in, from where, conditions; v1.52.0).
+     */
+    public function rule(): HasOne
+    {
+        return $this->hasOne(BoardColumnRule::class);
     }
 
     /**

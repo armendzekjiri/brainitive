@@ -9,6 +9,7 @@ use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\RecurringIssue;
 use App\Models\User;
+use App\Support\Boards\WorkflowRuleViolation;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Auth;
@@ -70,7 +71,15 @@ class RecurringIssueRunner
                 return null;
             }
 
-            $item = self::actingAs($creator, fn () => self::createIssue($template, $board, $creator, $date));
+            try {
+                // a savepoint: a refused create leaves nothing behind, the pause below is still saved
+                $item = DB::transaction(fn () => self::actingAs($creator, fn () => self::createIssue($template, $board, $creator, $date)));
+            } catch (WorkflowRuleViolation $e) {
+                // the board's workflow rules (v1.52.0) refuse the issue for its creator
+                $template->update(['paused_at' => $now, 'last_error' => 'Paused: '.$e->text()]);
+
+                return null;
+            }
             $template->occurrences()->create(['occurrence_date' => $date->toDateString(), 'item_id' => $item->id]);
 
             $template->fill([

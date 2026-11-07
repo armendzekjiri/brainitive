@@ -16,6 +16,7 @@ use App\Models\Board;
 use App\Models\Item;
 use App\Models\Project;
 use App\Support\Boards\Issues;
+use App\Support\Boards\WorkflowRuleViolation;
 use App\Support\Entitlements\LimitReached;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -213,6 +214,8 @@ class IssueController extends Controller
     {
         try {
             return $write();
+        } catch (WorkflowRuleViolation $e) {
+            throw $e; // a board workflow rule (v1.52.0): keeps its `workflow_rule` details
         } catch (ValidationException $e) {
             $errors = [];
             foreach ($e->errors() as $key => $messages) {

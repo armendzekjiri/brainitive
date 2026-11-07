@@ -231,6 +231,63 @@ export interface BoardColumn {
     is_done_column: boolean;
     items?: Item[];
     items_count?: number;
+    /** The board's workflow rule for entering this column, as it applies to the signed-in user (null = none). */
+    workflow?: ColumnWorkflow | null;
+}
+
+/** Workflow rule hints for one column (v1.52.0, WorkflowRules::clientPayload) — the server decides every move. */
+export interface ColumnWorkflow {
+    /** The rule as sentences ("Cards can enter Done only from Testing.", …). */
+    summary: string[];
+    /** Cards may only come from these columns; [] = from anywhere (and no creating here when set). */
+    allowed_from: number[];
+    requires: { assignee: boolean; subtasks_done: boolean; due_date: boolean };
+    /** The who-part of the rule allows the signed-in user. */
+    actor_allowed: boolean;
+    actor_reason: string | null;
+}
+
+/** A column's workflow rule as the settings page edits it. */
+export interface WorkflowRuleSettings {
+    allowed_user_ids: number[];
+    allowed_roles: string[];
+    allowed_from_column_ids: number[];
+    /** The who-part restricts even with nobody listed (the listed people left): nobody may move cards in. */
+    restrict_who?: boolean;
+    /** Restricted with nobody left (server-computed). */
+    locked?: boolean;
+    /** Listed people who can no longer open the project (dropped on the next save). */
+    former_user_ids?: number[];
+    require_assignee: boolean;
+    require_subtasks_done: boolean;
+    require_due_date: boolean;
+}
+
+/** Someone a workflow rule can list (WorkflowRules::members). */
+export interface WorkflowRuleMember {
+    id: number;
+    name: string;
+    role: string;
+    /** May edit the board's cards at all (project viewers can't). */
+    can_move: boolean;
+    /** Listed in a rule but no longer in the project. */
+    former: boolean;
+}
+
+/** A change to a board's workflow rules (board history, WorkflowRules::history). */
+export interface WorkflowRuleChange {
+    id: number;
+    action: 'workflow_rule_created' | 'workflow_rule_updated' | 'workflow_rule_deleted';
+    column: string;
+    before: string;
+    after: string;
+    user: string | null;
+    at: string;
+}
+
+export interface WorkflowRuleRole {
+    key: string;
+    label: string;
 }
 
 export interface Item {

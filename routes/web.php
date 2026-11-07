@@ -6,6 +6,7 @@ use App\Http\Controllers\AppDeviceController;
 use App\Http\Controllers\BoardBulkItemController;
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BoardViewController;
+use App\Http\Controllers\BoardWorkflowRuleController;
 use App\Http\Controllers\BookingPageController;
 use App\Http\Controllers\BookingTypeController;
 use App\Http\Controllers\BookmarkController;
@@ -480,6 +481,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('boards/{board:slug}/items/bulk', [BoardBulkItemController::class, 'destroy'])->name('boards.items.bulk.destroy');
             Route::put('boards/{board:slug}/columns/{column}', [BoardController::class, 'updateColumn'])->name('boards.columns.update');
             Route::delete('boards/{board:slug}/columns/{column}', [BoardController::class, 'destroyColumn'])->name('boards.columns.destroy');
+            // workflow rules per target column (v1.52.0)
+            Route::put('boards/{board:slug}/columns/{column}/rule', [BoardWorkflowRuleController::class, 'update'])->name('boards.columns.rule.update');
+            Route::delete('boards/{board:slug}/columns/{column}/rule', [BoardWorkflowRuleController::class, 'destroy'])->name('boards.columns.rule.destroy');
             Route::post('boards/{board:slug}/items', [BoardController::class, 'storeItem'])->name('boards.items.store');
             Route::post('boards/{board:slug}/items/{item}/duplicate', [BoardController::class, 'duplicateItem'])->name('boards.items.duplicate');
             Route::get('boards/{board:slug}/items/{item}', [BoardController::class, 'showItem'])->name('boards.items.show');

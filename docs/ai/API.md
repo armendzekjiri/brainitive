@@ -681,15 +681,15 @@ created_at, updated_at}`. Activity option: `{id, name, color, pricing_type: hour
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
 | `GET /api/v1/projects/{id}/boards` | app + verified | A project's boards in the web's order, cursor-paginated, `updated_since`. Can't open the project → 404 | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
-| `GET /api/v1/boards/{id}` | app + verified | One board: `columns` (WIP limit, done flag, `cards_count`), `swimlanes`, `done_retention_days`, `active_sprint`, `can` | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
+| `GET /api/v1/boards/{id}` | app + verified | One board: `columns` (WIP limit, done flag, `cards_count`, `workflow` rule hints — v1.52.0), `swimlanes`, `done_retention_days`, `active_sprint`, `can` | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
 | `GET /api/v1/boards/{id}/items?column=&include_old_done=&q=&assignee=&status=&labels=&priority=&type=&quick=&f<id>=` | app + verified | The board's cards as the board page shows them, cursor-paginated, `updated_since`; `column` not on the board → 422. Filters = the board URL's / a saved view's params (BRAI-407) | Read + move cards | BRAI-187, BRAI-191 | ready (v1.49.0, BRAI-403 / 407) |
-| `POST /api/v1/items/{id}/move` | app + verified | Drag & drop: `{column_id, position? (0 = top), with_subtasks?}` → `{data: card}`. Into a done column completes it (`with_subtasks`: its open subtasks too), out of one reopens it; watchers are notified. 403 without `can.edit_items`, 404 not visible / malformed id, 422 column of another board | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
+| `POST /api/v1/items/{id}/move` | app + verified | Drag & drop: `{column_id, position? (0 = top), with_subtasks?}` → `{data: card}`. Into a done column completes it (`with_subtasks`: its open subtasks too), out of one reopens it; watchers are notified. 403 without `can.edit_items`, 404 not visible / malformed id, 422 column of another board, 422 + `workflow_rule` a board workflow rule refuses it (v1.52.0) | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
 | `GET /api/v1/projects/{id}/config` | app + verified | What issue forms and filters offer: `{project_id, types, priorities, labels, fields (with options, board_ids), releases (fix versions: unreleased / released), can: {manage}}`, not paginated | Use views + set field values | BRAI-191 | ready (v1.49.0, BRAI-407) |
 | `GET /api/v1/boards/{id}/views` | app + verified | Saved views the user may use (shared + own, the web's order): `{id, name, is_shared, is_own, owner, is_default, layout, params, dropped}`, not paginated | Use views + set field values | BRAI-191 | ready (v1.49.0, BRAI-407) |
 
 Board: `{id, uuid, slug, name, description, type: kanban|scrum|list, position, project: {id, name, key}, workspace: {slug,
 name}, url, created_at, updated_at}`; `GET /boards/{id}` adds `{columns: [{id, name, slug, color, position, is_done, wip_limit,
-cards_count}], done_retention_days, swimlanes: {mode: none|custom|assignee|priority|type|release, rest_name, lanes: [{id, name,
+cards_count, workflow}], done_retention_days, swimlanes: {mode: none|custom|assignee|priority|type|release, rest_name, lanes: [{id, name,
 color, rules: {priority_ids, type_ids, label_ids, assignee_ids, release_ids, overdue}}]}, active_sprint: {id, name, goal,
 start_date, end_date}|null, can: {update, create_items, edit_items, delete_any_item, manage_sprints}}`.
 Card (issue on a board): `{id, work_id: "issue:<id>", key, title, board_id, column_id, status (column name), done, completed_at,
@@ -699,6 +699,12 @@ comments, attachments}, url, created_at, updated_at}`.
 - The cards are what the web board shows (`App\Support\Boards\BoardCards`): subtasks are cards too (`parent_id`); a **Scrum**
   board shows only the running sprint (none running → no cards; backlog and planned sprints: see Sprints); a **Kanban** board
   leaves out done cards finished more than `done_retention_days` ago (`include_old_done=1` lists them too).
+- **Workflow rules (v1.52.0):** `columns[].workflow` = `{summary: [sentences], allowed_from_column_ids: [ids] ([] = from
+  anywhere; set = no creating in that column), requires: {assignee, subtasks_done, due_date}, can_move_here}` or `null` (no
+  rule). Hints for dimming / disabling targets — the server (`WorkflowGuard`) decides. Every write that moves an issue into a
+  column or creates one there (`POST /items/{id}/move`, `POST /boards/{id}/items`, `PATCH /items/{id}`, `/sync` changes) answers
+  a refused one with 422 `validation_failed`, `errors.column_id`, and `workflow_rule: {column_id, column, reason:
+  actor|from|assignee|subtasks|due_date, item_id, item_key}` (show `message`). No role bypasses a rule; rules are edited on the web only.
 - Sorted by `column_id`, then `position` inside the column: group them by `column_id` and lay the columns out in the order of
   `GET /boards/{id}`. `?column=` loads one column (a mobile column view).
 - Swimlanes: the app evaluates the rules as the web does (`resources/js/lib/swimlanes.ts`): first lane whose rules all match
