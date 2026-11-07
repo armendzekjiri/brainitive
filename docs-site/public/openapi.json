@@ -15443,7 +15443,10 @@
                                 "type": "string"
                             },
                             "goal": {
-                                "type": "string"
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
                             },
                             "start_date": {
                                 "type": [
@@ -15629,7 +15632,10 @@
                         "type": "boolean"
                     },
                     "owner": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "is_default": {
                         "type": "boolean",
@@ -17087,14 +17093,23 @@
                         "type": "string"
                     },
                     "url": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "intended_type": {
-                        "type": "string",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "description": "issue | task | page | bookmark | snippet | null: what the user meant it to become"
                     },
                     "source": {
-                        "type": "string",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "description": "where it came from (\"Brainitive Desktop\", \"Browser extension\", \u2026)"
                     },
                     "state": {
@@ -17107,10 +17122,7 @@
                         ]
                     },
                     "captured_at": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
+                        "type": "string"
                     },
                     "processed_at": {
                         "type": [
@@ -17955,7 +17967,7 @@
                         "description": "queued | running | ready | failed | expired"
                     },
                     "file_size": {
-                        "type": "string"
+                        "type": "integer"
                     },
                     "counts": {
                         "type": [
@@ -17965,7 +17977,10 @@
                         "description": "what the ZIP holds, per kind (issues, docs, comments \u2026)"
                     },
                     "error": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "created_at": {
                         "type": [
@@ -18156,7 +18171,7 @@
                 "type": "object",
                 "properties": {
                     "id": {
-                        "type": "string"
+                        "type": "integer"
                     },
                     "client": {
                         "type": "string"
@@ -18168,10 +18183,16 @@
                         "type": "string"
                     },
                     "app_version": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "os_version": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "has_push_token": {
                         "type": "boolean"
@@ -18379,7 +18400,10 @@
                         "type": "string"
                     },
                     "body": {
-                        "type": "string",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "description": "plain text"
                     },
                     "moderation": {
@@ -18391,7 +18415,10 @@
                         "description": "open | planned | building | released | declined (the public roadmap)"
                     },
                     "status_note": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "votes_count": {
                         "type": "integer"
@@ -18498,7 +18525,10 @@
                         "type": "string"
                     },
                     "color": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "archived": {
                         "type": "boolean"
@@ -19962,7 +19992,10 @@
                                     "type": "string"
                                 },
                                 "color": {
-                                    "type": "string"
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
                                 },
                                 "is_done": {
                                     "type": "boolean"
@@ -20034,16 +20067,28 @@
                         "description": "its pipeline column"
                     },
                     "name": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "email": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "phone": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "company": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "source": {
                         "type": "string",
@@ -20062,12 +20107,7 @@
                         "description": "utm_source, utm_medium, utm_campaign, utm_term, utm_content (as sent)",
                         "items": {}
                     },
-                    "referrer": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
+                    "referrer": {},
                     "consent_at": {
                         "type": [
                             "string",
@@ -20075,7 +20115,10 @@
                         ]
                     },
                     "consent_text": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "assignee": {
                         "type": [
@@ -20160,7 +20203,10 @@
                         ]
                     },
                     "timezone": {
-                        "type": "string",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "description": "null until a browser or app sent one; effective_timezone is what reminders use"
                     },
                     "effective_timezone": {
@@ -20306,7 +20352,7 @@
                         ],
                         "properties": {
                             "id": {
-                                "type": "string"
+                                "type": "integer"
                             },
                             "name": {
                                 "type": "string"
@@ -20318,7 +20364,10 @@
                                 "type": "string"
                             },
                             "app_version": {
-                                "type": "string"
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
                             }
                         },
                         "required": [
@@ -20867,7 +20916,7 @@
                             "type": "object",
                             "properties": {
                                 "id": {
-                                    "type": "string"
+                                    "type": "integer"
                                 },
                                 "name": {
                                     "type": "string"
@@ -20911,7 +20960,7 @@
                             "type": "object",
                             "properties": {
                                 "id": {
-                                    "type": "string"
+                                    "type": "integer"
                                 },
                                 "name": {
                                     "type": "string"
@@ -21894,7 +21943,10 @@
                         "description": "the emoji; null for an uploaded image icon"
                     },
                     "message": {
-                        "type": "string",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "description": "the note given when it was published"
                     },
                     "author": {
@@ -21955,7 +22007,10 @@
                         "description": "the emoji; null for an uploaded image icon"
                     },
                     "message": {
-                        "type": "string",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "description": "the note given when it was published"
                     },
                     "author": {
@@ -22156,7 +22211,10 @@
                         "type": "string"
                     },
                     "description": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "rows_count": {
                         "type": "integer"
@@ -22253,7 +22311,10 @@
                         "type": "string"
                     },
                     "description": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "rows_count": {
                         "type": "integer"
@@ -22724,7 +22785,7 @@
                             "type": "object",
                             "properties": {
                                 "id": {
-                                    "type": "string"
+                                    "type": "integer"
                                 },
                                 "slug": {
                                     "type": "string"
@@ -22776,7 +22837,7 @@
                             "type": "object",
                             "properties": {
                                 "id": {
-                                    "type": "string"
+                                    "type": "integer"
                                 },
                                 "slug": {
                                     "type": "string"
@@ -23353,7 +23414,10 @@
                         ]
                     },
                     "description": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "notes_markdown": {
                         "type": [
@@ -24370,7 +24434,10 @@
                         "type": "string"
                     },
                     "goal": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "status": {
                         "type": "string",
@@ -26491,7 +26558,10 @@
                         "description": "daily | weekly | monthly | yearly | null: completing it moves the due date on"
                     },
                     "reminder_minutes": {
-                        "type": "string",
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
                         "description": "minutes before the due time (0, 10, 60, 1440) or null"
                     },
                     "position": {
@@ -26730,7 +26800,10 @@
                         "description": "sanitized HTML, for rendering"
                     },
                     "email_status": {
-                        "type": "string",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "description": "agent replies through a connected mailbox: queued | sent | failed (null otherwise)"
                     },
                     "attachments": {
@@ -28800,7 +28873,7 @@
                 "type": "object",
                 "properties": {
                     "id": {
-                        "type": "string"
+                        "type": "integer"
                     },
                     "spent_on": {
                         "type": "string",
@@ -28814,7 +28887,10 @@
                         "description": "1h 30m"
                     },
                     "note": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "billable": {
                         "type": "boolean"
@@ -28894,10 +28970,16 @@
                                 ]
                             },
                             "key": {
-                                "type": "string"
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
                             },
                             "title": {
-                                "type": "string"
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
                             },
                             "url": {
                                 "type": [
@@ -28927,7 +29009,10 @@
                                 "type": "string"
                             },
                             "color": {
-                                "type": "string"
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
                             },
                             "billable": {
                                 "type": "boolean"
