@@ -31,7 +31,7 @@ final class WorkflowRules
 
     /**
      * Validation for `PUT boards/{board}/columns/{column}/rule`. `restrict_who` (optional): keep the who-part
-     * restricted although nobody is listed (a rule whose listed people are gone stays "only project admins").
+     * restricted although nobody is listed (a rule whose listed people are gone stays locked: nobody).
      *
      * @return array<string, mixed>
      */
@@ -135,7 +135,7 @@ final class WorkflowRules
 
     /**
      * Delete rules that restrict nothing any more (their "allowed from" columns were deleted and nothing else is
-     * set). A who-restricted rule never counts as empty: its people being gone means "only project admins".
+     * set). A who-restricted rule never counts as empty: its people being gone means nobody may move cards in.
      */
     public static function pruneEmpty(?int $boardId = null): int
     {
@@ -183,7 +183,7 @@ final class WorkflowRules
     /**
      * The rule as sentences, e.g. ["Cards can enter Done only from Testing.", "Only Armend Zekjiri or project
      * admins can move cards here.", "Requires an assignee and all subtasks done."]. People who can no longer open
-     * the project are left out; a who-rule with nobody left reads "Only project admins …". Needs `users`,
+     * the project are left out; a who-rule with nobody left reads "Nobody can move cards here right now …". Needs `users`,
      * `fromColumns` and `column` loaded.
      *
      * @return list<string>
@@ -195,7 +195,10 @@ final class WorkflowRules
         if ($rule->fromColumns->isNotEmpty()) {
             $lines[] = "Cards can enter {$name} only from ".self::orList($rule->fromColumns->sortBy('position')->pluck('name')->all()).'.';
         }
-        if (WorkflowGuard::instance()->who($rule)['restricts']) {
+        $who = WorkflowGuard::instance()->who($rule);
+        if ($who['locked']) {
+            $lines[] = 'Nobody can move cards here right now (the rule lists nobody).';
+        } elseif ($who['restricts']) {
             $lines[] = 'Only '.self::whoList($rule).' can move cards here.';
         }
         $requires = array_keys(array_filter([
@@ -214,6 +217,16 @@ final class WorkflowRules
     public static function sentence(?BoardColumnRule $rule): string
     {
         return $rule ? implode(' ', self::summary($rule)) : '';
+    }
+
+    /** Why someone the who-part doesn't allow can't move cards into the rule's column (the 422 / hint text). */
+    public static function actorReason(BoardColumnRule $rule): string
+    {
+        $name = (string) $rule->column?->name;
+
+        return WorkflowGuard::instance()->who($rule)['locked']
+            ? "Nobody can move cards to {$name} right now (the rule lists nobody)."
+            : 'Only '.self::whoList($rule)." can move cards to {$name}.";
     }
 
     /** "Armend Zekjiri, Jane Doe or project admins" (current members first, by name; then roles). */
@@ -269,7 +282,7 @@ final class WorkflowRules
                     'due_date' => (bool) $rule->require_due_date,
                 ],
                 'actor_allowed' => $allowed,
-                'actor_reason' => $allowed ? null : 'Only '.self::whoList($rule).' can move cards to '.$rule->column?->name.'.',
+                'actor_reason' => $allowed ? null : self::actorReason($rule),
             ];
         }
 
@@ -279,7 +292,7 @@ final class WorkflowRules
     /**
      * What the settings page edits, per column id. `allowed_user_ids` = people who can still open the project
      * (others are in `former_user_ids`, dropped on the next save); `restrict_who` keeps the who-part restricted;
-     * `locked` = restricted with nobody left (only project admins).
+     * `locked` = restricted with nobody left (nobody may move cards in).
      *
      * @return array<int, array{allowed_user_ids: list<int>, former_user_ids: list<int>, allowed_roles: list<string>, allowed_from_column_ids: list<int>, restrict_who: bool, locked: bool, require_assignee: bool, require_subtasks_done: bool, require_due_date: bool}>
      */

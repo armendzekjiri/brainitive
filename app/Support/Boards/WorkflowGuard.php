@@ -29,16 +29,14 @@ use WeakMap;
  * Creating an issue counts as entering its column from nowhere: the who-rule and the conditions apply, and a
  * column that can only be entered from certain columns can't be created into. No role bypasses a rule.
  *
- * The who-part: listed members who can still open the project OR listed roles; a rule that listed people of whom
- * none is left (deleted / left the project) means "only project admins" (`LOCKED_ROLES`), never "anyone".
+ * The who-part: listed members who can still open the project OR listed roles. A rule that listed people of whom
+ * none is left (deleted / left the project) and no roles is `locked`: NOBODY may move cards in (like a Jira transition
+ * condition nobody meets) — no admin fallback. Project / workspace admins fix it by editing the rule.
  *
  * One instance per request (rules, members and roles are cached; forgotten on every routed request).
  */
 final class WorkflowGuard
 {
-    /** Who may move cards in when a rule restricts who but nobody listed is left. */
-    public const LOCKED_ROLES = ['project_admin'];
-
     private static int $bypass = 0;
 
     /** @var array<int, array{project: Project|null, rules: Collection<int, BoardColumnRule>, members: array<int, true>}> board id => setup */
@@ -97,7 +95,7 @@ final class WorkflowGuard
 
     /**
      * The who-part as it applies now: listed members who can still open the project, the listed roles, and whether
-     * it restricts at all. A restricting rule with nobody left falls back to LOCKED_ROLES (`locked`).
+     * it restricts at all. A restricting rule with nobody left is `locked`: nobody passes it.
      *
      * @return array{restricts: bool, users: Collection<int, User>, roles: list<string>, locked: bool}
      */
@@ -109,7 +107,7 @@ final class WorkflowGuard
         $restricts = (bool) $rule->restrict_who || $users->isNotEmpty() || $roles !== [];
         $locked = $restricts && $users->isEmpty() && $roles === [];
 
-        return ['restricts' => $restricts, 'users' => $users, 'roles' => $locked ? self::LOCKED_ROLES : $roles, 'locked' => $locked];
+        return ['restricts' => $restricts, 'users' => $users, 'roles' => $roles, 'locked' => $locked];
     }
 
     /**
@@ -138,7 +136,7 @@ final class WorkflowGuard
 
         $project = $this->setup((int) $to->board_id)['project'];
         if ($actor && $project && ! $this->actorAllowed($rule, $actor, $project)) {
-            return WorkflowRuleViolation::make('actor', 'Only '.WorkflowRules::whoList($rule)." can move cards to {$to->name}.", $to, $item);
+            return WorkflowRuleViolation::make('actor', WorkflowRules::actorReason($rule), $to, $item);
         }
 
         $from = $rule->fromColumns;
@@ -218,6 +216,9 @@ final class WorkflowGuard
         $who = $this->who($rule);
         if (! $who['restricts']) {
             return true;
+        }
+        if ($who['locked']) {
+            return false; // the rule lists nobody: nobody, admins included
         }
         if ($who['users']->contains('id', $actor->id)) {
             return true;

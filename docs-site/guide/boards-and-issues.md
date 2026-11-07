@@ -37,7 +37,7 @@ Workflow rules decide **who may move cards into a column, from which columns, an
 > Cards can enter **Done** from **[Testing]** · Moved here by **[Armend Zekjiri] [Project admins]** · Only when the card has **[all subtasks done]**
 
 - **From:** pick the columns cards may come from. Empty means *from anywhere*. A column with a "from" list can't have cards created in it directly — a new card has no previous column.
-- **Moved here by:** pick people and/or roles (**Workspace owner**, **Workspace admins**, **Project admins**, **Project editors**). Empty means *anyone who can edit cards*. Someone who is listed **or** has a listed role may move cards in. If everyone you listed leaves the project or is deleted, the rule doesn't open up: only project admins can then move cards in, until an admin picks new people.
+- **Moved here by:** pick people and/or roles (**Workspace owner**, **Workspace admins**, **Project admins**, **Project editors**). Empty means *anyone who can edit cards*. Someone who is listed **or** has a listed role may move cards in. If everyone you listed leaves the project or is deleted (and no role is listed), the rule doesn't open up: **nobody** can move cards into that column — admins included — until a project admin edits the rule. The settings page warns about it.
 - **Only when the card has:** an assignee, all subtasks done, a due date.
 
 The top of the page lists every rule on the board. Leaving a column is never restricted.

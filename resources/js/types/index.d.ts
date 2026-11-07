@@ -252,7 +252,7 @@ export interface WorkflowRuleSettings {
     allowed_user_ids: number[];
     allowed_roles: string[];
     allowed_from_column_ids: number[];
-    /** The who-part restricts even with nobody listed (the listed people left): only project admins. */
+    /** The who-part restricts even with nobody listed (the listed people left): nobody may move cards in. */
     restrict_who?: boolean;
     /** Restricted with nobody left (server-computed). */
     locked?: boolean;

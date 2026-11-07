@@ -154,7 +154,7 @@ function RuleEditor({ workspace, project, board, column, saved, members, roles, 
             .map((m) => ({ value: `user:${m.id}`, label: m.name, hint: m.role, group: 'People' })),
     ];
     const whoSelected = [...draft.allowed_roles.map((r) => `role:${r}`), ...draft.allowed_user_ids.map((id) => `user:${id}`)];
-    // the people this rule listed are gone: it stays restricted to project admins until someone picks people / roles
+    // the people this rule listed are gone: nobody may move cards in until an admin picks people / roles or opens it
     const locked = !!draft.restrict_who && whoSelected.length === 0;
     const formerListed = members.filter((m) => (saved.former_user_ids ?? []).includes(m.id));
 
@@ -209,7 +209,7 @@ function RuleEditor({ workspace, project, board, column, saved, members, roles, 
                         Moved here by{' '}
                         <SlotPicker
                             label={`Who may move cards to ${column.name}`}
-                            placeholder={locked ? 'nobody left — only project admins' : 'anyone who can edit cards'}
+                            placeholder={locked ? 'nobody (everyone listed is gone)' : 'anyone who can edit cards'}
                             selected={whoSelected}
                             options={whoOptions}
                             onChange={(values) => set({
@@ -232,6 +232,12 @@ function RuleEditor({ workspace, project, board, column, saved, members, roles, 
                         <ConditionToggle on={draft.require_due_date} label="a due date" onChange={(on) => set({ require_due_date: on })} />
                     </p>
                 </div>
+
+                {locked && (
+                    <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                        Nobody can move cards to {column.name}: the people this rule allowed are gone. Edit the rule.
+                    </p>
+                )}
 
                 {formerListed.length > 0 && (
                     <p className="text-xs text-amber-700 dark:text-amber-400">

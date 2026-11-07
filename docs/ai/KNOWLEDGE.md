@@ -503,11 +503,16 @@ Rules per target column (who / allowed from / conditions), enforced by `Support\
 - **Without a signed-in user only the who-part is skipped** (GitHub merge transitions, webhooks, console): "allowed from"
   and conditions still apply. `MergeTransitions::move` checks `violation($item, $column, null)` and records result `blocked`
   + `message` on the PR link (`meta.merge_transition`), shown in the issue's Development panel.
-- **An emptied who-rule is locked, never "anyone".** `restrict_who` is stored when people / roles were chosen; when the
-  listed people are deleted or leave the project, the rule reads "Only project admins …" (`WorkflowGuard::LOCKED_ROLES`) and
-  the editor shows "nobody left — only project admins" until an admin picks people or clears it on purpose. People who
-  left are dropped from summaries / messages (`WorkflowGuard::who()` intersects with current members) and offered as
-  `former_user_ids` in the editor. Rules that restrict nothing after a column delete are pruned (`pruneEmpty()`).
+- **An emptied who-rule is locked: NOBODY may move cards in** (user decision 2026-11-07, like a Jira transition condition
+  nobody meets — no admin fallback, no bypass). `restrict_who` is stored when people / roles were chosen; when the listed
+  people are deleted or leave the project and no role is listed, `WorkflowGuard::who()` reports `locked` and
+  `actorAllowed()` is false for everyone. Message (422, drag hint, header tooltip): "Nobody can move cards to Done right now
+  (the rule lists nobody)."; summary "Nobody can move cards here right now (the rule lists nobody)."; settings warns "Nobody
+  can move cards to Done: the people this rule allowed are gone. Edit the rule." Project and workspace admins (also
+  workspace admins outside the project) can still edit the rule — that's how it gets fixed; clearing the who-list on purpose
+  (`restrict_who: false`) opens it to anyone who can edit cards. Without a signed-in user (GitHub merges) the who-part,
+  locked or not, isn't checked. People who left are dropped from summaries / messages and offered as `former_user_ids` in
+  the editor. Rules that restrict nothing after a column delete are pruned (`pruneEmpty()`).
 - **Recurring templates run as whoever saved them last.** `RecurringIssueController::update` sets `created_by` to the editor
   (like resume), and store / update check the rule for that person on a probe issue (422 on `column_id`), so nobody routes
   issues through someone else's rights.
@@ -520,7 +525,7 @@ Rules per target column (who / allowed from / conditions), enforced by `Support\
 - **Creating = entering from nowhere.** Who-rule and conditions apply; a column with an allowed-from list can't be created
   into (duplicate and "move to another board" count as creating). Strict on purpose: otherwise "create directly in Done" is
   the loophole. A reorder inside the column isn't entering it.
-- **No bypass for anyone** (workspace owner / admins included) — the requester wanted it strict; admins can list themselves.
+- **No bypass for anyone** (workspace owner / admins included) — the requester wanted it strict; admins can list themselves (and must, to move cards into a locked column).
 - **One refused issue = nothing changes.** Cascade and bulk check every issue first and run in a transaction; issues completed
   by the same action count as done for "all subtasks done" (`$completingIds`). An `ensure()`d model instance is remembered
   (`WeakMap`) so the backstop doesn't check it twice — and doesn't re-evaluate "subtasks done" before the subtasks moved.

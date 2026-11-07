@@ -135,7 +135,8 @@ ARCHITECTURE (Kanban), KNOWLEDGE (decisions above), API.md, docs-site boards gui
 3. No signed-in user: only the who-part is skipped; GitHub merge transitions record `blocked` + reason on the PR.
 4. People who left the project are left out of summaries and messages (editor shows them as former).
 5. `allowed_from_column_ids`: max = the board's column count, intersected with the board's other columns.
-6. `restrict_who`: an emptied who-rule means only project admins, never anyone.
+6. `restrict_who`: an emptied who-rule is locked — nobody may move cards in (decision 2026-11-07: like Jira, no admin
+   fallback); admins fix it by editing the rule, settings shows a warning.
 7. Open subtasks precomputed per action (`WorkflowGuard::openSubtasks`, one query per level).
 8. Moving a subtree into another board's done column counts the subtree as done. Plus: empty rules pruned after column / user
    deletes; automations use `ensure()`.

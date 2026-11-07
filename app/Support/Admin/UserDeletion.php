@@ -103,7 +103,7 @@ class UserDeletion
             // "Download my data" ZIPs: the rows cascade, the files must go too
             DataExport::where('user_id', $user->id)->get()->each->expire();
             $user->delete();
-            // rules whose only part was this person stay restricted (only project admins); others emptied → gone
+            // rules whose only part was this person stay restricted (locked: nobody may move cards in); others emptied → gone
             WorkflowRules::pruneEmpty();
         });
 

@@ -204,7 +204,7 @@ class WorkflowRuleSettingsTest extends TestCase
         $this->save('done', ['allowed_user_ids' => [$this->workspace->owner_id]])->assertSessionHasNoErrors();
     }
 
-    public function test_an_emptied_who_rule_means_only_project_admins_not_anyone(): void
+    public function test_an_emptied_who_rule_means_nobody_admins_included_until_an_admin_edits_it(): void
     {
         $this->save('done', ['allowed_user_ids' => [$this->max->id]]);
         UserDeletion::delete($this->max);
@@ -214,17 +214,51 @@ class WorkflowRuleSettingsTest extends TestCase
         $this->assertNotNull($rule, 'the rule stays');
         $this->assertSame([], $rule->users->all());
         $this->assertTrue($rule->restrict_who);
-        $this->assertSame('Only project admins can move cards here.', WorkflowRules::sentence(WorkflowGuard::instance()->ruleFor(BoardColumn::find($this->column('done')))));
+        $done = BoardColumn::find($this->column('done'));
+        $this->assertSame('Nobody can move cards here right now (the rule lists nobody).', WorkflowRules::sentence(WorkflowGuard::instance()->ruleFor($done)));
+
+        // nobody may move cards in: editors, project admins and the workspace owner alike (no admin fallback)
+        $item = $this->item(['column_id' => $this->column('in-progress')]);
+        foreach ([$this->editor, $this->admin, $this->owner()] as $user) {
+            $this->actingAs($user)->from(route('boards.show', [$this->workspace->slug, $this->project->slug, $this->board->slug]))
+                ->patch($this->itemRoute('boards.items.move', $item), ['column_id' => $done->id, 'position' => 0])
+                ->assertSessionHasErrors(['column_id' => 'Nobody can move cards to Done right now (the rule lists nobody).']);
+        }
+        $this->assertSame($this->column('in-progress'), $item->fresh()->column_id);
+
+        // the board tells everyone the same
+        $this->actingAs($this->admin)->get(route('boards.show', [$this->workspace->slug, $this->project->slug, $this->board->slug]))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('board.columns.2.workflow.actor_allowed', false)
+                ->where('board.columns.2.workflow.actor_reason', 'Nobody can move cards to Done right now (the rule lists nobody).')
+                ->where('board.columns.2.workflow.summary', ['Nobody can move cards here right now (the rule lists nobody).']));
 
         $this->actingAs($this->admin)->get(route('boards.edit', [$this->workspace->slug, $this->project->slug, $this->board->slug]))
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->where("workflowRules.{$this->column('done')}.locked", true)
-                ->where("workflowRules.{$this->column('done')}.restrict_who", true));
+                ->where("workflowRules.{$done->id}.locked", true)
+                ->where("workflowRules.{$done->id}.restrict_who", true)
+                ->where('canManageRules', true));
 
-        // re-saving without people keeps it locked when asked to; clearing it on purpose opens it up
+        // admins can still edit it: re-saving locked keeps it locked; picking someone fixes it; clearing on purpose opens it
         $this->save('done', ['restrict_who' => true])->assertSessionHasNoErrors();
         $this->assertTrue($this->doneRule()->restrict_who);
+        $this->save('done', ['allowed_roles' => ['project_admin']])->assertSessionHasNoErrors();
+        $this->actingAs($this->admin)->patch($this->itemRoute('boards.items.move', $item), ['column_id' => $done->id, 'position' => 0])->assertSessionHasNoErrors();
+        $this->assertSame($done->id, $item->fresh()->column_id);
         $this->save('done', ['restrict_who' => false]);
+        $this->assertNull($this->doneRule());
+    }
+
+    public function test_workspace_admins_who_are_not_project_members_can_edit_rules(): void
+    {
+        $wsAdmin = User::factory()->create();
+        $this->workspace->addUser($wsAdmin, 'admin');
+        $this->assertNull($wsAdmin->projectRole($this->project));
+
+        $this->save('done', ['require_assignee' => true], $wsAdmin)->assertSessionHasNoErrors();
+        $this->assertTrue($this->doneRule()->require_assignee);
+        $this->actingAs($wsAdmin)->delete(route('boards.columns.rule.destroy', [$this->workspace->slug, $this->project->slug, $this->board->slug, $this->column('done')]))
+            ->assertSessionHas('success');
         $this->assertNull($this->doneRule());
     }
 

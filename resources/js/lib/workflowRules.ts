@@ -75,8 +75,6 @@ const ROLE_ORDER = Object.keys(ROLE_PHRASES);
 
 /** "Armend Zekjiri, Jane or project admins" — members by name, then roles (WorkflowRules::whoList). */
 export function whoList(rule: WorkflowRuleSettings, memberName: (id: number) => string): string {
-    // restricted with nobody left = only project admins (WorkflowGuard::LOCKED_ROLES)
-    if (rule.allowed_user_ids.length === 0 && rule.allowed_roles.length === 0) return ROLE_PHRASES.project_admin;
     const names = rule.allowed_user_ids.map(memberName).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
     const roles = ROLE_ORDER.filter((key) => rule.allowed_roles.includes(key)).map((key) => ROLE_PHRASES[key]);
     return orList([...names, ...roles]);
@@ -89,8 +87,11 @@ export function describeRule(rule: WorkflowRuleSettings, column: BoardColumn, co
         const names = columns.filter((c) => rule.allowed_from_column_ids.includes(c.id)).sort((a, b) => a.position - b.position).map((c) => c.name);
         lines.push(`Cards can enter ${column.name} only from ${orList(names)}.`);
     }
-    if (rule.allowed_user_ids.length > 0 || rule.allowed_roles.length > 0 || rule.restrict_who) {
+    if (rule.allowed_user_ids.length > 0 || rule.allowed_roles.length > 0) {
         lines.push(`Only ${whoList(rule, memberName)} can move cards here.`);
+    } else if (rule.restrict_who) {
+        // the people it allowed are gone: nobody may move cards in (WorkflowGuard::who → locked)
+        lines.push('Nobody can move cards here right now (the rule lists nobody).');
     }
     const requires = [
         rule.require_assignee && 'an assignee',
