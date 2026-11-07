@@ -42,7 +42,7 @@ class ProjectDetailResource extends JsonResource
             ...(new ProjectResource($project))->toArray($request),
             // the user's project role; null for workspace admins who aren't project members
             'role' => self::roleOf($user, $project),
-            'member_count' => $project->users()->count(),
+            'member_count' => ApiKeyAccess::reads('members') ? $project->users()->count() : null,
             'can' => [
                 'update' => $user->can('update', $project),
                 'manage_members' => $user->can('manageMembers', $project),

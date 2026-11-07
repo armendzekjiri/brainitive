@@ -15053,7 +15053,8 @@
                         "type": "string"
                     },
                     "changes": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "the fix version is Plans & releases: left out of an API key's view without it"
                     },
                     "metadata": {
                         "type": "string"
@@ -17159,7 +17160,8 @@
                         "type": "string"
                     },
                     "title": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "a doc's / plan's name: empty for an API key without Docs / Plans read"
                     },
                     "version": {
                         "type": "integer"
@@ -17200,7 +17202,7 @@
                             "string",
                             "null"
                         ],
-                        "description": "kind page: the published snapshot"
+                        "description": "kind page: the published snapshot\n(a doc's content: null for an API key without Docs read)"
                     },
                     "html": {
                         "type": [
@@ -17363,7 +17365,8 @@
                         "description": "page (a doc) | plan (a Gantt plan)"
                     },
                     "title": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "a doc's / plan's name: empty for an API key without Docs / Plans read"
                     },
                     "version": {
                         "type": "integer"
@@ -22473,6 +22476,7 @@
                     },
                     "releases": {
                         "type": "array",
+                        "description": "releases belong to Plans & releases: empty for an API key without it",
                         "items": {
                             "$ref": "#/components/schemas/ReleaseOptionResource"
                         }
@@ -22576,7 +22580,10 @@
                         "description": "the user's project role; null for workspace admins who aren't project members"
                     },
                     "member_count": {
-                        "type": "integer",
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
                         "minimum": 0
                     },
                     "can": {
@@ -28902,6 +28909,7 @@
                             "object",
                             "null"
                         ],
+                        "description": "a personal API key: only an issue it can read (no stored key / title of one it can't)",
                         "properties": {
                             "id": {
                                 "type": [

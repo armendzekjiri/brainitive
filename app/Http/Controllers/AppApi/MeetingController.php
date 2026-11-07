@@ -13,6 +13,7 @@ use App\Models\Meeting;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Meetings\MeetingScheduler;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
@@ -135,6 +136,8 @@ class MeetingController extends Controller
      */
     public function notes(Request $request, string $meeting): JsonResponse
     {
+        // a personal API key: the notes are a new doc
+        ApiKeyAccess::requireWrite('docs');
         $row = $this->visibleMeeting($request, $meeting);
         $subject = $row->subject;
         $project = ($subject instanceof Item ? $subject->board?->project : $subject->project)?->loadMissing('workspace');

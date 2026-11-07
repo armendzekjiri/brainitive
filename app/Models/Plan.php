@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ScopedToApiKey;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\References\ContentReferences;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -17,6 +19,7 @@ use Illuminate\Support\Str;
 class Plan extends Model
 {
     use HasFactory, SoftDeletes;
+    use ScopedToApiKey;
 
     /** A new history checkpoint is recorded at most this often while autosaving. */
     public const VERSION_INTERVAL_MINUTES = 30;
@@ -69,10 +72,10 @@ class Plan extends Model
         // Rows linked to issues are derived references (BRAI-71); every write path saves the model.
         static::saved(function (Plan $plan) {
             if ($plan->wasRecentlyCreated || $plan->wasChanged('data')) {
-                ContentReferences::syncPlan($plan);
+                ApiKeyAccess::unscoped(fn () => ContentReferences::syncPlan($plan));
             }
         });
-        static::forceDeleted(fn (Plan $plan) => ContentReferences::pruneMissing((int) $plan->project_id));
+        static::forceDeleted(fn (Plan $plan) => ApiKeyAccess::unscoped(fn () => ContentReferences::pruneMissing((int) $plan->project_id)));
     }
 
     public function getRouteKeyName(): string

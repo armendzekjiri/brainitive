@@ -162,7 +162,11 @@ once). Public guide: `docs-site/integrations/developer-api.md`; public reference
   combine areas follow each part's area: `GET /me/today` and the agenda only include connected-calendar events and
   bookings with Calendar read (never fetched without it), issues with Issues read, to-dos with My Work read; smart links
   (`links/resolve`) and a doc's related content drop targets outside the key's scope or areas (`not_found` / left
-  out, never `restricted`); workspace insights need read on every area, project health Issues + Plans.
+  out, never `restricted`); workspace insights need read on every area, project health Issues + Plans. Every
+  related record of another area is left out (null / empty) unless the key reads that area (issue `release`, a
+  release's issues, booking `card`, feedback `item`, work-log / timer `issue`, capture `target`, deliverable snapshot,
+  project `member_count`); cross-area writes need write there (convert a capture, meeting notes, completing an issue).
+  Route-by-route table: `tasks/feat-developer-api-keys.md` → Response audit.
 - **Declared per route** in `App\Support\ApiKeys\ApiKeyRoutes::MAP` (route name → area / `null` / `false`); an undeclared
   route is refused and `ApiKeyRoutesTest` fails. The spec shows it per operation: `x-brainitive-key-ability`
   (`{available, areas, level, delete?, scope?}`) and an "**API keys:** …" line; unavailable operations list only the

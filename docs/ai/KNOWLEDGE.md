@@ -1419,6 +1419,11 @@ also wait for read / archive actions in flight (a page older than the action is 
 - **Excluded on purpose:** realtime and live co-editing tokens (an open socket would outlive a revoked key), offline
   sync (its change feed and appliers span every area; re-scoping it was not worth the risk), notifications (titles from
   every workspace), the calendar feed link (a credential), and anything account / session / device / key management.
+- **Area is part of the model scope** (response audit): `ScopedToApiKey` models load only when the key READS their
+  area, so any relation of another area is null in a key's answer; stored copies of other-area data (a work log's
+  issue title, a capture's target title, a deliverable's doc HTML) are gated with `ApiKeyAccess::reads()`. Derived
+  links / reference pruning and sync-queue jobs run in `ApiKeyAccess::unscoped()` — otherwise a key's request would
+  prune links it can't see. A new response field from another area: gate it, and `ApiKeySingleAreaSweepTest` checks it.
 - **One rule for workspace-level content** (Codex review: bookings): models with the `ScopedToApiKey` trait are
   filtered by `ApiKeyAccess::scopeModel()` during a key's request — issues and work logs by board / project /
   workspace, and WORKSPACE-level models (snippet collections + snippets, bookmark groups + links, booking pages +

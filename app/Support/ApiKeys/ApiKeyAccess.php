@@ -8,14 +8,20 @@ use App\Models\Booking;
 use App\Models\BookingPage;
 use App\Models\Bookmark;
 use App\Models\BookmarkItem;
+use App\Models\Capture;
 use App\Models\Item;
+use App\Models\Page;
+use App\Models\Plan;
 use App\Models\Project;
+use App\Models\Release;
 use App\Models\Snippet;
 use App\Models\SnippetCollection;
 use App\Models\TimeEntry;
 use App\Models\User;
+use App\Support\AppApi\AppApiErrors;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -48,9 +54,44 @@ final class ApiKeyAccess
     public function __construct(public readonly ApiKey $key, public readonly User $user) {}
 
     /** The key access of the request being handled, if it was authenticated with a personal API key. */
+    /** >0 while system work runs inside a key's request (derived references, queued jobs): nothing is narrowed. */
+    private static int $suspended = 0;
+
+    /**
+     * Run system work unscoped inside a key's request — derived links, reference pruning, jobs run on the sync queue:
+     * they keep the data consistent for everyone and must see all of it (a key's view would drop links it can't see).
+     *
+     * @template T
+     *
+     * @param  callable(): T  $work
+     * @return T
+     */
+    public static function unscoped(callable $work): mixed
+    {
+        self::$suspended++;
+        try {
+            return $work();
+        } finally {
+            self::$suspended--;
+        }
+    }
+
+    public static function suspend(): void
+    {
+        self::$suspended++;
+    }
+
+    public static function resume(): void
+    {
+        self::$suspended = max(0, self::$suspended - 1);
+    }
+
+    /** Area of each capture destination type (CaptureConversion targets). */
+    public const CAPTURE_TARGET_AREAS = ['issue' => 'issues', 'task' => 'work', 'page' => 'docs', 'bookmark' => 'library', 'snippet' => 'library'];
+
     public static function current(): ?self
     {
-        if (! app()->bound('request')) {
+        if (self::$suspended > 0 || ! app()->bound('request')) {
             return null;
         }
         $access = request()->attributes->get(self::ATTRIBUTE);
@@ -249,18 +290,45 @@ final class ApiKeyAccess
     public function scopeModel($query): void
     {
         $model = $query->getModel();
-        $whole = $this->wholeWorkspaceIds();
+        // fail closed: a key that can't read the model's area sees none of it, wherever it is loaded (relations too)
+        $area = match (true) {
+            $model instanceof Item => 'issues',
+            $model instanceof TimeEntry => 'time',
+            $model instanceof Page => 'docs',
+            $model instanceof Plan, $model instanceof Release => 'plans',
+            $model instanceof Capture => 'work',
+            $model instanceof SnippetCollection, $model instanceof Snippet, $model instanceof Bookmark, $model instanceof BookmarkItem => 'library',
+            $model instanceof Booking, $model instanceof BookingPage => 'calendar',
+            default => null,
+        };
+        if ($area === null || ! $this->can($area, ApiKeyAreas::READ)) {
+            $query->whereRaw('1 = 0');
 
+            return;
+        }
+
+        $whole = $this->wholeWorkspaceIds();
         match (true) {
             $model instanceof Item => $this->scopeItems($query),
             $model instanceof TimeEntry => $this->scopeTimeEntries($query),
+            $model instanceof Page, $model instanceof Plan, $model instanceof Release => $query->whereIn($query->qualifyColumn('project_id'), $this->projectIds() ?? Project::query()->select('projects.id')->whereIn('projects.workspace_id', $this->workspaceIds())),
+            $model instanceof Capture => $query->where($query->qualifyColumn('user_id'), $this->user->id),
             $model instanceof SnippetCollection, $model instanceof Bookmark, $model instanceof BookingPage => $query->whereIn($query->qualifyColumn('workspace_id'), $whole),
             $model instanceof Snippet => $query->whereIn($query->qualifyColumn('collection_id'), DB::table('snippet_collections')->select('id')->whereIn('workspace_id', $whole)),
             $model instanceof BookmarkItem => $query->whereIn($query->qualifyColumn('bookmark_id'), DB::table('bookmarks')->select('id')->whereIn('workspace_id', $whole)),
             $model instanceof Booking => $query->whereIn($query->qualifyColumn('booking_type_id'), DB::table('booking_types')->select('booking_types.id')
                 ->join('booking_pages', 'booking_pages.id', '=', 'booking_types.booking_page_id')->whereIn('booking_pages.workspace_id', $whole)),
-            default => $query->whereRaw('1 = 0'), // a model with the trait but no rule here: nothing
         };
+    }
+
+    /** 403 `key_ability_denied` unless the current key (if any) may write `$area` — cross-area writes (convert, complete). */
+    public static function requireWrite(string $area): void
+    {
+        $access = self::current();
+        if ($access !== null && ! $access->can($area, ApiKeyAreas::WRITE)) {
+            throw new HttpResponseException(AppApiErrors::json(403,
+                'This key can’t write '.mb_strtolower(ApiKeyAreas::label($area)).'.', code: AppApiErrors::KEY_ABILITY_DENIED));
+        }
     }
 
     /**
@@ -321,6 +389,16 @@ final class ApiKeyAccess
         if (app()->bound('request')) {
             request()->attributes->remove(self::ATTRIBUTE);
         }
+    }
+
+    /**
+     * The central gate for fields of ANOTHER area inside a response (Resources, Support builders): true without a key
+     * (web, apps), else whether the current request's key reads `$area`. A gated field is null (a list: empty) — the
+     * shape stays the same for typed clients. Route → field → area audit: docs/ai/tasks/feat-developer-api-keys.md.
+     */
+    public static function reads(string $area): bool
+    {
+        return self::current()?->can($area, ApiKeyAreas::READ) ?? true;
     }
 
     /** Without a key: true. With one: does it read this area? */

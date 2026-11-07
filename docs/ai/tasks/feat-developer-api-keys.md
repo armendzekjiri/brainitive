@@ -156,6 +156,43 @@ in `ApiKeyRoutes`), skill add-app-api-endpoint (step: declare the area).
 - Tests: `tests/Feature/ApiKeys/*` (auth, routes declared / excluded, areas × levels, scopes, workspace switch, rate
   limits, management, email), `OpenApiSpecTest` (scheme + extension + docs-site copy), e2e `api-keys.spec.ts`.
 
+## Response audit (Codex reviews, v1.52.0)
+Every route with an area was checked for fields of ANOTHER area in its answer. **Central fix:** models with the
+`ScopedToApiKey` trait (Item, TimeEntry, Page, Plan, Release, Capture, SnippetCollection, Snippet, Bookmark,
+BookmarkItem, BookingPage, Booking) only load during a key's request when the key READS the model's area and the row
+is in its scope (`ApiKeyAccess::scopeModel`, fail closed) — so a relation of another area simply loads as null / empty
+wherever it is used. Stored copies of another area's data are gated with `ApiKeyAccess::reads($area)`. System work
+(derived links, reference pruning, sync-queue jobs) runs unscoped (`ApiKeyAccess::unscoped()`, Queue before/after).
+`ApiKeySingleAreaSweepTest` calls every GET route with a one-area key per area and asserts no other area's markers.
+
+| Route(s) | Declared area | Other-area data in the answer | Decision |
+|---|---|---|---|
+| `items.show/store/update/by-key` | issues | `release` (plans) | Release relation scoped → null without Plans |
+| `items.activity` | issues | `changes.release_id` (plans), `meeting_*` (calendar), `work_log*` (time) entries | release change dropped; meeting / work-log entries filtered out without that area |
+| `projects.config` | issues | `releases[]` (plans) | empty without Plans (`reads('plans')`) |
+| `boards.show` | issues | swimlane rule `release_ids` (plans, ids only) | kept: ids, no names |
+| `projects.health` | issues + plans | plan milestones | route needs both areas |
+| `projects.workload` | issues | project members (names) | kept: the workload's own rows (documented) |
+| `releases.show/index` | plans | `items[]` + progress (issues) | Item scope → no issues / zero counts without Issues |
+| `plans.show` | plans | `rows[].issue` (issues) | `can('view')` → gate; rows' own stored names stay (plan data) |
+| `pages.links`, `links.resolve` | docs | issues / tickets / plans | filtered by `ApiKeyGate::allows` (not_found / left out) |
+| `pages.show`, versions | docs | smart-link anchors stored in the doc's HTML | kept: the doc's own text |
+| `whiteboards.show` | docs | issue cards' `customData.itemId` | kept: ids inside the doc's own scene |
+| `client-deliverables.show`, `client-portals.deliverables` | helpdesk | doc snapshot `html` / `markdown`, `title` (docs / plans) | null / empty without Docs (Plans for plan deliverables) |
+| `feedback-portals.posts`, `feedback-posts.*` | helpdesk | linked `item` (issues) | Item scope → null |
+| `bookings.*`, `booking-pages.index` | calendar | `card` (issues) | Item scope → null |
+| `calendar.events`, `today` | calendar / work | issues, to-dos, external events, bookings | each source needs its area (not fetched otherwise) |
+| `work.index`, `my-day.*`, `today` | work | issue rows (issues) | Item scope + `limitIssues`; completing an issue needs Issues write (`can('update')`) |
+| `captures.*` | work | `target` title / breadcrumb / url (issue / doc / bookmark / snippet) | empty without the target's area; `convert` needs write on the target area |
+| `captures.destinations` | work | boards (issues), pages (docs), lists (work), bookmarks / snippets (library) | gate per destination (`createItems` / `create` / `manageItems`), library scope; key's workspaces only |
+| `work-logs.*`, `timesheet.show`, `timer.*` | time | `issue` block (issues) | Item scope → null; no stored key / title fallback for keys; timer checked first |
+| `meetings.*` | calendar | subject (issue / doc), `notes_page` (docs) | subject loads through the scope (404 without its area); `notes` needs Docs write; notes page scoped |
+| `projects.show` | — | sections per area, `member_count` (members) | sections per area; `member_count` null without Members |
+| `me.show`, `workspaces.*`, `projects.index` | — | workspace / project names only | kept (scope-filtered) |
+| `insights.show` | every area | team time, helpdesk, members | route needs every area |
+| `search` | all content areas | everything | route needs every content area; `places` empty |
+| snippets / bookmarks, members, helpdesk / leads routes | own area | none found | — |
+
 ## Open questions
 - Plans & releases are read-only in the App API today, so "Read + write" there grants nothing more yet.
 - A Brainitive board card was not created from this worktree (no MCP use here); the lead links it.

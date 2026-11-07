@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\GuardsContentGrowth;
 use App\Models\Concerns\ScopedToApiKey;
 use App\Observers\ItemObserver;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Collab\ItemCollab;
 use App\Support\Imports\ImportScope;
 use App\Support\Live\BoardLive;
@@ -104,7 +105,7 @@ class Item extends Model
         // Smart links in the description are derived references (BRAI-143)
         static::saved(function (Item $item) {
             if ($item->wasRecentlyCreated ? (string) $item->description !== '' : $item->wasChanged('description')) {
-                SmartLinks::syncItem($item);
+                ApiKeyAccess::unscoped(fn () => SmartLinks::syncItem($item));
             }
         });
 
@@ -124,7 +125,7 @@ class Item extends Model
         static::forceDeleted(function (Item $item) {
             $projectId = Board::withTrashed()->whereKey($item->board_id)->value('project_id');
             if ($projectId) {
-                ContentReferences::pruneMissing((int) $projectId);
+                ApiKeyAccess::unscoped(fn () => ContentReferences::pruneMissing((int) $projectId));
             }
         });
     }

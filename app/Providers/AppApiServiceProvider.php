@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\ApiKeys\ApiKeyGate;
 use App\Support\ApiKeys\ApiKeys;
 use App\Support\AppApi\AppTokens;
@@ -9,6 +10,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -25,6 +27,10 @@ class AppApiServiceProvider extends ServiceProvider
 
         // personal API keys (Developer API, v1.52.0): deny-only — a key's user may do less, never more
         Gate::before(fn ($user, string $ability, array $arguments = []) => ApiKeyGate::before($user, $ability, $arguments));
+        // a job run on the sync queue inside a key's request is system work: unscoped, like on a worker
+        Queue::before(fn () => ApiKeyAccess::suspend());
+        Queue::after(fn () => ApiKeyAccess::resume());
+        Queue::failing(fn () => ApiKeyAccess::resume());
 
         // throttle:app-api — every /api/v1 request: per token and per IP
         RateLimiter::for('app-api', function (Request $request) {
