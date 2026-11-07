@@ -101,7 +101,7 @@ export function ApiKeyScopePicker({
             <div className="max-h-60 overflow-y-auto rounded-md border p-2">
                 {visible.length === 0 && <p className="px-1 py-2 text-sm text-muted-foreground">Nothing matches “{query}”.</p>}
                 {visible.map((group) => (
-                    <div key={group.label ?? '_'} className="py-1">
+                    <div key={group.label ?? '_'} className="py-1" role={group.label ? 'group' : undefined} aria-label={group.label ?? undefined}>
                         {group.label && <p className="truncate px-1 pb-1 text-xs font-medium text-muted-foreground">{group.label}</p>}
                         <ul className="space-y-0.5">
                             {group.items.map((item) => (
