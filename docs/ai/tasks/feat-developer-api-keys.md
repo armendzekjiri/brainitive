@@ -183,7 +183,7 @@ wherever it is used. Stored copies of another area's data are gated with `ApiKey
 | `bookings.*`, `booking-pages.index` | calendar | `card` (issues) | Item scope → null |
 | `calendar.events`, `today` | calendar / work | issues, to-dos, external events, bookings | each source needs its area (not fetched otherwise) |
 | `work.index`, `my-day.*`, `today` | work | issue rows (issues) | Item scope + `limitIssues`; completing an issue needs Issues write (`can('update')`) |
-| `captures.*` | work | `target` title / breadcrumb / url (issue / doc / bookmark / snippet) | empty without the target's area; `convert` needs write on the target area |
+| `captures.*` | work | `target` title / breadcrumb / url (issue / doc / bookmark / snippet) | live target only, in the key's scope and area — never the saved snapshot; `convert` needs write on the target area |
 | `captures.destinations` | work | boards (issues), pages (docs), lists (work), bookmarks / snippets (library) | gate per destination (`createItems` / `create` / `manageItems`), library scope; key's workspaces only |
 | `work-logs.*`, `timesheet.show`, `timer.*` | time | `issue` block (issues) | Item scope → null; no stored key / title fallback for keys; timer checked first |
 | `meetings.*` | calendar | subject (issue / doc), `notes_page` (docs) | subject loads through the scope (404 without its area); `notes` needs Docs write; notes page scoped |

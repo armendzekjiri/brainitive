@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Notifications\BookingCancelledNotification;
 use App\Notifications\BookingCreatedNotification;
 use App\Notifications\BookingGuestNotification;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Boards\ItemComments;
 use App\Support\Calendar\CalendarProviders;
 use App\Support\Meetings\MeetingCalendars;
@@ -135,7 +136,8 @@ final class BookingService
     /** A cancelled booking leaves no trace in the calendar; its card says what happened. */
     private static function cleanUp(Booking $booking, string $by, ?string $reason): void
     {
-        $booking->load('type.page.user', 'type.page.workspace', 'item');
+        // system work after an authorized cancel: the card note is written even for a key without Issues
+        ApiKeyAccess::unscoped(fn () => $booking->load('type.page.user', 'type.page.workspace', 'item'));
 
         if ($booking->calendar_connection_id && $booking->external_event_id) {
             try {

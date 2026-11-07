@@ -5,13 +5,16 @@ namespace Tests\Feature\ApiKeys;
 use App\Models\ApiKey;
 use App\Models\Board;
 use App\Models\CalendarConnection;
+use App\Models\Capture;
 use App\Models\ContentReference;
 use App\Models\Item;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\TimeEntry;
 use App\Support\ApiKeys\ApiKeyAreas;
 use App\Support\Calendar\CalendarProviders;
 use App\Support\Calendar\NormalizedEvent;
+use App\Support\Captures\CaptureConversion;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\Feature\ApiKeys\Concerns\UsesApiKeys;
@@ -96,6 +99,36 @@ class ApiKeyMixedResponsesTest extends TestCase
         $both = $this->apiKey($this->editor, ['docs' => 'read', 'issues' => 'read']);
         $this->getJson("/api/v1/pages/{$doc->uuid}/links", $this->keyHeaders($both))->assertOk()
             ->assertJsonPath('data.related.0.title', 'Hidden issue');
+    }
+
+    public function test_a_capture_target_outside_the_scope_shows_no_snapshot(): void
+    {
+        $otherBoard = Board::factory()->create(['project_id' => $this->project->id]);
+        $item = Item::factory()->create(['board_id' => $otherBoard->id, 'created_by' => $this->editor->id, 'title' => 'Out of scope target']);
+        $capture = Capture::factory()->create(['user_id' => $this->editor->id, 'text' => 'note', 'target_type' => 'issue', 'target_id' => $item->id,
+            'processed_at' => now(), 'target_location' => ['type' => 'issue', 'title' => 'Out of scope target', 'breadcrumb' => 'Snapshot crumb']]);
+
+        // reads issues + work, but only the main board
+        $key = $this->apiKey($this->editor, ['issues' => 'read', 'work' => 'read'], ApiKey::SCOPE_BOARDS, [$this->board->id]);
+        $response = $this->getJson("/api/v1/captures/{$capture->uuid}", $this->keyHeaders($key))->assertOk()
+            ->assertJsonPath('data.target.title', '')->assertJsonPath('data.target.breadcrumb', '')->assertJsonPath('data.target.available', false);
+        $this->assertStringNotContainsString('Out of scope target', $response->getContent());
+        $this->assertStringNotContainsString('Snapshot crumb', $response->getContent());
+
+        // the apps (no key) still get the snapshot
+        $this->assertSame('Out of scope target', CaptureConversion::location($capture->fresh(), $this->outsider)['title']);
+    }
+
+    public function test_a_time_only_key_deleting_a_work_log_still_moves_the_issue_total(): void
+    {
+        $item = $this->item(['title' => 'Logged on']);
+        $entry = TimeEntry::create(['workspace_id' => $this->workspace->id, 'project_id' => $this->project->id, 'item_id' => $item->id, 'user_id' => $this->editor->id,
+            'spent_on' => now()->toDateString(), 'minutes' => 45, 'source' => 'manual', 'billable' => false]);
+        $this->assertSame(45, (int) $item->fresh()->time_spent);
+
+        $key = $this->apiKey($this->editor, ['time' => 'write'], canDelete: true);
+        $this->deleteJson("/api/v1/work-logs/{$entry->id}", [], $this->keyHeaders($key))->assertNoContent();
+        $this->assertSame(0, (int) $item->fresh()->time_spent);
     }
 
     // ── Today + agenda ──────────────────────────────────────────────────────────────────────

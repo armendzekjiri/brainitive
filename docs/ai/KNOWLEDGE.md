@@ -1419,6 +1419,10 @@ also wait for read / archive actions in flight (a page older than the action is 
 - **Excluded on purpose:** realtime and live co-editing tokens (an open socket would outlive a revoked key), offline
   sync (its change feed and appliers span every area; re-scoping it was not worth the risk), notifications (titles from
   every workspace), the calendar feed link (a credential), and anything account / session / device / key management.
+- **No stored snapshots for keys, ledgers unscoped** (Codex round 6): a key never gets a write-time copy of
+  another record (capture `target_location`, work log `item_key` / `item_title`) — only the live record through its
+  scope and area, else nothing. Counter / ledger updates triggered by an authorized write (TimeEntry → `items.time_spent`,
+  the booking-cancel note on its card) bypass the key's scope (`withoutGlobalScope('api-key')` / `unscoped()`).
 - **Area is part of the model scope** (response audit): `ScopedToApiKey` models load only when the key READS their
   area, so any relation of another area is null in a key's answer; stored copies of other-area data (a work log's
   issue title, a capture's target title, a deliverable's doc HTML) are gated with `ApiKeyAccess::reads()`. Derived
