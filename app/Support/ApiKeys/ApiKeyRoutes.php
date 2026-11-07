@@ -326,14 +326,17 @@ final class ApiKeyRoutes
 
     /**
      * What a key needs for an operation, for the OpenAPI extension `x-brainitive-key-ability`: `{area, level,
-     * delete}` / `{excluded: true}` / null for public routes.
+     * delete, scope}` / `{available: false}` / null for public and undeclared routes.
      *
      * @return array<string, mixed>|null
      */
     public static function describe(string $route, string $method): ?array
     {
         $entry = self::entry($route);
-        if ($entry === null || ! $entry['allowed']) {
+        if ($entry === null) {
+            return null; // not an App API route (ApiKeyRoutesTest keeps every real one declared)
+        }
+        if (! $entry['allowed']) {
             return ['available' => false];
         }
         if ($entry['public']) {

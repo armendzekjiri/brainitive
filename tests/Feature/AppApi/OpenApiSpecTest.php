@@ -125,7 +125,19 @@ class OpenApiSpecTest extends TestCase
         $this->assertSame('Brainitive App API', $spec['info']['title']);
         $this->assertStringContainsString('docs/ai/API.md', $spec['info']['description']);
         $this->assertSame('bearer', $spec['components']['securitySchemes']['appToken']['scheme']);
-        $this->assertSame([['appToken' => []]], $spec['security']);
+        $this->assertSame([['appToken' => []], ['apiKey' => []]], $spec['security']);
+
+        // Developer API (v1.52.0): personal API keys, and what each operation needs from one
+        $this->assertSame('bearer', $spec['components']['securitySchemes']['apiKey']['scheme']);
+        $move = $spec['paths']['/items/{item}/move']['post'];
+        $this->assertSame(['available' => true, 'areas' => ['issues'], 'level' => 'write'], $move['x-brainitive-key-ability']);
+        $this->assertStringContainsString('**API keys:** Issues & boards: Read + write.', $move['description']);
+        $delete = $spec['paths']['/items/{item}']['delete'];
+        $this->assertTrue($delete['x-brainitive-key-ability']['delete']);
+        $devices = $spec['paths']['/devices']['get'];
+        $this->assertSame(['available' => false], $devices['x-brainitive-key-ability']);
+        $this->assertSame([['appToken' => []]], $devices['security'], 'Endpoints a key can never use take the app token only.');
+        $this->assertArrayNotHasKey('x-brainitive-key-ability', $spec['paths']['/instance']['get']);
     }
 
     public function test_errors_are_documented_in_the_app_api_shape_and_public_routes_need_no_token(): void
