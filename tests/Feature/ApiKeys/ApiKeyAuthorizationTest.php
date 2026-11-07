@@ -248,8 +248,8 @@ class ApiKeyAuthorizationTest extends TestCase
         // other areas see the whole project
         $this->api($secret, "/projects/{$this->project->id}/pages")->assertOk();
         // project-wide aggregates and search: not for board keys
-        $this->api($secret, "/projects/{$this->project->id}/health")->assertForbidden()->assertJsonPath('code', 'key_scope_denied');
-        $this->api($this->apiKey($this->editor, ['issues' => 'read'], ApiKey::SCOPE_BOARDS, [$this->board->id]), "/projects/{$this->project->id}/health")
+        $this->api($secret, "/projects/{$this->project->id}/health")->assertForbidden()->assertJsonPath('code', 'key_ability_denied');
+        $this->api($this->apiKey($this->editor, ['issues' => 'read', 'plans' => 'read'], ApiKey::SCOPE_BOARDS, [$this->board->id]), "/projects/{$this->project->id}/health")
             ->assertForbidden()->assertJsonPath('code', 'key_scope_denied');
         $this->api($secret, '/search?q=main')->assertForbidden();
 

@@ -158,7 +158,11 @@ once). Public guide: `docs-site/integrations/developer-api.md`; public reference
   `none | read | write`; **delete** is a separate flag. GET/HEAD = read, POST/PUT/PATCH = write, DELETE = write + delete
   (unwatch, unlink, take off My Day = write). No area: `GET /me`, `/workspaces`, `/workspaces/{slug}`,
   `/workspaces/{slug}/projects`, `/projects/{id}` (read only, filtered). `POST /uploads`: write on issues or docs.
-  `GET /search`: read on every content area, not a boards key; `places` is always empty for keys.
+  `GET /search`: read on every content area, not a boards key; `places` is always empty for keys. Responses that
+  combine areas follow each part's area: `GET /me/today` and the agenda only include connected-calendar events and
+  bookings with Calendar read (never fetched without it), issues with Issues read, to-dos with My Work read; smart links
+  (`links/resolve`) and a doc's related content drop targets outside the key's scope or areas (`not_found` / left
+  out, never `restricted`); workspace insights need read on every area, project health Issues + Plans.
 - **Declared per route** in `App\Support\ApiKeys\ApiKeyRoutes::MAP` (route name → area / `null` / `false`); an undeclared
   route is refused and `ApiKeyRoutesTest` fails. The spec shows it per operation: `x-brainitive-key-ability`
   (`{available, areas, level, delete?, scope?}`) and an "**API keys:** …" line; unavailable operations list only the

@@ -1419,6 +1419,11 @@ also wait for read / archive actions in flight (a page older than the action is 
 - **Excluded on purpose:** realtime and live co-editing tokens (an open socket would outlive a revoked key), offline
   sync (its change feed and appliers span every area; re-scoping it was not worth the risk), notifications (titles from
   every workspace), the calendar feed link (a credential), and anything account / session / device / key management.
+- **Responses that mix areas are the trap** (Codex review): Today / the agenda (calendar + bookings + issues + to-dos),
+  smart links and related content (issues, docs, tickets, plans by the user's project membership), insights / health.
+  Each part needs its own area check (`ApiKeyAccess::readable`, `ApiKeyGate::allows($key, 'view', [$model])`), and a
+  source the key can't read is not even queried. A new aggregate endpoint: declare all its areas (`areas` in
+  `ApiKeyRoutes`) or filter per part.
 - **Password change, reset, suspension revoke every key** (`SignOutEverywhere`): a key created with a stolen session
   must not survive the victim's password change. Creation and regeneration email the user.
 

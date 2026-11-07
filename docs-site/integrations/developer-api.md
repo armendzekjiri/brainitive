@@ -53,6 +53,8 @@ Each area is **None**, **Read** or **Read + write**. Write means create, update 
 
 **Delete** is a separate permission, off by default. Without it a key gets `403 key_ability_denied` on every `DELETE` that removes something (issues, docs, comments, files, tasks, work logs …). Taking an issue off My Day, unwatching or unlinking issues is a write, not a delete.
 
+Answers that combine areas only contain the parts the key can read: **Today** (`GET /me/today`) and the calendar agenda include your connected calendars and bookings only with **Calendar & bookings**, issues only with **Issues & boards** and to-dos only with **My Work**; resolving Brainitive links and a doc's related content leave out anything outside the key's scope or areas, as if it didn't exist. Workspace insights need read on every area, and project health needs **Issues & boards** and **Plans & releases**.
+
 Some endpoints need no area: `GET /me` (who the key acts as), `GET /workspaces`, `GET /workspaces/{slug}`, `GET /workspaces/{slug}/projects` and `GET /projects/{id}` — all limited to the key's scope, and a project only lists the sections of areas the key can read. Uploading a file for an issue or doc (`POST /uploads`) needs write on Issues & boards or Docs & whiteboards. Search (`GET /search`) needs read on every content area and a key not limited to boards.
 
 ### Never available with an API key

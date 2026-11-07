@@ -88,7 +88,8 @@ class AppApiDocsServiceProvider extends ServiceProvider
         $what = match (true) {
             $areas === [] => 'any key (read only)',
             ($needs['any_area'] ?? false) === true => $level.' on '.implode(' or ', $areas),
-            count($areas) > 1 => $level.' on every content area ('.implode(', ', $areas).')',
+            count($areas) > 2 => $level.' on every one of '.implode(', ', $areas),
+            count($areas) > 1 => $level.' on '.implode(' and ', $areas),
             default => $areas[0].': '.$level,
         };
         $extra = array_filter([

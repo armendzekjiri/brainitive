@@ -2123,7 +2123,7 @@
         "/search": {
             "get": {
                 "operationId": "app.v1.search",
-                "description": "Without filters the first page also lists matching places (workspaces, projects, boards,\nplans, snippet and bookmark collections) by name, as the web's command palette does.\n\nWithout `q` (empty or missing) it answers the user's recent content instead: the newest issues, docs,\ntickets, plans, tasks, snippets and bookmarks they can open (\u2264 12, `limit` can lower that), newest\nfirst, in the same shape (no `snippet`, `counts` and `places` empty, `next_cursor` null). The other\nfilters still apply. For the quick switcher's empty state.\n\n**API keys:** Read on every content area (Issues & boards, Docs & whiteboards, Plans & releases, My Work, tasks & captures, Helpdesk, leads & feedback, Snippets & bookmarks) + a key not limited to boards.",
+                "description": "Without filters the first page also lists matching places (workspaces, projects, boards,\nplans, snippet and bookmark collections) by name, as the web's command palette does.\n\nWithout `q` (empty or missing) it answers the user's recent content instead: the newest issues, docs,\ntickets, plans, tasks, snippets and bookmarks they can open (\u2264 12, `limit` can lower that), newest\nfirst, in the same shape (no `snippet`, `counts` and `places` empty, `next_cursor` null). The other\nfilters still apply. For the quick switcher's empty state.\n\n**API keys:** Read on every one of Issues & boards, Docs & whiteboards, Plans & releases, My Work, tasks & captures, Helpdesk, leads & feedback, Snippets & bookmarks + a key not limited to boards.",
                 "summary": "Search everything the user can open: issues, docs, comments, tickets, tasks, plans, snippets,\nbookmarks, their captures and files \u2014 ranked, typo tolerant",
                 "tags": [
                     "Search"
@@ -14424,7 +14424,7 @@
         "/workspaces/{workspace}/insights/{tab}": {
             "get": {
                 "operationId": "app.v1.insights.show",
-                "description": "Workspace admins only (403 for members; 404 for others), as the web. Filters: `period` (default last_30)\nor `period=custom&from=&to=`, `project`.\n\n**API keys:** Issues & boards: Read + a key over whole workspaces.",
+                "description": "Workspace admins only (403 for members; 404 for others), as the web. Filters: `period` (default last_30)\nor `period=custom&from=&to=`, `project`.\n\n**API keys:** Read on every one of Issues & boards, Docs & whiteboards, Plans & releases, My Work, tasks & captures, Time tracking, Calendar & bookings, Helpdesk, leads & feedback, Snippets & bookmarks, Members + a key over whole workspaces.",
                 "summary": "One tab of the workspace's Insights: overview, team, projects, helpdesk or usage",
                 "tags": [
                     "Insights"
@@ -14526,7 +14526,15 @@
                 "x-brainitive-key-ability": {
                     "available": true,
                     "areas": [
-                        "issues"
+                        "issues",
+                        "docs",
+                        "plans",
+                        "work",
+                        "time",
+                        "calendar",
+                        "helpdesk",
+                        "library",
+                        "members"
                     ],
                     "level": "read",
                     "scope": "workspace"
@@ -14536,7 +14544,7 @@
         "/projects/{project}/health": {
             "get": {
                 "operationId": "app.v1.projects.health",
-                "description": "Every project member, as the web. `from` / `to` (local days, \u2264 a year; default the last 14 days), `tz`.\n\n**API keys:** Issues & boards: Read + a key over the whole project (not limited to boards).",
+                "description": "Every project member, as the web. `from` / `to` (local days, \u2264 a year; default the last 14 days), `tz`.\n\n**API keys:** Read on Issues & boards and Plans & releases + a key over the whole project (not limited to boards).",
                 "summary": "A project's health: live metrics of a period and the saved status updates",
                 "tags": [
                     "Insights"
@@ -14614,7 +14622,8 @@
                 "x-brainitive-key-ability": {
                     "available": true,
                     "areas": [
-                        "issues"
+                        "issues",
+                        "plans"
                     ],
                     "level": "read",
                     "scope": "project"

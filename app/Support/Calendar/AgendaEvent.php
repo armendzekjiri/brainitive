@@ -24,6 +24,14 @@ final class AgendaEvent
         'booking' => 'booking',
     ];
 
+    /** Calendar source → the API key area that may read it (Developer API). */
+    private const SOURCE_AREAS = [
+        'board' => 'issues',
+        'list' => 'work',
+        'external' => 'calendar', // connected calendars, incl. Google tasks
+        'booking' => 'calendar',
+    ];
+
     /**
      * The user's calendar for their local days $from … $to (inclusive), soonest first: CalendarEvents
      * (the web calendar's sources) turned into agenda events and cut to exactly those days.
@@ -34,6 +42,15 @@ final class AgendaEvent
     public static function forDays(User $user, string $from, string $to, array $sources, bool $meOnly, bool $showCompleted): array
     {
         $zone = $user->localTimezone();
+
+        // a personal API key: each source needs its area's read — external events, Google tasks and bookings
+        // Calendar & bookings, issues Issues & boards, to-dos My Work; a source it can't read is never queried
+        if (($key = ApiKeyAccess::forUser($user)) !== null) {
+            $sources = array_values(array_filter($sources, fn (string $source) => $key->can(self::SOURCE_AREAS[$source] ?? 'calendar', ApiKeyAreas::READ)));
+            if ($sources === []) {
+                return ['events' => [], 'errors' => []];
+            }
+        }
 
         // CalendarEvents works on calendar dates (app zone): ask one day more on each side, then cut
         // by the user's local days below, so no event near midnight is lost or doubled.
@@ -58,10 +75,11 @@ final class AgendaEvent
             $issueIds = $events->where('type', 'issue')->map(fn (array $e) => (int) substr((string) $e['work_id'], 6))->values()->all();
             $visible = array_flip(ApiKeyAccess::visibleIssueIds($user, $issueIds));
             $tasks = $key->can('work', ApiKeyAreas::READ);
+            $calendar = $key->can('calendar', ApiKeyAreas::READ);
             $events = $events->filter(fn (array $e) => match ($e['type']) {
                 'issue' => isset($visible[(int) substr((string) $e['work_id'], 6)]),
                 'task' => $tasks,
-                default => true,
+                default => $calendar, // event, google_task, booking — and anything new: closed until mapped
             });
         }
 

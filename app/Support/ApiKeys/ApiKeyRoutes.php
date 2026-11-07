@@ -20,7 +20,8 @@ namespace App\Support\ApiKeys;
  *                filtered to workspaces / projects, but not to boards: search);
  *      `param` — the route / query / body parameter to check the scope on, as `name:type` (type: a key of
  *                ApiKeyLocator::ofParam), when it isn't the first known route parameter (PARAMS);
- *      `areas` — `all`: needs read on every content area (search).
+ *      `areas` — areas that must all be readable: `all` (every content area: search), `every` (every area:
+ *                workspace insights) or a comma list (`issues,plans`: project health).
  *
  * Everything in a key's scope is still checked by the policies as the user (a key never exceeds its user), and
  * ApiKeyGate checks every model a policy is asked about (ids in bodies too).
@@ -162,8 +163,10 @@ final class ApiKeyRoutes
         'client-deliverables.show' => 'helpdesk',
 
         // ── Insights: summaries of issues (workspace-wide / whole project) ──
-        'insights.show' => ['area' => 'issues', 'scope' => 'workspace'],
-        'projects.health' => ['area' => 'issues', 'scope' => 'project'],
+        // workspace insights mix issues, team time, helpdesk and members: read on every area
+        'insights.show' => ['area' => null, 'areas' => 'every', 'scope' => 'workspace'],
+        // health also reads the project's plans
+        'projects.health' => ['area' => null, 'areas' => 'issues,plans', 'scope' => 'project'],
         'projects.workload' => ['area' => 'issues', 'scope' => 'project'],
 
         // ── Task lists ──
@@ -325,6 +328,22 @@ final class ApiKeyRoutes
     }
 
     /**
+     * Areas that must ALL be readable (`areas`): `all` = every content area (search), `every` = every area,
+     * or a comma list. Null: none declared.
+     *
+     * @return list<string>|null
+     */
+    public static function requiredAreas(?string $areas): ?array
+    {
+        return match ($areas) {
+            null => null,
+            'all' => ApiKeyAreas::contentAreas(),
+            'every' => ApiKeyAreas::keys(),
+            default => explode(',', $areas),
+        };
+    }
+
+    /**
      * What a key needs for an operation, for the OpenAPI extension `x-brainitive-key-ability`: `{area, level,
      * delete, scope}` / `{available: false}` / null for public and undeclared routes.
      *
@@ -345,12 +364,13 @@ final class ApiKeyRoutes
 
         $method = strtoupper($method);
         $level = $entry['level'] ?? (in_array($method, ['GET', 'HEAD'], true) ? ApiKeyAreas::READ : ApiKeyAreas::WRITE);
-        $areas = $entry['areas'] === 'all' ? ApiKeyAreas::contentAreas() : ($entry['area'] === null ? [] : explode('|', $entry['area']));
+        $required = self::requiredAreas($entry['areas']);
+        $areas = $required ?? ($entry['area'] === null ? [] : explode('|', $entry['area']));
 
         return array_filter([
             'available' => true,
             'areas' => $areas,
-            'any_area' => count($areas) > 1 && $entry['areas'] !== 'all' ? true : null,
+            'any_area' => count($areas) > 1 && $required === null ? true : null,
             'level' => $areas === [] ? null : $level,
             'delete' => $method === 'DELETE' && $entry['level'] === null ? true : null,
             'scope' => $entry['scope'],

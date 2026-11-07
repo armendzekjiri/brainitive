@@ -73,10 +73,10 @@ class AuthorizeApiKey
         $method = strtoupper($request->method());
         $level = $entry['level'] ?? (in_array($method, ['GET', 'HEAD', 'OPTIONS'], true) ? ApiKeyAreas::READ : ApiKeyAreas::WRITE);
 
-        if ($entry['areas'] === 'all') {
-            foreach (ApiKeyAreas::contentAreas() as $area) {
+        if (($required = ApiKeyRoutes::requiredAreas($entry['areas'])) !== null) {
+            foreach ($required as $area) {
                 if (! $access->can($area, ApiKeyAreas::READ)) {
-                    return AppApiErrors::json(403, 'This key can’t search: search needs read access to every content area ('.ApiKeyAreas::label($area).' is missing).', code: AppApiErrors::KEY_ABILITY_DENIED);
+                    return AppApiErrors::json(403, 'This key can’t use this endpoint: it needs read access to '.(count($required) > 2 ? 'every area' : implode(' and ', array_map(fn ($a) => mb_strtolower(ApiKeyAreas::label($a)), $required))).' ('.ApiKeyAreas::label($area).' is missing).', code: AppApiErrors::KEY_ABILITY_DENIED);
                 }
             }
         } elseif ($entry['area'] !== null) {
