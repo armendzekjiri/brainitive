@@ -281,7 +281,7 @@ function PricingSection() {
                             <div
                                 className={`relative h-full rounded-2xl border p-6 flex flex-col transition-all duration-300 hover:-translate-y-1 ${plan.highlighted
                                     ? 'border-[#0E83DC]/40 bg-card shadow-xl shadow-[#0E83DC]/10 ring-1 ring-[#0E83DC]/20'
-                                    : 'border-border/60 bg-card/70 backdrop-blur-sm hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20'
+                                    : 'border-border/60 bg-card/70 hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20'
                                     }`}
                             >
                                 {plan.highlighted && (
@@ -324,7 +324,7 @@ function PricingSection() {
                 {/* Self-hosted + Enterprise */}
                 <div className="mt-6 grid gap-6 md:grid-cols-2">
                     <RevealSection delay={240}>
-                        <div className="h-full rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm p-6 sm:p-7 flex flex-col">
+                        <div className="h-full rounded-2xl border border-border/60 bg-card/70 p-6 sm:p-7 flex flex-col">
                             <div className="flex items-center justify-between gap-4">
                                 <div>
                                     <div className="text-xs font-semibold uppercase tracking-wider text-[#69A748]">Open source</div>
@@ -356,7 +356,7 @@ function PricingSection() {
                     <RevealSection delay={320}>
                         <a
                             href="mailto:hello@brainitive.app?subject=Brainitive%20Enterprise"
-                            className="group h-full rounded-2xl border-2 border-border/70 bg-card/70 backdrop-blur-sm p-6 sm:p-7 flex flex-col transition-all duration-300 hover:border-[#0E83DC]/30 hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20"
+                            className="group h-full rounded-2xl border-2 border-border/70 bg-card/70 p-6 sm:p-7 flex flex-col transition-all duration-300 hover:border-[#0E83DC]/30 hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20"
                         >
                             <div className="flex items-center justify-between gap-4">
                                 <div>
@@ -671,7 +671,7 @@ function ExtensionSection() {
                     </div>
                 </div>
 
-                <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-sm border border-[#C0C5C0]/30 dark:border-slate-700/60 rounded-2xl p-6 sm:p-8">
+                <div className="bg-white/70 dark:bg-slate-900/60 border border-[#C0C5C0]/30 dark:border-slate-700/60 rounded-2xl p-6 sm:p-8">
                     <p className="font-semibold text-[#485E72] dark:text-slate-100 mb-1">Get the extension</p>
                     <p className="text-sm text-[#485E72]/60 dark:text-slate-400 mb-5">Free in the Chrome Web Store — it works in Microsoft Edge too.</p>
                     <a
@@ -815,7 +815,7 @@ function DesktopSection() {
                         </Link>
                     </div>
 
-                    <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-sm border border-[#C0C5C0]/30 dark:border-slate-700/60 rounded-2xl p-6 sm:p-8">
+                    <div className="bg-white/70 dark:bg-slate-900/60 border border-[#C0C5C0]/30 dark:border-slate-700/60 rounded-2xl p-6 sm:p-8">
                         <div className="inline-flex items-center gap-2 rounded-full border border-[#485E72]/20 bg-[#485E72]/5 px-3 py-1 text-xs font-semibold text-[#485E72] dark:text-slate-300 mb-3">
                             <Code2 className="h-3.5 w-3.5" />
                             Open API · Beta
@@ -1362,16 +1362,19 @@ export default function Welcome({
             <Head title="Brainitive – Workspaces, Boards & Wiki" />
             <div className="min-h-screen overflow-x-hidden bg-background text-[#485E72] dark:text-slate-100">
                 {/* ═══ Ambient background blobs ═══ */}
+                {/* Radial gradients, not blur(): a 100 px+ blur under a pulsing animation, with translucent
+                    backdrop-blurred cards on top, repainted the whole page every frame — WebKit without GPU
+                    compositing (Playwright, WebKitGTK) dropped to 0–3 frames per second. */}
                 <div className="fixed inset-0 pointer-events-none overflow-hidden">
                     <div
-                        className="absolute -top-32 -left-32 w-[700px] h-[700px] rounded-full bg-[#0E83DC]/[0.06] blur-[120px] animate-pulse-slow"
+                        className="absolute -top-64 -left-64 w-[960px] h-[960px] bg-[radial-gradient(closest-side,rgba(14,131,220,0.06),transparent)] animate-pulse-slow"
                     />
                     <div
-                        className="absolute top-1/3 -right-48 w-[600px] h-[600px] rounded-full bg-[#69A748]/[0.05] blur-[100px] animate-pulse-slow"
+                        className="absolute top-1/3 -right-72 w-[800px] h-[800px] bg-[radial-gradient(closest-side,rgba(105,167,72,0.05),transparent)] animate-pulse-slow"
                         style={{ animationDelay: '2s' }}
                     />
                     <div
-                        className="absolute -bottom-40 left-1/3 w-[500px] h-[500px] rounded-full bg-[#0E83DC]/[0.04] blur-[100px] animate-pulse-slow"
+                        className="absolute -bottom-64 left-1/3 w-[700px] h-[700px] bg-[radial-gradient(closest-side,rgba(14,131,220,0.04),transparent)] animate-pulse-slow"
                         style={{ animationDelay: '4s' }}
                     />
                 </div>
@@ -1544,7 +1547,7 @@ export default function Welcome({
                 <header className="relative z-10 pt-32 sm:pt-40 pb-20 sm:pb-28 px-6">
                     <div className="max-w-4xl mx-auto text-center">
                         {/* Badge */}
-                        <div className="inline-flex items-center gap-2 rounded-full border border-[#0E83DC]/20 bg-card/70 backdrop-blur-sm px-4 py-1.5 text-xs font-semibold text-[#0E83DC] mb-8 animate-fade-in shadow-sm">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-[#0E83DC]/20 bg-card/70 px-4 py-1.5 text-xs font-semibold text-[#0E83DC] mb-8 animate-fade-in shadow-sm">
                             <Sparkles className="h-3.5 w-3.5" />
                             Open source &middot; All-in-one workspace
                         </div>
@@ -1606,7 +1609,7 @@ export default function Welcome({
                                         </Link>
                                         <Link
                                             href={route('login')}
-                                            className="inline-flex items-center rounded-2xl border-2 border-border bg-card/60 backdrop-blur-sm px-7 py-4 text-base font-bold text-[#485E72] dark:text-slate-100 hover:border-[#0E83DC]/40 hover:bg-card transition-all"
+                                            className="inline-flex items-center rounded-2xl border-2 border-border bg-card/60 px-7 py-4 text-base font-bold text-[#485E72] dark:text-slate-100 hover:border-[#0E83DC]/40 hover:bg-card transition-all"
                                         >
                                             Log in
                                         </Link>
@@ -1713,7 +1716,7 @@ export default function Welcome({
                             {stats.map((s) => (
                                 <div
                                     key={s.label}
-                                    className="text-center rounded-2xl bg-card/60 backdrop-blur-sm border border-border/60 py-5 px-3 shadow-sm"
+                                    className="text-center rounded-2xl bg-card/60 border border-border/60 py-5 px-3 shadow-sm"
                                 >
                                     <div className="text-2xl sm:text-3xl font-bold text-[#0E83DC]">
                                         {s.value}
@@ -1781,7 +1784,7 @@ export default function Welcome({
                                         {group.items.map((item) => (
                                             <div
                                                 key={item.title}
-                                                className="group/item h-full rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm p-5 transition-all duration-300 hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20 hover:border-border/80 hover:-translate-y-0.5"
+                                                className="group/item h-full rounded-2xl border border-border/60 bg-card/70 p-5 transition-all duration-300 hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20 hover:border-border/80 hover:-translate-y-0.5"
                                             >
                                                 <div className="flex items-center gap-3 mb-2.5">
                                                     <div
@@ -1835,15 +1838,15 @@ export default function Welcome({
                             in one fast platform.
                         </p>
                         <div className="flex flex-wrap justify-center gap-4">
-                            <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-white/90 text-sm font-medium">
+                            <div className="flex items-center gap-2 bg-white/10 rounded-xl px-5 py-3 text-white/90 text-sm font-medium">
                                 <Shield className="h-4 w-4 text-[#69A748]" />{' '}
                                 Role-based access
                             </div>
-                            <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-white/90 text-sm font-medium">
+                            <div className="flex items-center gap-2 bg-white/10 rounded-xl px-5 py-3 text-white/90 text-sm font-medium">
                                 <Zap className="h-4 w-4 text-yellow-400" />{' '}
                                 Real-time feel
                             </div>
-                            <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-white/90 text-sm font-medium">
+                            <div className="flex items-center gap-2 bg-white/10 rounded-xl px-5 py-3 text-white/90 text-sm font-medium">
                                 <Palette className="h-4 w-4 text-white/60" />{' '}
                                 Excalidraw built-in
                             </div>
@@ -1892,7 +1895,7 @@ export default function Welcome({
                 )}
 
                 {/* ═══ Footer ═══ */}
-                <footer className="relative z-10 border-t border-border/60 bg-card/40 backdrop-blur-sm">
+                <footer className="relative z-10 border-t border-border/60 bg-card/40">
                     <div className="max-w-6xl mx-auto px-6 py-12">
                         <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
                             <div className="flex items-center gap-3">
