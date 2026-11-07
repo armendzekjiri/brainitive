@@ -82,6 +82,7 @@ export default defineConfig({
             { text: 'Self-hosting', link: '/self-hosting/', activeMatch: '^/self-hosting/' },
             { text: 'Integrations', link: '/integrations/', activeMatch: '^/integrations/' },
             { text: 'Admin', link: '/admin/', activeMatch: '^/admin/' },
+            { text: 'API', link: '/api', activeMatch: '^/api$' },
             { text: 'Open Brainitive', link: 'https://www.brainitive.app' },
         ],
         sidebar: Object.fromEntries(SECTIONS.map(([dir]) => [`/${dir}/`, SECTIONS.map(([d, text]) => ({ ...section(d, text), collapsed: d !== dir }))])),
