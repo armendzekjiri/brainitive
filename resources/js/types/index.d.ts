@@ -57,6 +57,8 @@ export interface Workspace {
     };
     projects_count?: number;
     users_count?: number;
+    /** Developer API: personal API keys may reach this workspace (admins switch it off). */
+    api_keys_enabled?: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -3399,4 +3401,57 @@ export interface LimitReachedPayload {
     workspace: string | null;
     billingUrl: string | null;
     message: string;
+}
+
+/** Developer API — what a personal API key may do in one area. */
+export type ApiKeyLevel = 'none' | 'read' | 'write';
+
+/** Developer API — where a personal API key reaches. */
+export type ApiKeyScopeType = 'all' | 'workspaces' | 'projects' | 'boards';
+
+/** A personal API key (Profile/ApiKeys prop `apiKeys`, App\Http\Controllers\ApiKeyController::present). Dates are ISO-8601. */
+export interface ApiKeyRow {
+    id: number;
+    name: string;
+    /** The public start of the key, shown as `prefix…`; never the secret. */
+    prefix: string;
+    scope_type: ApiKeyScopeType;
+    /** The chosen workspaces / projects / boards the user can still see. */
+    scope: { id: number; name: string }[];
+    /** Chosen entries the user can no longer see (deleted or access lost). */
+    scope_unavailable: number;
+    abilities: Record<string, ApiKeyLevel>;
+    can_delete: boolean;
+    status: 'active' | 'expired' | 'revoked';
+    created_at: string | null;
+    last_used_at: string | null;
+    last_used_ip: string | null;
+    expires_at: string | null;
+    revoked_at: string | null;
+}
+
+/** One permission area of an API key (Profile/ApiKeys prop `areas`, in form order). */
+export interface ApiKeyArea {
+    key: string;
+    label: string;
+    description: string;
+    /** No "Read & write" level (e.g. members). */
+    read_only: boolean;
+}
+
+/** What a new API key can be scoped to (Profile/ApiKeys prop `options`). */
+export interface ApiKeyOptions {
+    workspaces: { id: number; name: string; slug: string; api_keys_enabled: boolean }[];
+    projects: { id: number; name: string; key: string | null; workspace_id: number }[];
+    boards: { id: number; name: string; project_id: number }[];
+}
+
+/** Active API key summary on Profile/Edit (prop `apiKeys`). */
+export interface ApiKeySummary {
+    id: number;
+    name: string;
+    prefix: string;
+    last_used_at: string | null;
+    expires_at: string | null;
+    created_at: string | null;
 }

@@ -5,6 +5,8 @@ namespace App\Http\Controllers\AppApi\Concerns;
 use App\Models\Page;
 use App\Models\PageComment;
 use App\Models\PageReview;
+use App\Support\ApiKeys\ApiKeyAccess;
+use App\Support\ApiKeys\ApiKeyGate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -21,6 +23,9 @@ trait ResolvesPageReviews
         abort_unless(Str::isUuid($uuid), 404);
         $page = Page::with('project.workspace')->where('uuid', $uuid)->first();
         abort_unless($page instanceof Page && $page->project?->workspace !== null && $request->user()->hasProjectAccess($page->project), 404);
+        // a personal API key: the doc must be in its scope and Docs readable (ApiKeyGate), else the same 404
+        $key = ApiKeyAccess::forUser($request->user());
+        abort_unless($key === null || ApiKeyGate::allows($key, 'view', [$page]), 404);
 
         return $page;
     }

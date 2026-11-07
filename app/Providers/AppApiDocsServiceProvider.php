@@ -3,9 +3,12 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Support\ApiKeys\ApiKeyAreas;
+use App\Support\ApiKeys\ApiKeyRoutes;
 use Dedoc\Scramble\Scramble;
 use Dedoc\Scramble\Support\Generator\OpenApi;
 use Dedoc\Scramble\Support\Generator\Operation;
+use Dedoc\Scramble\Support\Generator\SecurityRequirement;
 use Dedoc\Scramble\Support\Generator\SecurityScheme;
 use Dedoc\Scramble\Support\Generator\ServerVariable;
 use Dedoc\Scramble\Support\RouteInfo;
@@ -40,6 +43,12 @@ class AppApiDocsServiceProvider extends ServiceProvider
                         ->as('appToken')
                         ->setDescription('Access token from POST /auth/exchange or POST /auth/refresh. 15 minutes; refresh before it expires. Passport tokens (MCP / CLI / extension) are rejected.')
                 );
+                // Developer API (v1.52.0): either scheme works where an operation lists both
+                $openApi->secure(
+                    SecurityScheme::http('bearer', 'brai_... (personal API key)')
+                        ->as('apiKey')
+                        ->setDescription('Personal API key from Profile -> API keys on the web (shown once). It acts as you, limited to the workspaces / projects / boards and the areas you chose; `x-brainitive-key-ability` on each operation says what it needs. Per key: 120 reads and 60 writes a minute.')
+                );
             })
             // Routes without `auth:app` (instance info, code exchange, refresh) are public.
             ->withOperationTransformers(function (Operation $operation, RouteInfo $routeInfo): void {
@@ -48,7 +57,51 @@ class AppApiDocsServiceProvider extends ServiceProvider
 
                 if (! $authenticated) {
                     $operation->security = [];
+
+                    return;
+                }
+
+                // what a personal API key needs (ApiKeyRoutes): the extension + a line in the description;
+                // endpoints a key can never use take the app token only
+                $name = Str::after((string) $routeInfo->route->getName(), 'app.v1.');
+                $needs = ApiKeyRoutes::describe($name, $operation->method);
+                if ($needs === null) {
+                    return;
+                }
+                $operation->setExtensionProperty('brainitive-key-ability', $needs);
+                $line = self::keyAbilityLine($needs);
+                $operation->description = trim($operation->description === '' ? $line : $operation->description."\n\n".$line);
+                if (! $needs['available']) {
+                    $operation->security = [new SecurityRequirement(['appToken' => []])];
                 }
             });
+    }
+
+    /** @param  array<string, mixed>  $needs  ApiKeyRoutes::describe() */
+    private static function keyAbilityLine(array $needs): string
+    {
+        if (! $needs['available']) {
+            return '**API keys:** not available (Brainitive apps only).';
+        }
+        $areas = array_map(fn (string $area) => ApiKeyAreas::label($area), $needs['areas'] ?? []);
+        $level = ($needs['level'] ?? 'read') === 'write' ? 'Read + write' : 'Read';
+        $what = match (true) {
+            $areas === [] => 'any key (read only)',
+            ($needs['any_area'] ?? false) === true => $level.' on '.implode(' or ', $areas),
+            count($areas) > 2 => $level.' on every one of '.implode(', ', $areas),
+            count($areas) > 1 => $level.' on '.implode(' and ', $areas),
+            default => $areas[0].': '.$level,
+        };
+        $extra = array_filter([
+            ($needs['delete'] ?? false) ? 'the Delete permission' : null,
+            match ($needs['scope'] ?? null) {
+                'workspace' => 'a key over whole workspaces',
+                'project' => 'a key over the whole project (not limited to boards)',
+                'boardless' => 'a key not limited to boards',
+                default => null,
+            },
+        ]);
+
+        return '**API keys:** '.$what.($extra === [] ? '' : ' + '.implode(' + ', $extra)).'.';
     }
 }

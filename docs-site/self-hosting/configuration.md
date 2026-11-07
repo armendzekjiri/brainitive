@@ -63,6 +63,16 @@ In Docker, `DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `COLLAB_URL` and `LIVE_PUBLISH
 
 Framing protection (`X-Frame-Options`, `frame-ancestors`) is always on; embeds meant for other sites set their own.
 
+## Developer API
+
+Personal API keys (Profile → API keys) let people use the API at `/api/v1` from their own scripts. See [Developer API](../integrations/developer-api).
+
+| Variable | Default | What it does |
+|---|---|---|
+| `API_KEYS_ENABLED` | `true` | `false` turns personal API keys off for the whole server: every key answers `401 api_keys_disabled` and nobody can create one. The keys work again when it's back on |
+| `API_KEYS_READ_PER_MINUTE` | `120` | Reads (GET) per key and minute |
+| `API_KEYS_WRITE_PER_MINUTE` | `60` | Writes per key and minute |
+
 ## Database
 
 Brainitive runs on PostgreSQL. Other databases are not supported.

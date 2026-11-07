@@ -2,6 +2,7 @@
 
 namespace App\Support\AppApi;
 
+use App\Support\ApiKeys\ApiKeys;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -41,6 +42,29 @@ final class AppApiErrors
      */
     public const CLIENT_NOT_ALLOWED = 'client_not_allowed';
 
+    /**
+     * Personal API keys (Developer API, v1.52.0):
+     *  - 401 `api_key_revoked` / `api_key_expired` / `api_keys_disabled` (switched off on this server);
+     *  - 403 `key_endpoint_not_allowed`: never with an API key (account, devices, sync …);
+     *  - 403 `key_ability_denied`: the key's area level (or the delete flag) doesn't cover it;
+     *  - 403 `key_scope_denied`: outside the key's workspaces / projects / boards;
+     *  - 403 `workspace_api_keys_disabled`: the workspace's admins turned API keys off.
+     */
+    public const KEY_ENDPOINT_NOT_ALLOWED = 'key_endpoint_not_allowed';
+
+    public const KEY_ABILITY_DENIED = 'key_ability_denied';
+
+    public const KEY_SCOPE_DENIED = 'key_scope_denied';
+
+    public const WORKSPACE_API_KEYS_DISABLED = 'workspace_api_keys_disabled';
+
+    /** 401 messages of a refused personal API key, by code. */
+    public const KEY_FAILURES = [
+        'api_key_revoked' => 'This API key was revoked.',
+        'api_key_expired' => 'This API key has expired.',
+        'api_keys_disabled' => 'API keys are turned off on this Brainitive server.',
+    ];
+
     public static function applies(Request $request): bool
     {
         return $request->is('api/v1', 'api/v1/*');
@@ -62,7 +86,11 @@ final class AppApiErrors
         }
 
         if ($e instanceof AuthenticationException) {
-            return self::json(401, 'Unauthenticated.');
+            $failure = $request->attributes->get(ApiKeys::FAILURE_ATTRIBUTE);
+
+            return is_string($failure) && isset(self::KEY_FAILURES[$failure])
+                ? self::json(401, self::KEY_FAILURES[$failure], code: $failure)
+                : self::json(401, 'Unauthenticated.');
         }
 
         if ($e instanceof HttpExceptionInterface) {

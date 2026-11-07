@@ -33,6 +33,9 @@ class OpenApiSpecTest extends TestCase
 
     private const SPEC = 'docs/api/openapi.json';
 
+    /** The Developer API reference (docs.brainitive.app/api) is built from this copy. */
+    private const DOCS_SITE_COPY = 'docs-site/public/openapi.json';
+
     /**
      * Scramble keeps inference state in statics (the extension broker of the first app instance,
      * reflection caches). A test that rendered the docs earlier in the same PHPUnit process
@@ -63,6 +66,7 @@ class OpenApiSpecTest extends TestCase
 
             if (getenv('OPENAPI_WRITE')) {
                 copy($fresh, $committed);
+                copy($fresh, base_path(self::DOCS_SITE_COPY));
             }
 
             $this->assertFileExists($committed, 'docs/api/openapi.json is missing. Run `'.self::REGENERATE.'` and commit it.');
@@ -72,6 +76,8 @@ class OpenApiSpecTest extends TestCase
                 'docs/api/openapi.json is out of date with routes/app-api.php, the Form Requests or the Resources. '
                 .'Run `'.self::REGENERATE.'` and commit the result.',
             );
+            // the public reference on docs.brainitive.app/api renders this copy (the docs build only has docs-site/)
+            $this->assertFileEquals($committed, base_path(self::DOCS_SITE_COPY), self::DOCS_SITE_COPY.' must be a copy of docs/api/openapi.json. Run `'.self::REGENERATE.'`.');
         } finally {
             @unlink($fresh);
         }
@@ -125,7 +131,19 @@ class OpenApiSpecTest extends TestCase
         $this->assertSame('Brainitive App API', $spec['info']['title']);
         $this->assertStringContainsString('docs/ai/API.md', $spec['info']['description']);
         $this->assertSame('bearer', $spec['components']['securitySchemes']['appToken']['scheme']);
-        $this->assertSame([['appToken' => []]], $spec['security']);
+        $this->assertSame([['appToken' => []], ['apiKey' => []]], $spec['security']);
+
+        // Developer API (v1.52.0): personal API keys, and what each operation needs from one
+        $this->assertSame('bearer', $spec['components']['securitySchemes']['apiKey']['scheme']);
+        $move = $spec['paths']['/items/{item}/move']['post'];
+        $this->assertSame(['available' => true, 'areas' => ['issues'], 'level' => 'write'], $move['x-brainitive-key-ability']);
+        $this->assertStringContainsString('**API keys:** Issues & boards: Read + write.', $move['description']);
+        $delete = $spec['paths']['/items/{item}']['delete'];
+        $this->assertTrue($delete['x-brainitive-key-ability']['delete']);
+        $devices = $spec['paths']['/devices']['get'];
+        $this->assertSame(['available' => false], $devices['x-brainitive-key-ability']);
+        $this->assertSame([['appToken' => []]], $devices['security'], 'Endpoints a key can never use take the app token only.');
+        $this->assertArrayNotHasKey('x-brainitive-key-ability', $spec['paths']['/instance']['get']);
     }
 
     public function test_errors_are_documented_in_the_app_api_shape_and_public_routes_need_no_token(): void

@@ -18,6 +18,7 @@ use App\Http\Resources\AppApi\CapturePreviewResource;
 use App\Http\Resources\AppApi\CaptureResource;
 use App\Models\Capture;
 use App\Models\User;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\AppApi\AppTokens;
 use App\Support\Captures\CaptureConversion;
 use App\Support\Captures\CaptureDestinations;
@@ -191,6 +192,8 @@ class CaptureController extends Controller
         $user = $request->user();
         $capture = $request->ownedCapture();
         $data = $request->validated();
+        // a personal API key: creating an issue / doc / to-do / bookmark / snippet is a write in that area
+        ApiKeyAccess::requireWrite(ApiKeyAccess::CAPTURE_TARGET_AREAS[$data['type']] ?? 'none');
 
         $result = CaptureConversion::convert($user, $capture, $data['type'], (int) $data['destination_id'], $data['fields']);
         $current = CaptureConversion::location($result['capture'], $user);

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Notifications\VerifyEmailNotification;
+use App\Support\ApiKeys\ApiKeyAccess;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Collection;
@@ -169,6 +170,14 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
     }
 
     /**
+     * Personal API keys of the Developer API (v1.52.0).
+     */
+    public function apiKeys(): HasMany
+    {
+        return $this->hasMany(ApiKey::class);
+    }
+
+    /**
      * Get the workspaces this user belongs to.
      */
     public function workspaces(): BelongsToMany
@@ -232,6 +241,11 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
      */
     public function hasWorkspaceAccess(Workspace $workspace): bool
     {
+        // a personal API key of this user narrows it to the key's scope (Developer API; never widens)
+        if (($key = ApiKeyAccess::forUser($this)) !== null && ! $key->allowsWorkspace((int) $workspace->id)) {
+            return false;
+        }
+
         return $this->workspaces()
             ->where('workspace_id', $workspace->id)
             ->exists();
@@ -242,6 +256,10 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
      */
     public function hasProjectAccess(Project $project): bool
     {
+        if (($key = ApiKeyAccess::forUser($this)) !== null && ! $key->allowsProject((int) $project->id, (int) $project->workspace_id)) {
+            return false;
+        }
+
         // Workspace admins have access to all projects
         $workspaceRole = $this->workspaceRole($project->workspace);
         if ($workspaceRole === 'admin') {
@@ -261,13 +279,18 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
      */
     public function accessibleProjectIds(): array
     {
-        return Project::query()
+        $ids = Project::query()
             ->whereIn('workspace_id', $this->workspaces()->select('workspaces.id'))
             ->where(fn ($q) => $q
                 ->whereHas('workspace.users', fn ($uq) => $uq->where('users.id', $this->id)->whereIn('workspace_user.role', ['owner', 'admin']))
                 ->orWhereHas('users', fn ($uq) => $uq->where('users.id', $this->id)))
             ->pluck('id')
             ->all();
+
+        // every list built on this (My Work, search, captures' destinations, work logs …) follows an API key's scope
+        $key = ApiKeyAccess::forUser($this);
+
+        return $key === null ? $ids : $key->filterProjectIds($ids);
     }
 
     /**
@@ -282,12 +305,16 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
             ->pluck('workspaces.id')
             ->merge(Workspace::where('owner_id', $this->id)->pluck('id'));
 
-        return Project::whereIn('workspace_id', $workspaceIds)
+        $ids = Project::whereIn('workspace_id', $workspaceIds)
             ->pluck('id')
             ->merge($this->currentProjects()->wherePivot('role', 'admin')->pluck('projects.id'))
             ->unique()
             ->values()
             ->all();
+
+        $key = ApiKeyAccess::forUser($this);
+
+        return $key === null ? $ids : $key->filterProjectIds($ids);
     }
 
     /**

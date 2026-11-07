@@ -1465,6 +1465,62 @@ also wait for read / archive actions in flight (a page older than the action is 
 
 ## Architectural decisions
 
+### Developer API: personal API keys (v1.52.0)
+- **Keys share the `app` guard and `/api/v1`, not Passport:** `brai_` bearers resolve in `ApiKeys::userFromRequest`
+  (from `AppTokens::userFromRequest`). `brai_` never collides with device tokens (`bra_` / `brr_`: the 4th character
+  differs). Only the sha256 is stored, looked up on a unique index.
+- **One declaration per route (`ApiKeyRoutes::MAP`), deny by default.** Route names, not paths, like the TV's
+  `clients.*.abilities`. `AuthorizeApiKey` runs before route-model binding, so an out-of-scope id is a 403 without a
+  model lookup, and **a place the user can't open is the controller's 404** — the 403 message only ever names
+  projects / boards / workspaces the user can see.
+- **A deny-only `Gate::before` (`ApiKeyGate`) is deliberate**, not the forbidden "admin bypass" pattern: it returns
+  `false` or `null`, never `true`, and only for the key's own user. It is what stops ids in bodies (link target, move to
+  sprint, capture destination, meeting subject, timer issue) from leaving the scope or the granted areas.
+- **The user's access helpers are key-aware** (`hasWorkspaceAccess`, `hasProjectAccess`, `accessibleProjectIds`,
+  `adminProjectIds`, through `ApiKeyAccess::forUser`) so every list built on them is filtered in SQL. Things that read
+  `$user->workspaces()` or a project's relations directly need an explicit filter (see ARCHITECTURE). The board level
+  isn't in those helpers: lists of issues across boards use `ApiKeyAccess::limitIssues()`.
+- **Tests:** the request guard caches the user between requests in a test, and `Authenticate` switches the default
+  guard to `app` — use `ForgetsGuardsBetweenRequests` and `shouldUse('web')` before a web call in the same test.
+  `ApiKeyAccess::current()` reads the *current* request's attributes, so it's naturally per request.
+- **Excluded on purpose:** realtime and live co-editing tokens (an open socket would outlive a revoked key), offline
+  sync (its change feed and appliers span every area; re-scoping it was not worth the risk), notifications (titles from
+  every workspace), the calendar feed link (a credential), and anything account / session / device / key management.
+- **No stored snapshots for keys, ledgers unscoped** (Codex round 6): a key never gets a write-time copy of
+  another record (capture `target_location`, work log `item_key` / `item_title`) — only the live record through its
+  scope and area, else nothing. Counter / ledger updates triggered by an authorized write (TimeEntry → `items.time_spent`,
+  the booking-cancel note on its card) bypass the key's scope (`withoutGlobalScope('api-key')` / `unscoped()`).
+- **Area is part of the model scope** (response audit): `ScopedToApiKey` models load only when the key READS their
+  area, so any relation of another area is null in a key's answer; stored copies of other-area data (a work log's
+  issue title, a capture's target title, a deliverable's doc HTML) are gated with `ApiKeyAccess::reads()`. Derived
+  links / reference pruning and sync-queue jobs run in `ApiKeyAccess::unscoped()` — otherwise a key's request would
+  prune links it can't see. A new response field from another area: gate it, and `ApiKeySingleAreaSweepTest` checks it.
+- **One rule for workspace-level content** (Codex review: bookings): models with the `ScopedToApiKey` trait are
+  filtered by `ApiKeyAccess::scopeModel()` during a key's request — issues and work logs by board / project /
+  workspace, and WORKSPACE-level models (snippet collections + snippets, bookmark groups + links, booking pages +
+  bookings) only for keys over whole workspaces. A new workspace-level model gets the trait and a line in
+  `scopeModel` (a trait without a line there matches nothing). `ApiKeyWorkspaceLevelTest` sweeps them with project- and
+  board-scoped keys.
+- **The new key's secret is never an Inertia prop** (Codex review): create / regenerate answer JSON to an axios
+  request (`no-store`); the page keeps it in component state only, so it never lands in history state or the session.
+- **Board scope is a global scope, not per-endpoint checks** (Codex re-review: timer, issue by key): during a key's
+  request `Item` and `TimeEntry` carry an `api-key` global scope (`ApiKeyAccess::scopeItems` / `scopeTimeEntries`), so
+  every Eloquent load of an issue or work log — by id, key, relation, list, aggregate — only sees the key's boards /
+  projects / workspaces. `AuthorizeApiKey` calls `ApiKeyAccess::end()` after the controller, so deferred automations
+  run unscoped. Raw `DB::table('items')` bypasses it (only `ApiKeyLocator` and the timer check use it, on purpose).
+  The timer is checked before show / stop / discard (`TimerController::timerInKeyScope`). `ApiKeyBoardScopeSweepTest`
+  walks every issue route with an issue on another board.
+- **Responses that mix areas are the trap** (Codex review): Today / the agenda (calendar + bookings + issues + to-dos),
+  smart links and related content (issues, docs, tickets, plans by the user's project membership), insights / health.
+  Each part needs its own area check (`ApiKeyAccess::readable`, `ApiKeyGate::allows($key, 'view', [$model])`), and a
+  source the key can't read is not even queried. A new aggregate endpoint: declare all its areas (`areas` in
+  `ApiKeyRoutes`) or filter per part.
+- **The create / revoke-all race** (Codex review): keys store `credential_generation` = `users.app_auth_generation`
+  (the counter SignOutEverywhere bumps, shared with app sign-ins). Create / regenerate read it when the request starts,
+  then lock the user row and refuse with 409 if it moved; auth treats a key with an older generation as revoked.
+- **Password change, reset, suspension revoke every key** (`SignOutEverywhere`): a key created with a stolen session
+  must not survive the victim's password change. Creation and regeneration email the user.
+
 ### Cloud plan limits: traps (v1.46.0, BRAI-160)
 - **Package binding wins through `singletonIf`:** package providers register before `bootstrap/providers.php`, so
   `EntitlementsServiceProvider` must never use `singleton()` for `Entitlements`. With brainitive/cloud installed,

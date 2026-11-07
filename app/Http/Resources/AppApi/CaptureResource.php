@@ -3,6 +3,7 @@
 namespace App\Http\Resources\AppApi;
 
 use App\Models\Capture;
+use App\Support\ApiKeys\ApiKeyAccess;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -25,6 +26,10 @@ class CaptureResource extends JsonResource
     public function toArray(Request $request): array
     {
         $location = $this->location ?? [];
+        // a personal API key: where it went (title, breadcrumb, link) only when it reads the target's area
+        if ($this->target_type && ! ApiKeyAccess::reads(ApiKeyAccess::CAPTURE_TARGET_AREAS[$this->target_type] ?? 'none')) {
+            $location = [];
+        }
 
         return [
             // the uuid

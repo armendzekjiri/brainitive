@@ -4,6 +4,7 @@ namespace App\Support\Search;
 
 use App\Models\Bookmark;
 use App\Models\User;
+use App\Support\ApiKeys\ApiKeyAccess;
 
 /**
  * What one person may find (BRAI-55), loaded once per search in a fixed number of queries and
@@ -36,6 +37,11 @@ final class SearchViewer
     public static function for(User $user): self
     {
         $workspaceIds = array_map('intval', $user->workspaces()->pluck('workspaces.id')->all());
+        // a personal API key: workspace-wide content (snippets, bookmarks) only of whole workspaces in its scope;
+        // project content follows accessibleProjectIds(), which already is the key's scope
+        if (($key = ApiKeyAccess::forUser($user)) !== null) {
+            $workspaceIds = $key->coversWholeWorkspaces() ? array_values(array_intersect($workspaceIds, $key->workspaceIds())) : [];
+        }
 
         return new self(
             userId: (int) $user->id,

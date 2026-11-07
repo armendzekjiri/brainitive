@@ -3,6 +3,7 @@
 namespace App\Http\Resources\AppApi;
 
 use App\Models\Project;
+use App\Support\ApiKeys\ApiKeyAccess;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -27,7 +28,8 @@ class ProjectConfigResource extends JsonResource
             'priorities' => PriorityResource::collection($project->getRelation('configPriorities')),
             'labels' => LabelResource::collection($project->getRelation('configLabels')),
             'fields' => ItemFieldResource::collection($project->getRelation('configFields')),
-            'releases' => ReleaseOptionResource::collection($project->getRelation('configReleases')),
+            // releases belong to Plans & releases: empty for an API key without it
+            'releases' => ReleaseOptionResource::collection(ApiKeyAccess::reads('plans') ? $project->getRelation('configReleases') : collect()),
             'can' => [
                 // labels, types, priorities, fields, releases are set up on the web (project settings)
                 'manage' => $request->user()->can('update', $project),

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\GuardsContentGrowth;
+use App\Models\Concerns\ScopedToApiKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class BookmarkItem extends Model
 {
     use GuardsContentGrowth, HasFactory;
+    use ScopedToApiKey;
 
     protected $fillable = [
         'bookmark_id',

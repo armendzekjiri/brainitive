@@ -43,8 +43,9 @@ return [
         'version' => '1.0.0',
 
         'description' => <<<'MD'
-The JSON API of the first-party **Brainitive Desktop** and **Brainitive Mobile** apps. Every
-Brainitive server (Brainitive Cloud or self-hosted) serves it under `/api/v1`.
+The JSON API of the first-party **Brainitive Desktop** and **Brainitive Mobile** apps, and of
+your own scripts and apps with a personal API key (the Developer API). Every Brainitive server
+(Brainitive Cloud or self-hosted) serves it under `/api/v1`.
 
 It is separate from the MCP server, the CLI and the browser extension: own tokens, own guard, own
 rate limits. Conventions (full text in `docs/ai/API.md` of the repository):
@@ -55,6 +56,14 @@ rate limits. Conventions (full text in `docs/ai/API.md` of the repository):
   device). Tokens of the MCP / CLI / extension clients get 401 here. The TV app (device-code
   sign-in, `POST /auth/device`) may only call a read-mostly list of endpoints (`docs/ai/API.md`);
   anything else answers 403 `client_not_allowed`.
+- **Developer API (personal API keys):** `Authorization: Bearer brai_...` - a key a user creates
+  under Profile -> API keys on the web. It acts as that user, limited to the workspaces / projects /
+  boards and the areas (None / Read / Read + write, plus Delete) chosen for it. Each operation says
+  what a key needs (`x-brainitive-key-ability`, and an "API keys:" line); endpoints marked "not
+  available" are for the Brainitive apps only. A key gets 401 `api_key_revoked` / `api_key_expired`
+  / `api_keys_disabled`, 403 `key_ability_denied` / `key_scope_denied` /
+  `workspace_api_keys_disabled` / `key_endpoint_not_allowed`. Per key: 120 reads + 60 writes a
+  minute. Guide: https://docs.brainitive.app/integrations/developer-api
 - **Errors:** always `{"message": "...", "code": "...", "errors"?: {"field": ["..."]}}` - 401
   `unauthenticated`, 403 `forbidden` (or `client_not_allowed`: not for this app), 404 `not_found`,
   409 `conflict`, 422 `validation_failed`,

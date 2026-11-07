@@ -8,6 +8,7 @@ use App\Models\Project;
 use App\Models\SnippetCollection;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\ApiKeys\ApiKeyAccess;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -27,6 +28,8 @@ class CaptureDestinations
         $projectIds = $user->accessibleProjectIds();
 
         $workspaces = $user->workspaces()
+            // a personal API key: its workspaces (boards / pages / lists / collections are gated by area + scope)
+            ->when(ApiKeyAccess::forUser($user), fn ($q, ApiKeyAccess $key) => $q->whereIn('workspaces.id', $key->workspaceIds()))
             ->with([
                 'projects' => fn ($q) => $q->whereIn('id', $projectIds)->orderBy('name'),
                 'projects.workspace',

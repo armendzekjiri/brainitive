@@ -12,15 +12,21 @@ use App\Http\Resources\AppApi\TimerStopResource;
 use App\Models\Item;
 use App\Models\User;
 use App\Models\WorkTimer;
+use App\Support\ApiKeys\ApiKeyAccess;
+use App\Support\ApiKeys\ApiKeyAreas;
+use App\Support\ApiKeys\ApiKeyLocator;
+use App\Support\AppApi\AppApiErrors;
 use App\Support\AppApi\TimerStopRefusal;
 use App\Support\Billing\TimeEntries;
 use App\Support\Billing\WorkTimers;
 use App\Support\MyWork\WorkRef;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -45,6 +51,7 @@ class TimerController extends Controller
      */
     public function show(Request $request): JsonResponse|Response
     {
+        $this->timerInKeyScope($request->user());
         $response = $this->state($request->user())->response($request);
         // the elapsed time ticks by itself (the app counts from `started_at`): it isn't a change
         $data = $response->getData(true);
@@ -93,6 +100,7 @@ class TimerController extends Controller
     public function stop(StopTimerRequest $request): TimerStopResource
     {
         $user = $request->user();
+        $this->timerInKeyScope($user);
         $data = $request->validated();
         $timer = WorkTimer::where('user_id', $user->id)->whereKey((int) $data['timer_id'])->first();
         $minutes = isset($data['time']) ? (int) Item::parseDuration($data['time']) : ($timer?->elapsedMinutes() ?? 1);
@@ -111,9 +119,31 @@ class TimerController extends Controller
     /** Stop the timer without logging anything. Answers the timer state (not running). */
     public function discard(DiscardTimerRequest $request): TimerStateResource
     {
+        $this->timerInKeyScope($request->user());
         WorkTimers::discard($request->user(), (int) $request->validated('timer_id'));
 
         return $this->state($request->user());
+    }
+
+    /**
+     * Personal API keys (Developer API): the running timer's issue must be in the key's scope (its boards too) and
+     * readable — checked before anything is shown, stopped or discarded. Read raw: the Item scope would hide it.
+     */
+    private function timerInKeyScope(User $user): void
+    {
+        $access = ApiKeyAccess::forUser($user);
+        if ($access === null) {
+            return;
+        }
+        $itemId = DB::table('work_timers')->where('user_id', $user->id)->value('item_id');
+        if ($itemId === null) {
+            return;
+        }
+        $boardId = DB::table('items')->where('id', $itemId)->value('board_id');
+        $location = $boardId === null ? null : ApiKeyLocator::board((int) $boardId);
+        if ($location === null || ! $access->can('issues', ApiKeyAreas::READ) || ! $access->allows($location)) {
+            throw new HttpResponseException(AppApiErrors::json(403, 'The running timer is on an issue this key can’t reach.', code: AppApiErrors::KEY_SCOPE_DENIED));
+        }
     }
 
     private function state(User $user): TimerStateResource

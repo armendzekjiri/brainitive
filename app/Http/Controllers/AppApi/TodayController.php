@@ -5,6 +5,7 @@ namespace App\Http\Controllers\AppApi;
 use App\Http\Controllers\AppApi\Concerns\AnswersWithETag;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AppApi\TodayResource;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Calendar\AgendaEvent;
 use App\Support\MyDay\MyDayPlan;
 use App\Support\MyWork\AssignedWork;
@@ -42,7 +43,10 @@ class TodayController extends Controller
         $date = MyDayPlan::today($user);
 
         $rows = AssignedWork::combined($user, ['overdue', 'today'], AssignedWork::OPEN, null, $date)->limit(self::WORK_LIMIT)->get();
-        $agenda = AgendaEvent::forDays($user, $date, $date, ['external', 'booking'], false, true);
+        // a personal API key: connected calendars and bookings only with Calendar & bookings read (never even fetched)
+        $agenda = ApiKeyAccess::readable($user, 'calendar')
+            ? AgendaEvent::forDays($user, $date, $date, ['external', 'booking'], false, true)
+            : ['events' => [], 'errors' => []];
 
         $response = (new TodayResource([
             'date' => $date,

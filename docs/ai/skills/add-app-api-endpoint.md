@@ -31,7 +31,13 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
 - No `->where()` / `whereUuid()` on POST / PUT / DELETE routes: web.php's GET fallback route turns a
   constraint mismatch into a 405. Check the id in the controller (`abort_unless(Str::isUuid($id), 404)`).
 - Auth-like public writes add `throttle:app-auth`.
-- Get the device of the call with `AppTokens::currentDevice($request)`.
+- Get the device of the call with `AppTokens::currentDevice($request)` (null for a personal API key).
+- **Declare it for personal API keys** in `App\Support\ApiKeys\ApiKeyRoutes::MAP` (Developer API): the area it belongs
+  to, a `level` override when the method lies (a DELETE that only unlinks = `write`), a `scope` rule for workspace-wide
+  (`workspace`) or project-wide (`project`) results, or `false` when a key must never call it. A list that isn't built on
+  `User::accessibleProjectIds()` / policies filters with `ApiKeyAccess::forUser($user)` (scope ids, `boardIds()`,
+  `limitIssues()`). Test it with a key (`Tests\Feature\ApiKeys\Concerns\UsesApiKeys`): area missing → 403
+  `key_ability_denied`, out of scope → 403 `key_scope_denied` / filtered.
 
 ## 2. Controller — `app/Http/Controllers/AppApi/WidgetController.php`
 Thin: authorize, call the Support service / model method the web controller uses, return a Resource.

@@ -17,6 +17,7 @@ use App\Http\Resources\AppApi\CommentResource;
 use App\Http\Resources\AppApi\WatchersResource;
 use App\Models\Attachment;
 use App\Models\Comment;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Boards\IssueMarkdown;
 use App\Support\Boards\ItemAttachments;
 use App\Support\Boards\ItemComments;
@@ -208,6 +209,9 @@ class IssueActivityController extends Controller
         $item = $this->visibleItem($request, $item);
 
         $page = $item->activities()
+            // a personal API key: meeting history needs Calendar read, work-log history Time tracking read
+            ->when(! ApiKeyAccess::reads('calendar'), fn ($q) => $q->where('action', 'not like', 'meeting\\_%'))
+            ->when(! ApiKeyAccess::reads('time'), fn ($q) => $q->where('action', 'not like', 'work\\_log%'))
             ->with('user')
             ->cursorPaginate($request->limit(), ['*'], 'cursor', $request->cursor());
 
