@@ -63,11 +63,14 @@ These stay with the Brainitive apps and the web, whatever a key is allowed: sign
 
 ## Your first request
 
-Send the key as a bearer token:
+Keep the key in an environment variable (or your CI's secret settings) rather than in commands or scripts, where it ends up in shell history and process lists. Then send it as a bearer token:
 
 ```bash
+# paste the key when asked; it never shows up in your shell history
+read -rs BRAINITIVE_API_KEY && export BRAINITIVE_API_KEY
+
 curl https://www.brainitive.app/api/v1/me \
-  -H "Authorization: Bearer brai_your_key_here"
+  -H "Authorization: Bearer $BRAINITIVE_API_KEY"
 ```
 
 The answer tells you who the key acts as and which workspaces it reaches:
@@ -81,8 +84,8 @@ Requests and answers are JSON (send `Content-Type: application/json` with a body
 ### List, create and move an issue
 
 ```bash
-KEY=brai_your_key_here
 API=https://www.brainitive.app/api/v1
+KEY=$BRAINITIVE_API_KEY
 
 # the boards of project 42, then the issues of board 7
 curl "$API/projects/42/boards" -H "Authorization: Bearer $KEY"

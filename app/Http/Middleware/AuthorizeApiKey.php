@@ -64,7 +64,12 @@ class AuthorizeApiKey
             return $denied;
         }
 
-        return $next($request);
+        try {
+            return $next($request);
+        } finally {
+            // the key's query scopes end with the controller: deferred automations run as the system
+            ApiKeyAccess::end();
+        }
     }
 
     /** @param  array{area: ?string, level: ?string, areas: ?string}  $entry */

@@ -4,8 +4,11 @@ namespace App\Support\ApiKeys;
 
 use App\Models\ApiKey;
 use App\Models\Board;
+use App\Models\Item;
 use App\Models\Project;
+use App\Models\TimeEntry;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -221,6 +224,57 @@ final class ApiKeyAccess
             $location->projectId !== null => $this->allowsProject($location->projectId, $location->workspaceId),
             default => $location->workspaceWide ? $this->allowsWholeWorkspace($location->workspaceId) : $this->allowsWorkspace($location->workspaceId),
         };
+    }
+
+    // ── Central query scopes (Item + TimeEntry global scopes, while a key's request runs) ─────────
+
+    /**
+     * Every Item query of an API-key request: only issues on boards the key reaches (its boards; or every board of
+     * its projects / workspaces). Registered as a global scope on Item, so by-id, by-key, relation loads, lists,
+     * aggregates and timers all follow it. AuthorizeApiKey ends it when the controller finished (automations
+     * and other deferred work run unscoped).
+     *
+     * @param  Builder<Item>  $query
+     */
+    public function scopeItems($query): void
+    {
+        $column = $query->qualifyColumn('board_id');
+        $boards = $this->boardIds();
+        if ($boards !== null) {
+            $query->whereIn($column, $boards);
+
+            return;
+        }
+        $projects = $this->projectIds();
+        $query->whereIn($column, Board::query()->select('boards.id')->whereIn('boards.project_id', $projects ?? Project::query()->select('projects.id')->whereIn('projects.workspace_id', $this->workspaceIds())));
+    }
+
+    /**
+     * Every TimeEntry query of an API-key request: the key's workspaces; for keys limited to projects / boards
+     * only entries of those projects, and for boards only entries without an issue or on the key's boards.
+     *
+     * @param  Builder<TimeEntry>  $query
+     */
+    public function scopeTimeEntries($query): void
+    {
+        $query->whereIn($query->qualifyColumn('workspace_id'), $this->workspaceIds());
+        $projects = $this->projectIds();
+        if ($projects !== null) {
+            $query->whereIn($query->qualifyColumn('project_id'), $projects);
+        }
+        $boards = $this->boardIds();
+        if ($boards !== null) {
+            $item = $query->qualifyColumn('item_id');
+            $query->where(fn ($q) => $q->whereNull($item)->orWhereIn($item, DB::table('items')->select('id')->whereIn('board_id', $boards)));
+        }
+    }
+
+    /** End the key's request scope (AuthorizeApiKey, after the controller): later work runs unscoped. */
+    public static function end(): void
+    {
+        if (app()->bound('request')) {
+            request()->attributes->remove(self::ATTRIBUTE);
+        }
     }
 
     /** Without a key: true. With one: does it read this area? */

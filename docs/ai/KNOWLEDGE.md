@@ -1419,6 +1419,13 @@ also wait for read / archive actions in flight (a page older than the action is 
 - **Excluded on purpose:** realtime and live co-editing tokens (an open socket would outlive a revoked key), offline
   sync (its change feed and appliers span every area; re-scoping it was not worth the risk), notifications (titles from
   every workspace), the calendar feed link (a credential), and anything account / session / device / key management.
+- **Board scope is a global scope, not per-endpoint checks** (Codex re-review: timer, issue by key): during a key's
+  request `Item` and `TimeEntry` carry an `api-key` global scope (`ApiKeyAccess::scopeItems` / `scopeTimeEntries`), so
+  every Eloquent load of an issue or work log — by id, key, relation, list, aggregate — only sees the key's boards /
+  projects / workspaces. `AuthorizeApiKey` calls `ApiKeyAccess::end()` after the controller, so deferred automations
+  run unscoped. Raw `DB::table('items')` bypasses it (only `ApiKeyLocator` and the timer check use it, on purpose).
+  The timer is checked before show / stop / discard (`TimerController::timerInKeyScope`). `ApiKeyBoardScopeSweepTest`
+  walks every issue route with an issue on another board.
 - **Responses that mix areas are the trap** (Codex review): Today / the agenda (calendar + bookings + issues + to-dos),
   smart links and related content (issues, docs, tickets, plans by the user's project membership), insights / health.
   Each part needs its own area check (`ApiKeyAccess::readable`, `ApiKeyGate::allows($key, 'view', [$model])`), and a

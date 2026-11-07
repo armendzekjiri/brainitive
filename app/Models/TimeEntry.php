@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use Illuminate\Database\Eloquent\Builder;
@@ -39,6 +40,9 @@ class TimeEntry extends Model
 
     protected static function booted(): void
     {
+        // a personal API key's request: only work logs in the key's scope (Developer API, ApiKeyAccess)
+        static::addGlobalScope('api-key', fn (Builder $query) => ApiKeyAccess::current()?->scopeTimeEntries($query));
+
         // legacy rows are backfilled from minutes that are already in time_spent; withTrashed: an
         // issue in the trash keeps a right total for when it is restored
         static::created(function (TimeEntry $entry) {

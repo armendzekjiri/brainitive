@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\GuardsContentGrowth;
 use App\Observers\ItemObserver;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Collab\ItemCollab;
 use App\Support\Imports\ImportScope;
 use App\Support\Live\BoardLive;
@@ -11,6 +12,7 @@ use App\Support\Live\Live;
 use App\Support\References\ContentReferences;
 use App\Support\References\SmartLinks;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -74,6 +76,9 @@ class Item extends Model
     protected static function boot(): void
     {
         parent::boot();
+
+        // a personal API key's request: only issues of boards the key reaches (Developer API, ApiKeyAccess)
+        static::addGlobalScope('api-key', fn (Builder $query) => ApiKeyAccess::current()?->scopeItems($query));
 
         static::creating(function (Item $item) {
             if (empty($item->uuid)) {
