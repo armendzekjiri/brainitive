@@ -115,6 +115,14 @@ class Board extends Model
     }
 
     /**
+     * Workflow rules of the board's columns (v1.52.0, Support\Boards\WorkflowRules).
+     */
+    public function columnRules(): HasMany
+    {
+        return $this->hasMany(BoardColumnRule::class);
+    }
+
+    /**
      * Get all items in this board.
      */
     public function items(): HasMany

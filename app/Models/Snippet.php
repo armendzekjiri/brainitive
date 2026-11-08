@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\GuardsContentGrowth;
+use App\Models\Concerns\ScopedToApiKey;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
@@ -10,6 +11,7 @@ use Illuminate\Support\Str;
 class Snippet extends Model
 {
     use GuardsContentGrowth;
+    use ScopedToApiKey;
 
     protected $fillable = [
         'collection_id',

@@ -15,6 +15,8 @@ export interface DevLink {
     occurred_at: string | null;
     /** pull requests: the one whose merge moves the card (merge transitions, BRAI-61) */
     primary?: boolean;
+    /** pull requests: a board workflow rule refused moving the card on merge (v1.52.0) — the reason */
+    merge_blocked?: string | null;
 }
 
 export interface Development {
@@ -170,6 +172,9 @@ export function DevelopmentPanel({ development, itemKey, itemTitle, settingsUrl,
                                     <StateBadge state={l.state} />
                                 </div>
                                 <span className="text-muted-foreground">{l.repository}#{l.identifier} · {l.author ?? 'unknown'} · {ago(l.occurred_at)}</span>
+                                {l.merge_blocked && (
+                                    <span className="block text-amber-700 dark:text-amber-400">Merged, but the card stayed: {l.merge_blocked}</span>
+                                )}
                                 {canEdit && primaryUrl && !l.primary && (
                                     <button type="button" onClick={() => makePrimary(l)} className="ml-1 inline-flex items-center gap-1 text-primary hover:underline">
                                         <Star className="size-3" /> Make primary

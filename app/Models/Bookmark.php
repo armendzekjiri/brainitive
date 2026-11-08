@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ScopedToApiKey;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,6 +15,7 @@ use Illuminate\Support\Str;
 class Bookmark extends Model
 {
     use HasFactory, SoftDeletes;
+    use ScopedToApiKey;
 
     protected $fillable = [
         'workspace_id',

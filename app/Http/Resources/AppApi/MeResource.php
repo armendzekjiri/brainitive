@@ -5,6 +5,7 @@ namespace App\Http\Resources\AppApi;
 use App\Http\Resources\AppApi\Concerns\PresentsWorkspaceLimits;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\AppApi\AppTokens;
 use App\Support\Entitlements\Entitlements;
 use Illuminate\Http\Request;
@@ -48,6 +49,8 @@ class MeResource extends JsonResource
             'created_at' => $user->created_at?->toIso8601ZuluString(),
             'limits_enforced' => $entitlements->enforced(),
             'workspaces' => $user->workspaces
+                // a personal API key: the workspaces in its scope that allow API keys
+                ->when(ApiKeyAccess::forUser($user), fn ($all, ApiKeyAccess $key) => $all->whereIn('id', $key->workspaceIds()))
                 ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
                 ->values()
                 ->map(fn (Workspace $workspace) => $this->workspace($workspace, $user, $entitlements))

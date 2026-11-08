@@ -11,6 +11,8 @@ import { itemTree, MAX_ITEM_DEPTH } from '@/lib/itemTree';
 import { typeOptionsFor } from '@/lib/itemTypes';
 import { issueSnapshot, useOfflineSnapshot } from '@/lib/offline/snapshots';
 import { cn } from '@/lib/utils';
+import { enterBlockReason, firstError } from '@/lib/workflowRules';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,7 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import {
     CheckSquare, Link2, Plus, X, Paperclip, Upload, Eye, Download, Trash2, Copy,
     MessageSquare, Reply, Pencil, Check, File, FileImage, FileText, FileSpreadsheet,
-    FileArchive, FileCode, FileType, History, Clock, Loader2, ChevronDown, ListChecks, Repeat,
+    FileArchive, FileCode, FileType, History, Clock, Loader2, ChevronDown, ListChecks, Repeat, Lock,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { DevelopmentPanel, type Development } from '@/components/item/DevelopmentPanel';
@@ -617,11 +619,20 @@ export function useItemDetail(args: UseItemDetailArgs) {
     const moveToColumn = (columnId: number, withSubtasks = false) => {
         if (!item) return;
         setColumnId(String(columnId));
+        const previous = String(item.column_id);
+        const target = columns.find((c) => c.id === columnId);
         router.patch(route('boards.items.move', [workspace.slug, project.slug, board.slug, item.id]), {
             column_id: columnId,
             position: 0,
             with_subtasks: withSubtasks,
-        }, { preserveScroll: true });
+        }, {
+            preserveScroll: true,
+            // refused (a board workflow rule, permissions): back to where it is, with the reason
+            onError: (errors) => {
+                setColumnId(previous);
+                toast.error(firstError(errors, `Could not move ${item.key} to ${target?.name ?? 'that status'}.`));
+            },
+        });
     };
 
     // Subtask rows (BRAI): tick a subtask done / open again from the parent, like moving its card.
@@ -1664,13 +1675,21 @@ export function ItemDetailSidebar({ d, inSheet = false }: { d: ItemDetail; inShe
                     <SelectValue placeholder="Status">{currentColumn?.name ?? 'Status'}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                    {columns.map((col) => (
-                        <SelectItem key={col.id} value={col.id.toString()}>
-                            <span className={cn('inline-flex items-center h-5 px-1.5 rounded-[3px] border text-[11px] font-bold uppercase tracking-[0.02em]', STATUS_CATEGORY_CLASSES[statusCategory(col, columns)])}>
-                                {col.name}
-                            </span>
-                        </SelectItem>
-                    ))}
+                    {columns.map((col) => {
+                        // workflow rules (v1.52.0): a status this card can't enter is shown disabled with the reason
+                        const blocked = enterBlockReason(item, col, columns);
+                        return (
+                            <SelectItem key={col.id} value={col.id.toString()} disabled={!!blocked} title={blocked ?? undefined}>
+                                <span className="flex flex-col items-start gap-0.5">
+                                    <span className={cn('inline-flex items-center gap-1 h-5 px-1.5 rounded-[3px] border text-[11px] font-bold uppercase tracking-[0.02em]', STATUS_CATEGORY_CLASSES[statusCategory(col, columns)])}>
+                                        {blocked && <Lock className="size-3" aria-hidden="true" />}
+                                        {col.name}
+                                    </span>
+                                    {blocked && <span className="max-w-[240px] text-[11px] font-normal leading-snug text-muted-foreground">{blocked}</span>}
+                                </span>
+                            </SelectItem>
+                        );
+                    })}
                 </SelectContent>
             </Select>
 

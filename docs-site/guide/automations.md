@@ -81,7 +81,7 @@ Add up to 10 actions with **Add action**. They run in order.
 | Action | What it does |
 |---|---|
 | **Assign to** | Assigns a project member |
-| **Move to column** | Moves the issue |
+| **Move to column** | Moves the issue (the board's [workflow rules](./boards-and-issues#workflow-rules) apply to the rule's owner; a refused move fails with the reason) |
 | **Set priority** | Sets the priority |
 | **Set type** | Changes the issue type |
 | **Set due date** | Sets the due date to today or today + N days |

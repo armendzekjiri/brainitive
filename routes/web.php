@@ -2,10 +2,12 @@
 
 use App\Http\Controllers\Admin;
 use App\Http\Controllers\AiController;
+use App\Http\Controllers\ApiKeyController;
 use App\Http\Controllers\AppDeviceController;
 use App\Http\Controllers\BoardBulkItemController;
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BoardViewController;
+use App\Http\Controllers\BoardWorkflowRuleController;
 use App\Http\Controllers\BookingPageController;
 use App\Http\Controllers\BookingTypeController;
 use App\Http\Controllers\BookmarkController;
@@ -324,6 +326,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('workspaces/{workspace}/members/{user}', [WorkspaceController::class, 'removeMember'])->name('workspaces.members.remove');
     Route::delete('workspaces/{workspace}/invitations/{invitation}', [WorkspaceController::class, 'cancelInvitation'])->name('workspaces.invitations.destroy');
     // Who runs the workspace's public pages: name + privacy / imprint links (BRAI-156)
+    // Workspace settings → Developer API: allow personal API keys in this workspace (admins)
+    Route::patch('workspaces/{workspace}/api-keys', [ApiKeyController::class, 'updateWorkspace'])->middleware('throttle:30,1,workspaces.api-keys.update')->name('workspaces.api-keys.update');
     Route::patch('workspaces/{workspace}/legal', [WorkspaceLegalController::class, 'update'])->middleware('throttle:30,1,workspaces.legal.update')->name('workspaces.legal.update');
 
     // Workspace-scoped routes (any upload in here needs file storage left: file.room)
@@ -480,6 +484,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('boards/{board:slug}/items/bulk', [BoardBulkItemController::class, 'destroy'])->name('boards.items.bulk.destroy');
             Route::put('boards/{board:slug}/columns/{column}', [BoardController::class, 'updateColumn'])->name('boards.columns.update');
             Route::delete('boards/{board:slug}/columns/{column}', [BoardController::class, 'destroyColumn'])->name('boards.columns.destroy');
+            // workflow rules per target column (v1.52.0)
+            Route::put('boards/{board:slug}/columns/{column}/rule', [BoardWorkflowRuleController::class, 'update'])->name('boards.columns.rule.update');
+            Route::delete('boards/{board:slug}/columns/{column}/rule', [BoardWorkflowRuleController::class, 'destroy'])->name('boards.columns.rule.destroy');
             Route::post('boards/{board:slug}/items', [BoardController::class, 'storeItem'])->name('boards.items.store');
             Route::post('boards/{board:slug}/items/{item}/duplicate', [BoardController::class, 'duplicateItem'])->name('boards.items.duplicate');
             Route::get('boards/{board:slug}/items/{item}', [BoardController::class, 'showItem'])->name('boards.items.show');
@@ -692,6 +699,11 @@ Route::middleware('auth')->group(function () {
         // e2e only: a signed-in app device + token for the session user (the sign-in exchange's stand-in)
         Route::post('/profile/app-devices/e2e-create', [AppDeviceController::class, 'e2eCreate'])->name('profile.app-devices.e2e-create');
     }
+    // Profile → API keys (Developer API, v1.52.0): the key is shown once, in the create / regenerate response
+    Route::get('/profile/api-keys', [ApiKeyController::class, 'index'])->name('profile.api-keys.index');
+    Route::post('/profile/api-keys', [ApiKeyController::class, 'store'])->middleware('throttle:10,1,profile.api-keys.store')->name('profile.api-keys.store');
+    Route::post('/profile/api-keys/{apiKey}/regenerate', [ApiKeyController::class, 'regenerate'])->whereNumber('apiKey')->middleware('throttle:10,1,profile.api-keys.regenerate')->name('profile.api-keys.regenerate');
+    Route::delete('/profile/api-keys/{apiKey}', [ApiKeyController::class, 'destroy'])->whereNumber('apiKey')->name('profile.api-keys.destroy');
     // "Download my data" (GDPR Art. 15 + 20, BRAI-156): queued ZIP, signed 24 h link for its owner only
     Route::get('/data-exports', [DataExportController::class, 'index'])->middleware(ReadOnlySession::class)->name('profile.data-export.index');
     Route::post('/data-exports', [DataExportController::class, 'store'])->middleware('throttle:5,1,profile.data-export.store')->name('profile.data-export.store');

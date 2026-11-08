@@ -6,6 +6,7 @@ use App\Models\Board;
 use App\Models\Item;
 use App\Models\TaskListItem;
 use App\Models\User;
+use App\Support\ApiKeys\ApiKeyAccess;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -31,8 +32,8 @@ final class AssignedWork
      */
     public static function issues(User $user, array $projectIds, string $status = self::OPEN): Builder
     {
-        return Item::query()
-            ->whereIn('board_id', Board::whereIn('project_id', $projectIds)->select('id'))
+        return ApiKeyAccess::limitIssues($user, Item::query()
+            ->whereIn('board_id', Board::whereIn('project_id', $projectIds)->select('id')))
             ->where('assigned_to', $user->id)
             ->when($status === self::OPEN, fn (Builder $q) => $q
                 ->whereNull('completed_at')

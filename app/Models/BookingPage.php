@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ScopedToApiKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +18,7 @@ use Illuminate\Support\Str;
 class BookingPage extends Model
 {
     use HasFactory, SoftDeletes;
+    use ScopedToApiKey;
 
     /** Busy sources of a new page: every calendar, issues and tasks; all-day entries don't block. */
     public const DEFAULT_BUSY_SOURCES = ['connections' => 'all', 'issues' => true, 'tasks' => true, 'all_day_blocks' => false];

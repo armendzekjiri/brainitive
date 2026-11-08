@@ -5,7 +5,10 @@ namespace App\Http\Controllers\AppApi;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AppApi\ConnectedAppResource;
 use App\Http\Resources\AppApi\DataExportStateResource;
+use App\Models\ApiKey;
 use App\Models\AppDevice;
+use App\Support\ApiKeys\ApiKeyAreas;
+use App\Support\ApiKeys\ApiKeys;
 use App\Support\AppApi\AppTokens;
 use App\Support\Profile\ConnectedApps;
 use App\Support\Profile\DataExports;
@@ -20,7 +23,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * App API v1 — connected apps and "Download my data" (BRAI-394): every app with access to the
- * account (desktop / mobile installs, MCP connectors, the CLI, the browser extension) with revoke,
+ * account (desktop / mobile installs, MCP connectors, the CLI, the browser extension, personal API keys) with revoke,
  * and the GDPR export of Profile → Your data. Account deletion stays on the web.
  */
 #[Group('Connected apps', weight: 120)]
@@ -58,7 +61,24 @@ class ConnectedAppController extends Controller
             'expires_at' => self::zulu($app['expires_at']),
         ]);
 
-        return ConnectedAppResource::collection($devices->concat($clients)->values());
+        // personal API keys (Developer API, v1.52.0), newest first; managed on the web (Profile → API keys)
+        $keys = $user->apiKeys()->active()->orderByDesc('created_at')->orderByDesc('id')->get()->map(fn (ApiKey $key) => [
+            'id' => 'api_key:'.$key->id,
+            'kind' => 'api_key',
+            'name' => $key->name,
+            'platform' => null,
+            'app_version' => null,
+            'scopes' => [
+                ...collect(ApiKeyAreas::normalize($key->abilities ?? []))->reject(fn (string $level) => $level === ApiKeyAreas::NONE)->map(fn (string $level, string $area) => $area.':'.$level)->values()->all(),
+                ...($key->can_delete ? ['delete'] : []),
+            ],
+            'current' => false,
+            'connected_at' => $key->created_at?->toIso8601ZuluString(),
+            'last_used_at' => $key->last_used_at?->toIso8601ZuluString(),
+            'expires_at' => $key->expires_at?->toIso8601ZuluString(),
+        ]);
+
+        return ConnectedAppResource::collection($devices->concat($clients)->concat($keys)->values());
     }
 
     /**
@@ -70,13 +90,15 @@ class ConnectedAppController extends Controller
     public function destroy(Request $request, string $id): Response
     {
         $user = $request->user();
-        // device:<id> or oauth:<client uuid> (Passport client ids are uuids: anything else can't match)
+        // device:<id>, api_key:<id> or oauth:<client uuid> (Passport client ids are uuids: anything else can't match)
         [$kind, $key] = array_pad(explode(':', $id, 2), 2, '');
-        abort_unless(($kind === 'device' && preg_match('/^[1-9][0-9]{0,18}$/', $key) === 1) || ($kind === 'oauth' && Str::isUuid($key)), 404);
+        abort_unless((in_array($kind, ['device', 'api_key'], true) && preg_match('/^[1-9][0-9]{0,17}$/', $key) === 1) || ($kind === 'oauth' && Str::isUuid($key)), 404);
 
-        $revoked = $kind === 'device'
-            ? AppTokens::signOutDevice($user, (int) $key, $request)
-            : ConnectedApps::disconnect($user, $key) > 0;
+        $revoked = match ($kind) {
+            'device' => AppTokens::signOutDevice($user, (int) $key, $request),
+            'api_key' => self::revokeKey($user->apiKeys()->active()->whereKey((int) $key)->first()),
+            default => ConnectedApps::disconnect($user, $key) > 0,
+        };
         abort_unless($revoked, 404);
 
         return response()->noContent();
@@ -99,6 +121,16 @@ class ConnectedAppController extends Controller
         DataExports::request($request->user());
 
         return (new DataExportStateResource($request->user()))->response()->setStatusCode(202);
+    }
+
+    private static function revokeKey(?ApiKey $key): bool
+    {
+        if ($key === null) {
+            return false;
+        }
+        ApiKeys::revoke($key);
+
+        return true;
     }
 
     private static function zulu(?string $iso): ?string

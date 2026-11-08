@@ -27,6 +27,8 @@ use App\Support\Boards\ItemFieldValues;
 use App\Support\Boards\ItemLinks;
 use App\Support\Boards\LinkedIssueVisibility;
 use App\Support\Boards\Swimlanes;
+use App\Support\Boards\WorkflowGuard;
+use App\Support\Boards\WorkflowRules;
 use App\Support\Entitlements\LimitGate;
 use App\Support\Github\ItemDevelopment;
 use App\Support\Live\BoardLive;
@@ -125,6 +127,9 @@ class BoardController extends Controller
             },
         ]);
         LinkedIssueVisibility::mask($board->columns->flatMap->items, $request->user());
+        // workflow rule hints for this user per column (v1.52.0; the server still decides every move)
+        $workflow = WorkflowRules::clientPayload($board, $user);
+        $board->columns->each(fn (BoardColumn $column) => $column->setAttribute('workflow', $workflow[$column->id] ?? null));
 
         // Only the types enabled for the project: cards with a switched-off type still show it
         // (item_type is loaded with each card).
@@ -195,6 +200,13 @@ class BoardController extends Controller
             'workspace' => $workspace,
             'project' => $project,
             'board' => $board,
+            // Workflow rules (v1.52.0): per column id, and the people a rule can list
+            'workflowRules' => (object) WorkflowRules::forSettings($board),
+            // editors see the rules read-only: only project / workspace admins change them
+            'canManageRules' => $request->user()->can('update', $project),
+            'ruleHistory' => WorkflowRules::history($board),
+            'ruleMembers' => WorkflowRules::members($project, $board),
+            'ruleRoles' => collect(WorkflowRules::ROLES)->map(fn (string $label, string $key) => ['key' => $key, 'label' => ucfirst($label)])->values(),
             // Choices for the swimlane rule builder
             'laneOptions' => [
                 'priorities' => ItemPriority::forProject($project)->orderBy('order')->get(['id', 'name', 'slug', 'color']),
@@ -375,7 +387,7 @@ class BoardController extends Controller
     /**
      * Delete a column.
      */
-    public function destroyColumn(Workspace $workspace, Project $project, Board $board, BoardColumn $column)
+    public function destroyColumn(Request $request, Workspace $workspace, Project $project, Board $board, BoardColumn $column)
     {
         $this->authorize('update', $board);
         abort_unless($column->board_id === $board->id, 404);
@@ -385,9 +397,18 @@ class BoardController extends Controller
             return redirect()->back()->withErrors(['column' => 'Cannot delete a column that still has items. Move or delete them first.']);
         }
 
+        // its own workflow rule goes with it, and it leaves other rules' "allowed from" lists (foreign keys): a rule
+        // change, so only for people who may change rules
+        if ($blocked = WorkflowRules::columnDeletionBlocker($column, $request->user())) {
+            return redirect()->back()->withErrors(['column' => $blocked]);
+        }
+        $wasInRules = DB::table('board_column_rule_from_column')->where('board_column_id', $column->id)->exists();
         $column->delete();
+        WorkflowRules::pruneEmpty($board->id); // a rule that only allowed cards from this column restricts nothing now
 
-        return redirect()->back()->with('success', 'Column deleted successfully.');
+        return redirect()->back()->with('success', $wasInRules
+            ? "Column deleted. Workflow rules that allowed cards from {$column->name} were updated."
+            : 'Column deleted successfully.');
     }
 
     /**
@@ -565,6 +586,8 @@ class BoardController extends Controller
             'items' => fn ($q) => $this->withCardData($q),
         ])->get();
         LinkedIssueVisibility::mask($columns->flatMap->items, $request->user());
+        $workflow = WorkflowRules::clientPayload($board, $request->user());
+        $columns->each(fn (BoardColumn $column) => $column->setAttribute('workflow', $workflow[$column->id] ?? null));
 
         // Get all items in the project for linking (excluding current item)
         $projectItems = Item::whereHas('board', function ($q) use ($project) {
@@ -875,6 +898,19 @@ class BoardController extends Controller
             if (! $targetColumn) {
                 return back()->withErrors(['target_board_id' => 'Target board has no columns.']);
             }
+        }
+
+        // Workflow rules of the target board (v1.52.0): moving in = creating there, for the issue and every
+        // subtask that travels along (they move by query below, so they are checked here).
+        // The whole subtree lands in the target column: into a done column it all counts as done ("all subtasks done").
+        $guard = WorkflowGuard::instance();
+        $children = Item::whereIn('id', $item->descendantIds())->get();
+        $subtree = [(int) $item->id, ...$children->pluck('id')->map(fn ($id) => (int) $id)->all()];
+        $completing = $targetColumn->is_done_column ? $subtree : [];
+        $open = $guard->needsSubtasks((int) $targetBoard->id) ? $guard->openSubtasks($subtree) : [];
+        $guard->ensure($item, $targetColumn, $request->user(), $completing, '', $open[$item->id] ?? []);
+        foreach ($children as $child) {
+            $guard->ensure($child, $targetColumn, $request->user(), $completing, "Subtask {$child->key}: ", $open[$child->id] ?? []);
         }
 
         // Update item (and its whole subtree) to the new board and column; it leaves any

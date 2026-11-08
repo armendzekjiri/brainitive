@@ -46,6 +46,7 @@ use App\Policies\WorkspacePolicy;
 use App\Support\Admin\InstanceMailConfig;
 use App\Support\Admin\ProductionConfigWarnings;
 use App\Support\Billing\ReportBuilder;
+use App\Support\Boards\WorkflowGuard;
 use App\Support\Helpdesks\Mail\FakeMailboxConnector;
 use App\Support\Helpdesks\Mail\ImapMailboxConnector;
 use App\Support\Helpdesks\Mail\MailboxConnector;
@@ -58,6 +59,7 @@ use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
@@ -85,6 +87,9 @@ class AppServiceProvider extends ServiceProvider
         // helpdesk mailboxes (v1.40.0, BRAI-79): the IMAP client, faked only in e2e (no network)
         $this->app->bind(MailboxConnector::class, fn () => MailHost::fake() ? new FakeMailboxConnector : new ImapMailboxConnector);
         $this->app->singleton(MailTransports::class);
+
+        // board workflow rules (v1.52.0): rules + roles cached for one request / queue job
+        $this->app->scoped(WorkflowGuard::class);
     }
 
     /**
@@ -98,6 +103,8 @@ class AppServiceProvider extends ServiceProvider
         // warning in the log, at most hourly; mail is checked when it is sent (admin SMTP wins).
         ProductionConfigWarnings::reportAtBoot();
         Event::listen(MessageSending::class, [ProductionConfigWarnings::class, 'onMessageSending']);
+        // a test or a long-lived process may handle several requests in one container: each starts with fresh rules
+        Event::listen(RouteMatched::class, fn () => $this->app->forgetInstance(WorkflowGuard::class));
 
         // Reset links carry a secret token: build them from APP_URL, never from the request's
         // Host / X-Forwarded-Host (host-header poisoning would send the token elsewhere).

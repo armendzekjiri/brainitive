@@ -23,7 +23,7 @@ logic underneath (Support services, policies) is shared.
 
 | | |
 |---|---|
-| Auth | `Authorization: Bearer bra_…` (access, 15 min). Refresh `brr_…` (60 days, single use). Tokens never in URLs. |
+| Auth | `Authorization: Bearer bra_…` (access, 15 min). Refresh `brr_…` (60 days, single use). Tokens never in URLs. Personal API keys `brai_…`: see "Developer API". |
 | Responses | Wrapped: `{data: {...}}` (API Resources' default); lists `{data: [...], next_cursor}`. **DELETE → 204** No Content when it removes a resource; removing a *part* of one (e.g. `DELETE /me/avatar`) answers 200 with the updated parent instead. Only unwrapped exception: the OAuth token responses of `POST /auth/exchange` and `POST /auth/refresh` are unwrapped (`{token_type, access_token, expires_in, refresh_token, refresh_expires_in, device}`). Resources list their fields explicitly, never a model's `toArray()`. |
 | Errors | `{"message": "…", "code": "…", "errors"?: {field: [..]}}` — 400 `bad_request` / `invalid_grant`, 401 `unauthenticated`, 402 `limit_reached` (+ `limit` object, see Invitations), 403 `forbidden`, 403 `client_not_allowed` (this app may not call the endpoint at all: the TV's scope, see "TV: what it may call"), 404 `not_found`, 405 `method_not_allowed`, 409 `conflict`, 410 `gone`, 422 `validation_failed`, 429 `rate_limited`, 500 `server_error`. 404 instead of 403 when the user must not learn that something exists. Documented once for all endpoints (`App\Support\AppApi\OpenApi`); a 402 needs `@throws LimitReached` on the controller method. |
 | Polling | `GET /me/today`, `/me/my-day`, `/me/timer`, `/me/work`, `/notifications` (first page, no `cursor`), `/notifications/unread-count` and `/capture-destinations` answer an `ETag` (hash of the answer + the user): send it as `If-None-Match` → 304 without body. Shared `AnswersWithETag` trait; a new polled endpoint uses it. |
@@ -142,6 +142,49 @@ devices and connected apps (no signing other devices out), invitations / creatin
 `/me/data-export`, `/me/calendar-feed`, profile changes (`PATCH /me`, avatar, notification preferences),
 `/uploads`, every other read (workspaces, projects, boards, docs, search, sync …) and every other write.
 A new endpoint is closed to the TV until its route name is added to the list (`AppClientAbilitiesTest` pins it).
+
+## Developer API: personal API keys
+**v1.52.0.** Users create keys under **Profile → API keys** (`/profile/api-keys`, web only) and call this API from
+their own scripts: `Authorization: Bearer brai_…` (`brai_` + 43 base62 chars; only the sha256 is stored, the key is shown
+once). Public guide: `docs-site/integrations/developer-api.md`; public reference: `docs.brainitive.app/api` (Scalar,
+`docs-site/public/openapi.json` = copy of `docs/api/openapi.json`, written by `composer openapi`, checked by
+`OpenApiSpecTest`). Plan + decisions: [`tasks/feat-developer-api-keys.md`](./tasks/feat-developer-api-keys.md).
+- **Where (scope):** `all` (every workspace of the user that allows keys, incl. later ones) / `workspaces` / `projects`
+  (no workspace-wide content: snippets, bookmarks, booking pages + bookings, workspace members, workspace insights) / `boards` (Issues & boards only
+  those boards; other granted areas the whole projects of those boards; no health / workload / search). Always ∩ the
+  user's own access; policies still run as the user.
+- **What (areas):** `issues`, `docs`, `plans`, `work` (My Work, task lists, captures), `time`, `calendar` (incl.
+  bookings, meetings), `helpdesk` (+ leads, portals), `library` (snippets, bookmarks), `members` (read only) — each
+  `none | read | write`; **delete** is a separate flag. GET/HEAD = read, POST/PUT/PATCH = write, DELETE = write + delete
+  (unwatch, unlink, take off My Day = write). No area: `GET /me`, `/workspaces`, `/workspaces/{slug}`,
+  `/workspaces/{slug}/projects`, `/projects/{id}` (read only, filtered). `POST /uploads`: write on issues or docs.
+  `GET /search`: read on every content area, not a boards key; `places` is always empty for keys. Responses that
+  combine areas follow each part's area: `GET /me/today` and the agenda only include connected-calendar events and
+  bookings with Calendar read (never fetched without it), issues with Issues read, to-dos with My Work read; smart links
+  (`links/resolve`) and a doc's related content drop targets outside the key's scope or areas (`not_found` / left
+  out, never `restricted`); workspace insights need read on every area, project health Issues + Plans. Every
+  related record of another area is left out (null / empty) unless the key reads that area (issue `release`, a
+  release's issues, booking `card`, feedback `item`, work-log / timer `issue`, capture `target`, deliverable snapshot,
+  project `member_count`); cross-area writes need write there (convert a capture, meeting notes, completing an issue).
+  Route-by-route table: `tasks/feat-developer-api-keys.md` → Response audit.
+- **Declared per route** in `App\Support\ApiKeys\ApiKeyRoutes::MAP` (route name → area / `null` / `false`); an undeclared
+  route is refused and `ApiKeyRoutesTest` fails. The spec shows it per operation: `x-brainitive-key-ability`
+  (`{available, areas, level, delete?, scope?}`) and an "**API keys:** …" line; unavailable operations list only the
+  `appToken` scheme.
+- **Never with a key** (403 `key_endpoint_not_allowed`): `auth.logout`, `auth.web-session`, `PATCH /me`, avatar, devices,
+  invitations, `POST /workspaces`, `POST /workspaces/{slug}/projects`, project templates, `POST …/invitations`,
+  navigation / pins, all notifications + preferences, `/me/calendar-feed*`, connected apps, data export, realtime,
+  `pages|whiteboards/{uuid}/collab*`, `/sync*`.
+- **Errors:** 401 `api_key_revoked` / `api_key_expired` / `api_keys_disabled` (instance switch `API_KEYS_ENABLED`);
+  403 `key_ability_denied` ("This key can’t write issues & boards."), `key_scope_denied` ("This key has no access to
+  project ToolExpert." — only for places the user can open, else the usual 404), `workspace_api_keys_disabled`
+  (`workspaces.api_keys_enabled`, workspace settings → Legal → Developer API), `key_endpoint_not_allowed`.
+- **Limits:** per key 120 reads + 60 writes / min (`API_KEYS_READ_PER_MINUTE`, `API_KEYS_WRITE_PER_MINUTE`) + 600 / min
+  per IP; the key's limit is the one in `X-RateLimit-*`.
+- **Lifecycle:** a key carries the user's sign-out generation (`credential_generation`); a create racing a password
+  change is refused (409) and a key from before the last sign-out-everywhere is 401 `api_key_revoked`. Revoke / regenerate on the web (also `DELETE /me/connected-apps/api_key:<id>` from the apps); password
+  change / reset / suspension revoke all keys; an email on create / regenerate; `last_used_at` / `last_used_ip` at most
+  once a minute. Max 50 active keys per user.
 
 ## The `## API (ready)` section on a mobile card
 
@@ -457,9 +500,10 @@ the instance sets `MOBILE_PUSH_ENABLED=false`. The Expo message:
 | `GET /api/v1/me/data-export` | app + verified | "Download my data": `{data: {latest, exports: [≤ 5], available_in}}` (seconds until a new request is allowed) | Request export | BRAI-262 | ready (v1.49.0, BRAI-394) |
 | `POST /api/v1/me/data-export` | app + verified, `throttle:5,1` | Request the ZIP (prepared in the background; notification + email when ready) → 202 with the same shape. Already being prepared / within the hour → 422 `export` | Request export | BRAI-262 | ready (v1.49.0, BRAI-394) |
 
-Connected app: `{id, kind: desktop|mobile|tv|mcp|cli|extension|oauth, name, platform, app_version,
+Connected app: `{id, kind: desktop|mobile|tv|mcp|cli|extension|oauth|api_key, name, platform, app_version,
 scopes, current, connected_at, last_used_at, expires_at}` — never a token, hash, IP or push token.
-Passport tokens are grouped per client (one row each, as on the web): the CLI and tokens from
+Personal API keys (v1.52.0) come last: `id: api_key:<id>`, `scopes: ["issues:write", …, "delete"?]`, `last_used_at`,
+`expires_at`; DELETE revokes the key. Passport tokens are grouped per client (one row each, as on the web): the CLI and tokens from
 `php artisan mcp:get-token` share the personal access client and show as `cli`.
 
 Export: `{id (uuid), status: queued|running|ready|failed|expired, file_size, counts, error,
@@ -681,15 +725,15 @@ created_at, updated_at}`. Activity option: `{id, name, color, pricing_type: hour
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
 | `GET /api/v1/projects/{id}/boards` | app + verified | A project's boards in the web's order, cursor-paginated, `updated_since`. Can't open the project → 404 | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
-| `GET /api/v1/boards/{id}` | app + verified | One board: `columns` (WIP limit, done flag, `cards_count`), `swimlanes`, `done_retention_days`, `active_sprint`, `can` | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
+| `GET /api/v1/boards/{id}` | app + verified | One board: `columns` (WIP limit, done flag, `cards_count`, `workflow` rule hints — v1.52.0), `swimlanes`, `done_retention_days`, `active_sprint`, `can` | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
 | `GET /api/v1/boards/{id}/items?column=&include_old_done=&q=&assignee=&status=&labels=&priority=&type=&quick=&f<id>=` | app + verified | The board's cards as the board page shows them, cursor-paginated, `updated_since`; `column` not on the board → 422. Filters = the board URL's / a saved view's params (BRAI-407) | Read + move cards | BRAI-187, BRAI-191 | ready (v1.49.0, BRAI-403 / 407) |
-| `POST /api/v1/items/{id}/move` | app + verified | Drag & drop: `{column_id, position? (0 = top), with_subtasks?}` → `{data: card}`. Into a done column completes it (`with_subtasks`: its open subtasks too), out of one reopens it; watchers are notified. 403 without `can.edit_items`, 404 not visible / malformed id, 422 column of another board | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
+| `POST /api/v1/items/{id}/move` | app + verified | Drag & drop: `{column_id, position? (0 = top), with_subtasks?}` → `{data: card}`. Into a done column completes it (`with_subtasks`: its open subtasks too), out of one reopens it; watchers are notified. 403 without `can.edit_items`, 404 not visible / malformed id, 422 column of another board, 422 + `workflow_rule` a board workflow rule refuses it (v1.52.0) | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
 | `GET /api/v1/projects/{id}/config` | app + verified | What issue forms and filters offer: `{project_id, types, priorities, labels, fields (with options, board_ids), releases (fix versions: unreleased / released), can: {manage}}`, not paginated | Use views + set field values | BRAI-191 | ready (v1.49.0, BRAI-407) |
 | `GET /api/v1/boards/{id}/views` | app + verified | Saved views the user may use (shared + own, the web's order): `{id, name, is_shared, is_own, owner, is_default, layout, params, dropped}`, not paginated | Use views + set field values | BRAI-191 | ready (v1.49.0, BRAI-407) |
 
 Board: `{id, uuid, slug, name, description, type: kanban|scrum|list, position, project: {id, name, key}, workspace: {slug,
 name}, url, created_at, updated_at}`; `GET /boards/{id}` adds `{columns: [{id, name, slug, color, position, is_done, wip_limit,
-cards_count}], done_retention_days, swimlanes: {mode: none|custom|assignee|priority|type|release, rest_name, lanes: [{id, name,
+cards_count, workflow}], done_retention_days, swimlanes: {mode: none|custom|assignee|priority|type|release, rest_name, lanes: [{id, name,
 color, rules: {priority_ids, type_ids, label_ids, assignee_ids, release_ids, overdue}}]}, active_sprint: {id, name, goal,
 start_date, end_date}|null, can: {update, create_items, edit_items, delete_any_item, manage_sprints}}`.
 Card (issue on a board): `{id, work_id: "issue:<id>", key, title, board_id, column_id, status (column name), done, completed_at,
@@ -699,6 +743,12 @@ comments, attachments}, url, created_at, updated_at}`.
 - The cards are what the web board shows (`App\Support\Boards\BoardCards`): subtasks are cards too (`parent_id`); a **Scrum**
   board shows only the running sprint (none running → no cards; backlog and planned sprints: see Sprints); a **Kanban** board
   leaves out done cards finished more than `done_retention_days` ago (`include_old_done=1` lists them too).
+- **Workflow rules (v1.52.0):** `columns[].workflow` = `{summary: [sentences], allowed_from_column_ids: [ids] ([] = from
+  anywhere; set = no creating in that column), requires: {assignee, subtasks_done, due_date}, can_move_here}` or `null` (no
+  rule). Hints for dimming / disabling targets — the server (`WorkflowGuard`) decides. Every write that moves an issue into a
+  column or creates one there (`POST /items/{id}/move`, `POST /boards/{id}/items`, `PATCH /items/{id}`, `/sync` changes) answers
+  a refused one with 422 `validation_failed`, `errors.column_id`, and `workflow_rule: {column_id, column, reason:
+  actor|from|assignee|subtasks|due_date, item_id, item_key}` (show `message`). No role bypasses a rule; rules are edited on the web only.
 - Sorted by `column_id`, then `position` inside the column: group them by `column_id` and lay the columns out in the order of
   `GET /boards/{id}`. `?column=` loads one column (a mobile column view).
 - Swimlanes: the app evaluates the rules as the web does (`resources/js/lib/swimlanes.ts`): first lane whose rules all match

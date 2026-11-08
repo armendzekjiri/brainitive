@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\AppApi;
 
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Boards\IssueMarkdown;
 use Illuminate\Http\Request;
 
@@ -23,7 +24,8 @@ class ClientDeliverableDetailResource extends ClientDeliverableResource
             'id' => (int) $d['id'],
             'uuid' => (string) $d['uuid'],
             'kind' => (string) $d['kind'],
-            'title' => (string) $d['title'],
+            // a doc's / plan's name: empty for an API key without Docs / Plans read
+            'title' => ApiKeyAccess::reads($d['kind'] === 'page' ? 'docs' : 'plans') ? (string) $d['title'] : '',
             'version' => (int) $d['version'],
             'status' => (string) $d['status'],
             'decision' => (string) $d['decision'],
@@ -35,8 +37,9 @@ class ClientDeliverableDetailResource extends ClientDeliverableResource
             // the team's message to the client
             'message' => $d['message'],
             // kind page: the published snapshot
-            'markdown' => $d['kind'] === 'page' ? IssueMarkdown::toMarkdown((string) $d['html']) : null,
-            'html' => $d['kind'] === 'page' ? (string) $d['html'] : null,
+            // (a doc's content: null for an API key without Docs read)
+            'markdown' => $d['kind'] === 'page' && ApiKeyAccess::reads('docs') ? IssueMarkdown::toMarkdown((string) $d['html']) : null,
+            'html' => $d['kind'] === 'page' && ApiKeyAccess::reads('docs') ? (string) $d['html'] : null,
             // what the client opens (null once withdrawn)
             'client_url' => $d['client_url'],
             // the clients' approvals / change requests, oldest first

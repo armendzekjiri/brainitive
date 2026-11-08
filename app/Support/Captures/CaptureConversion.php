@@ -9,6 +9,8 @@ use App\Models\Page;
 use App\Models\Snippet;
 use App\Models\TaskListItem;
 use App\Models\User;
+use App\Support\ApiKeys\ApiKeyAccess;
+use App\Support\ApiKeys\ApiKeyGate;
 use App\Support\Mcp\ResourceLocator;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Model;
@@ -111,10 +113,12 @@ class CaptureConversion
     {
         $result = [];
         $access = new CaptureAccess($user);
+        // a personal API key: only a live target inside its scope and areas — never the saved snapshot
+        $key = ApiKeyAccess::forUser($user);
 
         $captures->filter(fn (Capture $c) => $c->target_type && $c->target_id && isset(self::TARGETS[$c->target_type]))
             ->groupBy('target_type')
-            ->each(function (Collection $group, string $type) use (&$result, $access) {
+            ->each(function (Collection $group, string $type) use (&$result, $access, $key) {
                 /** @var class-string<Model> $class */
                 $class = self::TARGETS[$type];
                 $targets = $class::query()->with(self::LOCATOR_RELATIONS[$type])
@@ -125,9 +129,12 @@ class CaptureConversion
 
                 foreach ($group as $capture) {
                     $target = $targets->get($capture->target_id);
-                    $result[$capture->id] = $target && isset($visible[$target->getKey()])
-                        ? ResourceLocator::locate($target) + ['available' => true]
-                        : ['url' => null, 'available' => false] + ($capture->target_location ?? ['type' => $type, 'title' => '', 'breadcrumb' => '']);
+                    $live = $target && isset($visible[$target->getKey()]) && ($key === null || ApiKeyGate::allows($key, 'view', [$target]));
+                    $result[$capture->id] = match (true) {
+                        $live => ResourceLocator::locate($target) + ['available' => true],
+                        $key !== null => ['url' => null, 'available' => false, 'type' => $type, 'title' => '', 'breadcrumb' => ''],
+                        default => ['url' => null, 'available' => false] + ($capture->target_location ?? ['type' => $type, 'title' => '', 'breadcrumb' => '']),
+                    };
                 }
             });
 

@@ -53,7 +53,19 @@ class BulkItemEdit
         $updated = 0;
         $skippedSubtasks = 0;
 
-        DB::transaction(function () use ($board, $items, $changes, $column, $sprint, $addLabels, $removeLabels, $labelNames, &$statusMoves, &$updated, &$skippedSubtasks) {
+        // Workflow rules (v1.52.0): every issue is checked before anything is saved; one refused issue = 422 for the
+        // whole request. Issues of this selection that enter a done column together count as done for "all subtasks done".
+        $guard = WorkflowGuard::instance();
+        $completing = $column && $column->is_done_column
+            ? $items->filter(fn (Item $item) => (int) $item->column_id !== (int) $column->id)->pluck('id')->map(fn ($id) => (int) $id)->all()
+            : [];
+        // open subtasks of all selected issues in one query per level (only when a rule asks for them)
+        $open = $column && $guard->needsSubtasks((int) $column->board_id)
+            ? $guard->openSubtasks($items->pluck('id')->map(fn ($id) => (int) $id)->all())
+            : [];
+        $blocked = [];
+
+        DB::transaction(function () use ($board, $items, $changes, $column, $sprint, $addLabels, $removeLabels, $labelNames, $guard, $actor, $completing, $open, &$blocked, &$statusMoves, &$updated, &$skippedSubtasks) {
             // New cards land at the bottom of the target column, in the order they were listed
             $nextPosition = $column ? (int) (Item::where('column_id', $column->id)->max('position') ?? 0) : 0;
 
@@ -78,6 +90,13 @@ class BulkItemEdit
                     $item->position = ++$nextPosition;
                     // Same rule as Item::moveToColumn, but an issue that stays done keeps its date
                     $item->completed_at = $column->is_done_column ? ($wasDone ? $item->completed_at : now()) : null;
+                    try {
+                        $guard->ensure($item, $column, $actor, $completing, '', $open[$item->id] ?? []);
+                    } catch (WorkflowRuleViolation $e) {
+                        $blocked[] = [$item, $e];
+
+                        continue;
+                    }
                 }
 
                 if ($item->isDirty()) {
@@ -106,6 +125,10 @@ class BulkItemEdit
                 if ($touched) {
                     $updated++;
                 }
+            }
+
+            if ($blocked !== []) {
+                throw WorkflowRuleViolation::forMany($blocked); // rolls the whole edit back
             }
         });
 

@@ -5,6 +5,7 @@ namespace App\Http\Resources\AppApi;
 use App\Models\BillingActivity;
 use App\Models\Item;
 use App\Models\TimeEntry;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Billing\TimeEntries;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -46,7 +47,8 @@ class WorkLogResource extends JsonResource
             'locked' => $entry->isLocked(),
             // id null + "Deleted or moved project" once it moved away or is out of reach (Codex web review S)
             'project' => TimeEntries::visibleProject($entry, $this->accessible),
-            'issue' => $entry->item_id || $entry->item_key ? [
+            // a personal API key: only an issue it can read (no stored key / title of one it can't)
+            'issue' => ($entry->item_id || $entry->item_key) && ($item !== null || ApiKeyAccess::current() === null) ? [
                 'id' => $entry->item_id === null ? null : (int) $entry->item_id,
                 'work_id' => $item ? 'issue:'.$item->id : null,
                 'key' => $item?->key ?? $entry->item_key,

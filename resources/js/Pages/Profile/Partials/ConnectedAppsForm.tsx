@@ -1,8 +1,9 @@
-import { router } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Plug } from 'lucide-react';
+import { KeyRound, Plug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import type { ApiKeySummary } from '@/types';
 
 export interface ConnectedApp {
     client_id: string;
@@ -18,11 +19,14 @@ const SCOPE_LABELS: Record<string, string> = {
     capture: 'Save pages, links and notes',
 };
 
-/** Apps with access to this account (MCP connectors, the browser extension, the CLI) — revoke any of them. */
-export default function ConnectedAppsForm({ apps, className = '' }: { apps: ConnectedApp[]; className?: string }) {
+/**
+ * Apps with access to this account (MCP connectors, the browser extension, the CLI) — revoke any of them —
+ * and the active personal API keys (managed on the API keys page).
+ */
+export default function ConnectedAppsForm({ apps, apiKeys = [], className = '' }: { apps: ConnectedApp[]; apiKeys?: ApiKeySummary[]; className?: string }) {
     const [busy, setBusy] = useState<string | null>(null);
 
-    if (apps.length === 0) {
+    if (apps.length === 0 && apiKeys.length === 0) {
         return <p className={`text-sm text-muted-foreground ${className}`}>No apps are connected to your account.</p>;
     }
 
@@ -48,6 +52,25 @@ export default function ConnectedAppsForm({ apps, className = '' }: { apps: Conn
                     </div>
                     <Button variant="outline" size="sm" disabled={busy === app.client_id} onClick={() => disconnect(app)}>
                         Disconnect
+                    </Button>
+                </li>
+            ))}
+            {apiKeys.map((key) => (
+                <li key={`api-key-${key.id}`} className="flex items-center gap-3 px-4 py-3" data-testid="connected-api-key">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <KeyRound className="size-4" aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{key.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                            API key · <span className="font-mono">{key.prefix}…</span> ·{' '}
+                            {key.last_used_at ? `last used ${formatDistanceToNow(new Date(key.last_used_at), { addSuffix: true })}` : 'never used'}
+                        </p>
+                    </div>
+                    <Button variant="outline" size="sm" asChild>
+                        <Link href={route('profile.api-keys.index')} aria-label={`Manage ${key.name}`}>
+                            Manage
+                        </Link>
                     </Button>
                 </li>
             ))}

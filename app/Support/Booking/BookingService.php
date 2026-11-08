@@ -12,7 +12,9 @@ use App\Models\User;
 use App\Notifications\BookingCancelledNotification;
 use App\Notifications\BookingCreatedNotification;
 use App\Notifications\BookingGuestNotification;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Boards\ItemComments;
+use App\Support\Boards\WorkflowGuard;
 use App\Support\Calendar\CalendarProviders;
 use App\Support\Meetings\MeetingCalendars;
 use Carbon\CarbonImmutable;
@@ -103,7 +105,8 @@ final class BookingService
         }
 
         self::writeCalendarEvent($booking);
-        self::createCard($booking);
+        // a card made for the host from a public page: the board's workflow rules don't apply (the host chose the column)
+        WorkflowGuard::bypass(fn () => self::createCard($booking));
 
         $booking->load('type.page.user', 'type.page.workspace');
         $page->user->notify(new BookingCreatedNotification($booking, $replaces));
@@ -135,7 +138,8 @@ final class BookingService
     /** A cancelled booking leaves no trace in the calendar; its card says what happened. */
     private static function cleanUp(Booking $booking, string $by, ?string $reason): void
     {
-        $booking->load('type.page.user', 'type.page.workspace', 'item');
+        // system work after an authorized cancel: the card note is written even for a key without Issues
+        ApiKeyAccess::unscoped(fn () => $booking->load('type.page.user', 'type.page.workspace', 'item'));
 
         if ($booking->calendar_connection_id && $booking->external_event_id) {
             try {

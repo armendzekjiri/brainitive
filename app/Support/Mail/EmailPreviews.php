@@ -4,6 +4,7 @@ namespace App\Support\Mail;
 
 use App\Mail\BillingReportMail;
 use App\Mail\InstanceTestMail;
+use App\Models\ApiKey;
 use App\Models\AppDevice;
 use App\Models\BillingReport;
 use App\Models\Board;
@@ -41,6 +42,7 @@ use App\Models\User;
 use App\Models\Webhook;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
+use App\Notifications\ApiKeyCreatedNotification;
 use App\Notifications\AppRefreshReuseNotification;
 use App\Notifications\AutomationNoticeNotification;
 use App\Notifications\BookingCalendarUnreadableNotification;
@@ -189,6 +191,9 @@ final class EmailPreviews
             ])), $s->alex()]],
             'app-refresh-reuse' => ['label' => 'App signed out (sign-in token used twice)', 'group' => 'account', 'recipient' => 'Account holder', 'build' => fn () => [new AppRefreshReuseNotification($s->make(AppDevice::class, [
                 'id' => 0, 'client' => 'desktop', 'platform' => 'macos', 'name' => 'Alex’s MacBook Pro',
+            ])), $s->alex()]],
+            'api-key-created' => ['label' => 'New API key created (Developer API)', 'group' => 'account', 'recipient' => 'Account holder', 'build' => fn () => [new ApiKeyCreatedNotification($s->make(ApiKey::class, [
+                'id' => 0, 'name' => 'Deploy script', 'prefix' => 'brai_Xy7Q2mLk', 'created_from_ip' => '203.0.113.24',
             ])), $s->alex()]],
             'workspace-invitation' => ['label' => 'Workspace invitation', 'group' => 'account', 'recipient' => 'Invitee', 'build' => fn () => [new WorkspaceInvitationNotification($s->make(WorkspaceInvitation::class, ['token' => Str::random(64), 'role' => 'editor']), $s->workspace(), $s->sam()), (new AnonymousNotifiable)->route('mail', 'jordan@example.com')]],
             'instance-test' => ['label' => 'Admin test email', 'group' => 'account', 'recipient' => 'Instance admin', 'build' => fn () => [new InstanceTestMail('smtp'), null]],

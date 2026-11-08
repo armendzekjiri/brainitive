@@ -3,6 +3,7 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\InteractsWithBrainitive;
+use App\Support\Boards\WorkflowRules;
 use App\Support\Mcp\ToolError;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -39,7 +40,12 @@ class DeleteBoardColumnTool extends Tool
             if ($column->items()->exists()) {
                 throw new ToolError("The column \"{$column->name}\" still has cards. Move or delete them first.");
             }
+            // its workflow rule / other rules' "allowed from" go with it: only for people who may change rules
+            if ($blocked = WorkflowRules::columnDeletionBlocker($column, $user)) {
+                throw new ToolError($blocked);
+            }
             $column->delete();
+            WorkflowRules::pruneEmpty($board->id);
 
             return Response::structured(['deleted' => true, 'columns' => $board->columns()->orderBy('position')->get()->map(fn ($c) => $this->columnSummary($c))->all()]);
         });

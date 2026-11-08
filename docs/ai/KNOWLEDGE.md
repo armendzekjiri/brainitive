@@ -54,6 +54,19 @@ Details in `e2e/README.md`; this lists what isn't obvious.
 - **Mail.** e2e mail goes to `storage/e2e/mail-<port>.log` (the `mail` log channel), and
   `mail.ts` follows invite and verification links. Laravel's log transport has already decoded
   quoted-printable bodies, so don't decode again (it corrupts `=17…` in links).
+- **Nightly Firefox / WebKit traps (fix/nightly-e2e-browsers, v1.51).**
+  - `page.route` + a service worker: Chromium still sees the requests of a controlled page, WebKit
+    doesn't — a spec that answers app requests with `route()` passes in the per-push Chromium run and
+    hangs or fails only nightly. Every such spec needs `test.use({ serviceWorkers: 'block' })`.
+  - WebKit without GPU compositing (Playwright, WebKitGTK) repaints large `filter: blur()` layers and
+    every `backdrop-filter` element on each frame. The homepage (an animated 120 px blurred background
+    + ~15 backdrop-blurred cards) dropped to 0–3 frames per second, so every click waited for
+    "element is stable" until the test timed out. The homepage uses radial gradients and no card
+    backdrop blur now; keep `backdrop-filter` to bars that overlay scrolling content.
+  - Debounced Inertia visits (search fields) that fire after the test moved on interrupt the next
+    `page.goto` in WebKit: wait for the URL the visit produces first.
+  - Two Escapes back to back (close a Radix Select, then its dialog): wait for the listbox to be gone
+    in between — while it is closing it is still the top dismissable layer and eats the second Escape.
 - **Every button.** The crawler (`crawler.ts`, project `crawl`) clicks every control on every
   page it can reach, plus their menus and dialogs, and fills and submits form dialogs. Destructive
   requests are answered with a reload (`409` + `X-Inertia-Location`). `networkidle` returns at
@@ -520,6 +533,60 @@ Jira's "hide completed issues older than…" for Kanban boards: `boards.settings
   import — `JiraExport::date()` calls `createFromFormat` per format and the first mismatch throws
   (`InvalidFormatException`) before `'Y-m-d H:i'` is tried. Jira's own format (`20/Oct/26 9:05 AM`) works.
   Not fixed here.
+
+### Board workflow rules: one guard, a model backstop, strict on purpose (v1.52.0, 2026-11-06)
+Rules per target column (who / allowed from / conditions), enforced by `Support\Boards\WorkflowGuard`.
+- **Two layers.** Explicit `ensure()` where a whole action must be refused up front with a clear message (drag & drop + the
+  "complete subtasks" cascade, bulk edit, move to another board, automations, recurring issues); and a **backstop in
+  `Item::saving`** for every create and every `column_id` change, as `Auth::user()`. A new write path is covered without
+  touching it — but a write that runs while *someone unrelated* is signed in (a guest booking a slot while logged in) must run
+  in `WorkflowGuard::bypass()`. Query-builder column writes skip the backstop: check them explicitly (`moveItemToBoard`'s subtree).
+- **Who edits rules: project admins + workspace admins (`ProjectPolicy::update`), not board editors** — the editors a rule
+  restricts must not be able to lift it (review finding). Editors see the rules read-only. Deleting a column that has a rule
+  or is in another rule's "allowed from" is a rule change too: `WorkflowRules::columnDeletionBlocker()` (web + MCP
+  `delete_board_column`). Every create / update / delete is an `ActivityLog` entry on the **Board** (`workflow_rule_*`,
+  sentence before / after, column in metadata), listed under "Rule changes" on the settings tab.
+- **Without a signed-in user only the who-part is skipped** (GitHub merge transitions, webhooks, console): "allowed from"
+  and conditions still apply. `MergeTransitions::move` checks `violation($item, $column, null)` and records result `blocked`
+  + `message` on the PR link (`meta.merge_transition`), shown in the issue's Development panel.
+- **An emptied who-rule is locked: NOBODY may move cards in** (user decision 2026-11-07, like a Jira transition condition
+  nobody meets — no admin fallback, no bypass). `restrict_who` is stored when people / roles were chosen; when the listed
+  people are deleted or leave the project and no role is listed, `WorkflowGuard::who()` reports `locked` and
+  `actorAllowed()` is false for everyone. Message (422, drag hint, header tooltip): "Nobody can move cards to Done right now
+  (the rule lists nobody)."; summary "Nobody can move cards here right now (the rule lists nobody)."; settings warns "Nobody
+  can move cards to Done: the people this rule allowed are gone. Edit the rule." Project and workspace admins (also
+  workspace admins outside the project) can still edit the rule — that's how it gets fixed; clearing the who-list on purpose
+  (`restrict_who: false`) opens it to anyone who can edit cards. Without a signed-in user (GitHub merges) the who-part,
+  locked or not, isn't checked. People who left are dropped from summaries / messages and offered as `former_user_ids` in
+  the editor. Rules that restrict nothing after a column delete are pruned (`pruneEmpty()`).
+- **Recurring templates run as whoever saved them last.** `RecurringIssueController::update` sets `created_by` to the editor
+  (like resume), and store / update check the rule for that person on a probe issue (422 on `column_id`), so nobody routes
+  issues through someone else's rights.
+- **Subtask checks are batched:** callers that check many issues (bulk, cascade, move to board) precompute
+  `WorkflowGuard::openSubtasks($ids)` (one query per level) when `needsSubtasks()`; moving a subtree into a done column counts
+  the subtree as completing.
+- **Not checked:** `ImportScope::active()`
+  (Jira / Trello / Notion / archive imports reproduce existing data), `bypass()` (booking cards for the host). Template
+  instantiation creates a new project, which has no rules yet. Rules don't travel with templates / exports (follow-up).
+- **Creating = entering from nowhere.** Who-rule and conditions apply; a column with an allowed-from list can't be created
+  into (duplicate and "move to another board" count as creating). Strict on purpose: otherwise "create directly in Done" is
+  the loophole. A reorder inside the column isn't entering it.
+- **No bypass for anyone** (workspace owner / admins included) — the requester wanted it strict; admins can list themselves (and must, to move cards into a locked column).
+- **One refused issue = nothing changes.** Cascade and bulk check every issue first and run in a transaction; issues completed
+  by the same action count as done for "all subtasks done" (`$completingIds`). An `ensure()`d model instance is remembered
+  (`WeakMap`) so the backstop doesn't check it twice — and doesn't re-evaluate "subtasks done" before the subtasks moved.
+- **Errors are `WorkflowRuleViolation`** (a `ValidationWithExtras`): web → `errors.column_id` (the board / dialog toast it),
+  JSON 422, App API adds `workflow_rule {reason…}`, MCP `guard()` returns the text. Wrappers that rebuild a
+  `ValidationException` (App API `IssueController::fieldErrors`) must rethrow it untouched. Automations log
+  "Blocked by the board's workflow rules: …" as the action's error; recurring templates pause with it.
+- **Caching:** the guard is a scoped singleton (rules per board, roles per user+project) and is forgotten on every
+  `RouteMatched` — tests run many requests in one container, and a cached rule set from one request made another request's
+  query count differ (`ItemFieldsTest` query-count test). `WorkflowRules::save()` calls `forget()`.
+- **Cleanup by foreign keys:** members and allowed-from columns are pivots (cascade on user / column delete); no
+  `whereJsonContains`. An allowed-from list emptied by deletes means "from anywhere" again (the delete flash says rules changed).
+  Someone removed from the project stays listed (shown "no longer in the project") but can't move cards anyway (ItemPolicy).
+- **Client hints** (`lib/workflowRules.ts`, `columns[].workflow` with `actor_allowed`) mirror the server's messages; the board
+  refuses a blocked drop itself (toast), but drops still fire (`dropEffect` stays `move`, or no drop event and no message).
 
 ### Explicit route binders run before implicit ones
 In `Route::bind('page' | 'bookmark', …)` the `{workspace}` / `{project}` parameters are still raw
@@ -1397,6 +1464,62 @@ also wait for read / archive actions in flight (a page older than the action is 
   members, then hands their content in other workspaces to those owners.
 
 ## Architectural decisions
+
+### Developer API: personal API keys (v1.52.0)
+- **Keys share the `app` guard and `/api/v1`, not Passport:** `brai_` bearers resolve in `ApiKeys::userFromRequest`
+  (from `AppTokens::userFromRequest`). `brai_` never collides with device tokens (`bra_` / `brr_`: the 4th character
+  differs). Only the sha256 is stored, looked up on a unique index.
+- **One declaration per route (`ApiKeyRoutes::MAP`), deny by default.** Route names, not paths, like the TV's
+  `clients.*.abilities`. `AuthorizeApiKey` runs before route-model binding, so an out-of-scope id is a 403 without a
+  model lookup, and **a place the user can't open is the controller's 404** — the 403 message only ever names
+  projects / boards / workspaces the user can see.
+- **A deny-only `Gate::before` (`ApiKeyGate`) is deliberate**, not the forbidden "admin bypass" pattern: it returns
+  `false` or `null`, never `true`, and only for the key's own user. It is what stops ids in bodies (link target, move to
+  sprint, capture destination, meeting subject, timer issue) from leaving the scope or the granted areas.
+- **The user's access helpers are key-aware** (`hasWorkspaceAccess`, `hasProjectAccess`, `accessibleProjectIds`,
+  `adminProjectIds`, through `ApiKeyAccess::forUser`) so every list built on them is filtered in SQL. Things that read
+  `$user->workspaces()` or a project's relations directly need an explicit filter (see ARCHITECTURE). The board level
+  isn't in those helpers: lists of issues across boards use `ApiKeyAccess::limitIssues()`.
+- **Tests:** the request guard caches the user between requests in a test, and `Authenticate` switches the default
+  guard to `app` — use `ForgetsGuardsBetweenRequests` and `shouldUse('web')` before a web call in the same test.
+  `ApiKeyAccess::current()` reads the *current* request's attributes, so it's naturally per request.
+- **Excluded on purpose:** realtime and live co-editing tokens (an open socket would outlive a revoked key), offline
+  sync (its change feed and appliers span every area; re-scoping it was not worth the risk), notifications (titles from
+  every workspace), the calendar feed link (a credential), and anything account / session / device / key management.
+- **No stored snapshots for keys, ledgers unscoped** (Codex round 6): a key never gets a write-time copy of
+  another record (capture `target_location`, work log `item_key` / `item_title`) — only the live record through its
+  scope and area, else nothing. Counter / ledger updates triggered by an authorized write (TimeEntry → `items.time_spent`,
+  the booking-cancel note on its card) bypass the key's scope (`withoutGlobalScope('api-key')` / `unscoped()`).
+- **Area is part of the model scope** (response audit): `ScopedToApiKey` models load only when the key READS their
+  area, so any relation of another area is null in a key's answer; stored copies of other-area data (a work log's
+  issue title, a capture's target title, a deliverable's doc HTML) are gated with `ApiKeyAccess::reads()`. Derived
+  links / reference pruning and sync-queue jobs run in `ApiKeyAccess::unscoped()` — otherwise a key's request would
+  prune links it can't see. A new response field from another area: gate it, and `ApiKeySingleAreaSweepTest` checks it.
+- **One rule for workspace-level content** (Codex review: bookings): models with the `ScopedToApiKey` trait are
+  filtered by `ApiKeyAccess::scopeModel()` during a key's request — issues and work logs by board / project /
+  workspace, and WORKSPACE-level models (snippet collections + snippets, bookmark groups + links, booking pages +
+  bookings) only for keys over whole workspaces. A new workspace-level model gets the trait and a line in
+  `scopeModel` (a trait without a line there matches nothing). `ApiKeyWorkspaceLevelTest` sweeps them with project- and
+  board-scoped keys.
+- **The new key's secret is never an Inertia prop** (Codex review): create / regenerate answer JSON to an axios
+  request (`no-store`); the page keeps it in component state only, so it never lands in history state or the session.
+- **Board scope is a global scope, not per-endpoint checks** (Codex re-review: timer, issue by key): during a key's
+  request `Item` and `TimeEntry` carry an `api-key` global scope (`ApiKeyAccess::scopeItems` / `scopeTimeEntries`), so
+  every Eloquent load of an issue or work log — by id, key, relation, list, aggregate — only sees the key's boards /
+  projects / workspaces. `AuthorizeApiKey` calls `ApiKeyAccess::end()` after the controller, so deferred automations
+  run unscoped. Raw `DB::table('items')` bypasses it (only `ApiKeyLocator` and the timer check use it, on purpose).
+  The timer is checked before show / stop / discard (`TimerController::timerInKeyScope`). `ApiKeyBoardScopeSweepTest`
+  walks every issue route with an issue on another board.
+- **Responses that mix areas are the trap** (Codex review): Today / the agenda (calendar + bookings + issues + to-dos),
+  smart links and related content (issues, docs, tickets, plans by the user's project membership), insights / health.
+  Each part needs its own area check (`ApiKeyAccess::readable`, `ApiKeyGate::allows($key, 'view', [$model])`), and a
+  source the key can't read is not even queried. A new aggregate endpoint: declare all its areas (`areas` in
+  `ApiKeyRoutes`) or filter per part.
+- **The create / revoke-all race** (Codex review): keys store `credential_generation` = `users.app_auth_generation`
+  (the counter SignOutEverywhere bumps, shared with app sign-ins). Create / regenerate read it when the request starts,
+  then lock the user row and refuse with 409 if it moved; auth treats a key with an older generation as revoked.
+- **Password change, reset, suspension revoke every key** (`SignOutEverywhere`): a key created with a stolen session
+  must not survive the victim's password change. Creation and regeneration email the user.
 
 ### Cloud plan limits: traps (v1.46.0, BRAI-160)
 - **Package binding wins through `singletonIf`:** package providers register before `bootstrap/providers.php`, so

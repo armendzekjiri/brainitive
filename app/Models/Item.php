@@ -3,7 +3,10 @@
 namespace App\Models;
 
 use App\Models\Concerns\GuardsContentGrowth;
+use App\Models\Concerns\ScopedToApiKey;
 use App\Observers\ItemObserver;
+use App\Support\ApiKeys\ApiKeyAccess;
+use App\Support\Boards\WorkflowGuard;
 use App\Support\Collab\ItemCollab;
 use App\Support\Imports\ImportScope;
 use App\Support\Live\BoardLive;
@@ -11,6 +14,7 @@ use App\Support\Live\Live;
 use App\Support\References\ContentReferences;
 use App\Support\References\SmartLinks;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,6 +29,7 @@ use Illuminate\Support\Str;
 class Item extends Model
 {
     use GuardsContentGrowth, HasFactory, SoftDeletes;
+    use ScopedToApiKey;
 
     /** Set while a live description save writes (BRAI-151): that one doesn't reset the live document. */
     public bool $collabWrite = false;
@@ -84,6 +89,9 @@ class Item extends Model
         // completed_at follows the column on every write path (BRAI-346: done retention needs it)
         static::saving(fn (Item $item) => $item->syncCompletedAtWithColumn());
 
+        // the board's workflow rules (v1.52.0): every create and column change, as the signed-in user
+        static::saving(fn (Item $item) => WorkflowGuard::instance()->onSaving($item));
+
         // Auto-watch: add reporter to watchers after creation
         static::created(function (Item $item) {
             if ($item->reporter_id) {
@@ -101,7 +109,7 @@ class Item extends Model
         // Smart links in the description are derived references (BRAI-143)
         static::saved(function (Item $item) {
             if ($item->wasRecentlyCreated ? (string) $item->description !== '' : $item->wasChanged('description')) {
-                SmartLinks::syncItem($item);
+                ApiKeyAccess::unscoped(fn () => SmartLinks::syncItem($item));
             }
         });
 
@@ -121,7 +129,7 @@ class Item extends Model
         static::forceDeleted(function (Item $item) {
             $projectId = Board::withTrashed()->whereKey($item->board_id)->value('project_id');
             if ($projectId) {
-                ContentReferences::pruneMissing((int) $projectId);
+                ApiKeyAccess::unscoped(fn () => ContentReferences::pruneMissing((int) $projectId));
             }
         });
     }

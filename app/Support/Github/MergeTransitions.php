@@ -7,6 +7,7 @@ use App\Models\Board;
 use App\Models\BoardColumn;
 use App\Models\Item;
 use App\Models\ItemDevLink;
+use App\Support\Boards\WorkflowGuard;
 
 /**
  * "When the primary linked PR is merged → move the card to column X" (BRAI-61), per board, off by
@@ -15,6 +16,8 @@ use App\Models\ItemDevLink;
  * - Primary PR = the PR link marked `primary`, else the first linked PR. Other PRs are informational.
  * - Each merged PR is evaluated once (`meta.merge_transition`), so a redelivery, a retry or a later
  *   change of the setting never moves the card again.
+ * - A board workflow rule that refuses the move (allowed from / conditions; no person acts, so not the who-part)
+ *   leaves the card where it is: result `blocked` + `message`, shown on the PR in the issue's Development section.
  * - Closed without merge does nothing. A card in a done column is never moved (never reopens).
  * - The move is a normal model save (bottom of the column, completed_at like any move), so the
  *   history (ItemObserver, marked "via GitHub"), outgoing webhooks and automation rules see it.
@@ -45,14 +48,17 @@ final class MergeTransitions
             return;
         }
 
-        $result = self::primaryId($link->item_id) === $link->id ? self::move($link) : 'secondary';
+        $blocked = null;
+        $result = self::primaryId($link->item_id) === $link->id ? self::move($link, $blocked) : 'secondary';
 
         $meta = $link->meta ?? [];
-        $meta['merge_transition'] = ['at' => now()->toIso8601String(), 'result' => $result];
+        $meta['merge_transition'] = ['at' => now()->toIso8601String(), 'result' => $result]
+            + ($blocked !== null ? ['message' => $blocked] : []);
         $link->forceFill(['meta' => $meta])->save();
     }
 
-    private static function move(ItemDevLink $link): string
+    /** @param  string|null  $blocked  set to the reason when a board workflow rule refuses the move */
+    private static function move(ItemDevLink $link, ?string &$blocked = null): string
     {
         $item = Item::with(['board', 'column'])->find($link->item_id);
         if (! $item || ! $item->board) {
@@ -67,6 +73,13 @@ final class MergeTransitions
         }
         if ($item->column?->is_done_column) {
             return 'done'; // never move a finished card (never reopens)
+        }
+
+        // the board's workflow rules (v1.52.0): no person acts, so "allowed from" and the conditions decide
+        if ($violation = WorkflowGuard::instance()->violation($item, $column, null)) {
+            $blocked = $violation->text();
+
+            return 'blocked';
         }
 
         ActivityLog::via('github', function () use ($item, $column) {

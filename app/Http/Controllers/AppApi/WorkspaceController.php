@@ -10,6 +10,7 @@ use App\Http\Resources\AppApi\WorkspaceCollection;
 use App\Http\Resources\AppApi\WorkspaceDetailResource;
 use App\Http\Resources\AppApi\WorkspaceResource;
 use App\Models\Workspace;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Entitlements\LimitReached;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
@@ -31,7 +32,11 @@ class WorkspaceController extends Controller
     {
         $since = $request->updatedSince();
 
+        $key = ApiKeyAccess::forUser($request->user());
+
         $page = $request->user()->workspaces()
+            // a personal API key: the workspaces in its scope that allow API keys
+            ->when($key !== null, fn ($q) => $q->whereIn('workspaces.id', $key->workspaceIds()))
             ->when($since, fn ($q) => $q->where('workspaces.updated_at', '>=', $since))
             ->orderBy('workspaces.name')
             ->orderBy('workspaces.id')

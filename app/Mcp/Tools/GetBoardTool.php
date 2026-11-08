@@ -3,6 +3,8 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\InteractsWithBrainitive;
+use App\Support\Boards\WorkflowGuard;
+use App\Support\Boards\WorkflowRules;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -58,6 +60,8 @@ class GetBoardTool extends Tool
                     'color' => $col->color ?? '',
                     'is_done' => (bool) $col->is_done_column,
                     'wip_limit' => $col->wip_limit,
+                    // the board's workflow rule for entering this column (v1.52.0), '' = none
+                    'workflow_rule' => WorkflowRules::sentence(WorkflowGuard::instance()->ruleFor($col)),
                     'hidden_done_count' => $hidden->count(),
                     'items' => $inColumn->diffKeys($hidden)->map(fn ($i) => [
                         'id' => $i->id,
@@ -91,6 +95,7 @@ class GetBoardTool extends Tool
                 'color' => $schema->string(),
                 'is_done' => $schema->boolean()->description('Cards here count as done.'),
                 'wip_limit' => $schema->integer()->nullable(),
+                'workflow_rule' => $schema->string()->description('Workflow rule for moving cards into this column (who may, from which columns, conditions); empty = none. A move that breaks it is refused with the reason.'),
                 'hidden_done_count' => $schema->integer()->description('Older done cards not listed here (see done_retention_days).'),
                 'items' => $schema->array()->items($schema->object([
                     'id' => $schema->integer(),
