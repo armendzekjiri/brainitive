@@ -3,6 +3,8 @@
 namespace App\Support\Calendar;
 
 use App\Models\User;
+use App\Support\ApiKeys\ApiKeyAccess;
+use App\Support\ApiKeys\ApiKeyAreas;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 
@@ -22,6 +24,14 @@ final class AgendaEvent
         'booking' => 'booking',
     ];
 
+    /** Calendar source → the API key area that may read it (Developer API). */
+    private const SOURCE_AREAS = [
+        'board' => 'issues',
+        'list' => 'work',
+        'external' => 'calendar', // connected calendars, incl. Google tasks
+        'booking' => 'calendar',
+    ];
+
     /**
      * The user's calendar for their local days $from … $to (inclusive), soonest first: CalendarEvents
      * (the web calendar's sources) turned into agenda events and cut to exactly those days.
@@ -32,6 +42,15 @@ final class AgendaEvent
     public static function forDays(User $user, string $from, string $to, array $sources, bool $meOnly, bool $showCompleted): array
     {
         $zone = $user->localTimezone();
+
+        // a personal API key: each source needs its area's read — external events, Google tasks and bookings
+        // Calendar & bookings, issues Issues & boards, to-dos My Work; a source it can't read is never queried
+        if (($key = ApiKeyAccess::forUser($user)) !== null) {
+            $sources = array_values(array_filter($sources, fn (string $source) => $key->can(self::SOURCE_AREAS[$source] ?? 'calendar', ApiKeyAreas::READ)));
+            if ($sources === []) {
+                return ['events' => [], 'errors' => []];
+            }
+        }
 
         // CalendarEvents works on calendar dates (app zone): ask one day more on each side, then cut
         // by the user's local days below, so no event near midnight is lost or doubled.
@@ -49,7 +68,22 @@ final class AgendaEvent
 
         $events = collect($result['events'])
             ->map(fn (array $event) => self::from($event, $zone))
-            ->filter(fn (?array $event) => $event !== null && self::within($event, $from, $to, $zone))
+            ->filter(fn (?array $event) => $event !== null && self::within($event, $from, $to, $zone));
+
+        // a personal API key: issues only with Issues & boards read (and its boards), to-dos only with My Work read
+        if (($key = ApiKeyAccess::forUser($user)) !== null) {
+            $issueIds = $events->where('type', 'issue')->map(fn (array $e) => (int) substr((string) $e['work_id'], 6))->values()->all();
+            $visible = array_flip(ApiKeyAccess::visibleIssueIds($user, $issueIds));
+            $tasks = $key->can('work', ApiKeyAreas::READ);
+            $calendar = $key->can('calendar', ApiKeyAreas::READ);
+            $events = $events->filter(fn (array $e) => match ($e['type']) {
+                'issue' => isset($visible[(int) substr((string) $e['work_id'], 6)]),
+                'task' => $tasks,
+                default => $calendar, // event, google_task, booking — and anything new: closed until mapped
+            });
+        }
+
+        $events = $events
             // by local day; on a day all-day ones first, then by start time; ties by id (a stable order)
             ->sortBy(fn (array $event) => $event['all_day']
                 ? [$event['start_date'], 0, '', $event['id']]

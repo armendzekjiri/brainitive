@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\User;
+use App\Support\ApiKeys\ApiKeys;
 use App\Support\AppApi\AppSignInGeneration;
 use App\Support\AppApi\AppTokens;
 use App\Support\Live\RealtimeSession;
@@ -15,6 +16,7 @@ use Illuminate\Support\Str;
  * (AppTokens::revokeAllFor: tokens, live and collab sockets, the webviews' sessions — BRAI-377), and every
  * app sign-in approved but not yet turned into tokens (AppSignInGeneration — Codex review), and every realtime socket of
  * the user's browsers (RealtimeSession: the bumped generation closes them with 4401 "Signed out" — Codex realtime review 1).
+ * Personal API keys (Developer API) are revoked as well.
  * Used on suspension, deletion, password change and reset, and when a social login takes over an account whose email was never verified.
  */
 class SignOutEverywhere
@@ -45,5 +47,7 @@ class SignOutEverywhere
         }
 
         AppTokens::revokeAllFor($user, $appReason);
+        // personal API keys too: a key made with a stolen session must not outlive the password change (v1.52.0)
+        ApiKeys::revokeAllFor($user, $appReason);
     }
 }

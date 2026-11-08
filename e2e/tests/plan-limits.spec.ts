@@ -13,6 +13,10 @@ test.skip(REMOTE, 'dev.brainitive.app has no fixed e2e plan limits');
 const planWorkspace = (page: Page) => createWorkspace(page, uid(PLAN_LIMITS.slugPrefix.replace(/-$/, '')));
 
 /** Open the workspace settings' Members tab and start an invitation for `email`. */
+
+// the 402 journey fakes the server's answer with route(); with a service worker controlling the page, WebKit
+// sends its requests past Playwright's routing. Nothing here needs the worker.
+test.use({ serviceWorkers: 'block' });
 async function startInvite(page: Page, slug: string, email: string) {
     await page.goto(`${urls.workspace(slug)}/edit`);
     await openSettingsTab(page, /Members/);

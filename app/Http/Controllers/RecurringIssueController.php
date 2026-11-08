@@ -47,6 +47,7 @@ class RecurringIssueController extends Controller
             'timezone' => $timezone,
         ]);
         $template->active_from = $template->localToday()->toDateString();
+        RecurringIssueForm::ensureRulesAllow($template, $board, $request->user());
         $template->refreshNextOccurrence()->save();
 
         return response()->json(['template' => RecurringIssueForm::present($template->load('creator:id,name'))], 201);
@@ -58,6 +59,10 @@ class RecurringIssueController extends Controller
 
         $validated = $request->validate(RecurringIssueForm::rules($board, $project));
         $recurringIssue->fill(RecurringIssueForm::attributes($validated));
+        // Whoever changes it runs it from now on (like resume): the board's workflow rules and permissions are checked
+        // for them, never for the original creator, so an editor can't route issues through someone else's rights.
+        $recurringIssue->created_by = $request->user()->id;
+        RecurringIssueForm::ensureRulesAllow($recurringIssue, $board, $request->user());
 
         // A new schedule starts today: past dates of the new rule are never created afterwards.
         if ($recurringIssue->isDirty(RecurringIssue::SCHEDULE_FIELDS)) {

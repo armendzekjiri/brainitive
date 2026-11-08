@@ -66,6 +66,7 @@ import {
     Gauge,
 } from 'lucide-react';
 import { WorkspaceLegalSettings } from '@/components/legal/WorkspaceLegalSettings';
+import { WorkspaceApiKeysSetting } from '@/components/workspaces/WorkspaceApiKeysSetting';
 import { WorkspaceUsageCard } from '@/components/entitlements/WorkspaceUsageCard';
 import { isLimitReachedError } from '@/lib/entitlements';
 import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
@@ -1400,6 +1401,8 @@ export default function WorkspacesEdit({
                         {/* Legal: who runs the public pages (BRAI-156) */}
                         <TabsContent value="legal">
                             <WorkspaceLegalSettings workspace={workspace} />
+                            {/* Developer API: allow / block personal API keys here (v1.52.0) */}
+                            {canManage && <WorkspaceApiKeysSetting workspace={workspace} />}
                         </TabsContent>
 
                         {/* Plan & usage: Cloud plans only (v1.46.0) */}

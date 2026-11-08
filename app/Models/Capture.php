@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ScopedToApiKey;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -20,6 +21,7 @@ use Illuminate\Validation\Rule;
 class Capture extends Model
 {
     use HasFactory;
+    use ScopedToApiKey;
 
     /** Destination kinds, also the values of `intended_type` and `target_type`. */
     public const TYPES = ['issue', 'task', 'page', 'bookmark', 'snippet'];

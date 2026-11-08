@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ScopedToApiKey;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Collab\PageCollab;
 use App\Support\Entitlements\LimitGate;
 use App\Support\Events\DomainEvents;
@@ -22,6 +24,7 @@ use Illuminate\Support\Str;
 class Page extends Model
 {
     use HasFactory;
+    use ScopedToApiKey;
 
     protected $fillable = [
         'project_id',
@@ -170,9 +173,9 @@ class Page extends Model
                 return;
             }
             if ($page->is_whiteboard) {
-                ContentReferences::syncWhiteboard($page);
+                ApiKeyAccess::unscoped(fn () => ContentReferences::syncWhiteboard($page));
             } else {
-                SmartLinks::syncPage($page);
+                ApiKeyAccess::unscoped(fn () => SmartLinks::syncPage($page));
             }
         });
         // Live co-editing (BRAI-54): the draft changed outside the live document (discard, restore,
@@ -190,7 +193,7 @@ class Page extends Model
             }
         });
         // Pages are hard-deleted and their subpages go with them (FK cascade, no events)
-        static::deleted(fn (Page $page) => ContentReferences::pruneMissing((int) $page->project_id));
+        static::deleted(fn (Page $page) => ApiKeyAccess::unscoped(fn () => ContentReferences::pruneMissing((int) $page->project_id)));
     }
 
     public function project(): BelongsTo

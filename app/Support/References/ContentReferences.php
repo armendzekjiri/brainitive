@@ -12,6 +12,8 @@ use App\Models\Project;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\ApiKeys\ApiKeyAccess;
+use App\Support\ApiKeys\ApiKeyGate;
 use App\Support\Plans\PlanIssueSync;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -439,11 +441,13 @@ class ContentReferences
             if ($ids === [] || ! isset(ContentReference::TYPES[$type])) {
                 continue;
             }
-            $visible[$type] = self::visibleQuery($project, $user, $type)
-                ->whereKey($ids)
-                ->get()
-                ->keyBy(fn (Model $m) => (int) $m->getKey())
-                ->all();
+            $found = self::visibleQuery($project, $user, $type)->whereKey($ids)->get();
+            // a personal API key (Developer API): only ends in its scope and of areas it can read — the rest is
+            // left out as if it didn't exist
+            if (($key = ApiKeyAccess::forUser($user)) !== null) {
+                $found = $found->filter(fn (Model $m) => ApiKeyGate::allows($key, 'view', [$m]));
+            }
+            $visible[$type] = $found->keyBy(fn (Model $m) => (int) $m->getKey())->all();
         }
 
         return $visible;

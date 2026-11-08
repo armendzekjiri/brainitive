@@ -15,7 +15,9 @@ use App\Http\Resources\AppApi\IssueResource;
 use App\Models\Board;
 use App\Models\Item;
 use App\Models\Project;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Boards\Issues;
+use App\Support\Boards\WorkflowRuleViolation;
 use App\Support\Entitlements\LimitReached;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -93,11 +95,16 @@ class IssueController extends Controller
         $projects = Project::query()->whereIn('id', $request->user()->accessibleProjectIds())
             ->when($request->workspaceSlug(), fn ($q, $slug) => $q->whereHas('workspace', fn ($w) => $w->where('slug', $slug)))
             ->select('id');
-        $items = Item::query()
+        $user = $request->user();
+        // a personal API key: only its boards (explicit here, next to the Item model's key scope)
+        $items = ApiKeyAccess::limitIssues($user, Item::query()
             ->where('key', $key)
-            ->whereIn('board_id', Board::whereIn('project_id', $projects)->select('id'))
+            ->whereIn('board_id', Board::whereIn('project_id', $projects)->select('id')))
             ->limit(2)
-            ->get();
+            ->get()
+            // and the view policy (ApiKeyGate runs on it): an issue the key can't see is the same 404 as a missing key
+            ->filter(fn (Item $item) => $user->can('view', $item))
+            ->values();
 
         abort_if($items->isEmpty(), 404);
         abort_if($items->count() > 1, 409, 'This key exists in several of your workspaces: pass ?workspace=<slug>.');
@@ -159,7 +166,10 @@ class IssueController extends Controller
     public function dated(ListDatedIssuesRequest $request, string $project): IssueCollection
     {
         $project = $this->visibleProject($request, $project);
-        $boards = Board::where('project_id', $project->id)->with('project.workspace')->get()->keyBy('id');
+        $scoped = ApiKeyAccess::forUser($request->user())?->boardIds();
+        // a personal API key limited to boards: those boards only
+        $boards = Board::where('project_id', $project->id)->when($scoped !== null, fn ($q) => $q->whereIn('id', $scoped))
+            ->with('project.workspace')->get()->keyBy('id');
         $boardId = $request->board();
         if ($boardId !== null && ! $boards->has($boardId)) {
             throw ValidationException::withMessages(['board' => 'That board is not in this project.']);
@@ -213,6 +223,8 @@ class IssueController extends Controller
     {
         try {
             return $write();
+        } catch (WorkflowRuleViolation $e) {
+            throw $e; // a board workflow rule (v1.52.0): keeps its `workflow_rule` details
         } catch (ValidationException $e) {
             $errors = [];
             foreach ($e->errors() as $key => $messages) {

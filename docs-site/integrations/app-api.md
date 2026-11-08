@@ -1,12 +1,14 @@
 ---
 title: App API
-description: "The App API (/api/v1) behind the Brainitive desktop, mobile and TV apps: how apps sign in, what a token is, how devices are listed and revoked, and where the API reference lives."
+description: "The App API (/api/v1) behind the Brainitive desktop, mobile and TV apps and the Developer API: how apps sign in, what a token is, how devices are listed and revoked, and where the API reference lives."
 order: 85
 ---
 
 # App API
 
 The **App API** is the JSON API under `/api/v1` that the official Brainitive apps use: Brainitive Desktop, the mobile app and the TV app. It covers what the web app does for your day-to-day work (boards, issues, docs, My Work, captures, time tracking, the calendar and more), with offline sync and live updates for apps.
+
+Your own scripts and apps can use the same API with a **personal API key**: see [Developer API](./developer-api).
 
 It is separate from the other ways to connect: [AI and MCP](./ai-and-mcp) for AI assistants, the [CLI](./cli) and the [browser extension](./browser-extension) each have their own access.
 
@@ -27,9 +29,9 @@ No OAuth app or client secret has to be set up for any of this.
 
 ## Reference
 
-The full reference (OpenAPI 3.1) is the file [`docs/api/openapi.json`](https://github.com/armendzekjiri/brainitive/blob/main/docs/api/openapi.json) in the repository. On a server, instance admins can browse it at `/docs/api`.
+The full reference is public at [docs.brainitive.app/api](/api) (OpenAPI 3.1, also the file [`docs/api/openapi.json`](https://github.com/armendzekjiri/brainitive/blob/main/docs/api/openapi.json) in the repository). Each endpoint says what a personal API key needs for it. On a server, instance admins can also browse it at `/docs/api`.
 
-Using the App API with your own scripts is not supported yet: tokens are only issued to the official apps.
+To use the API from your own scripts, create a personal API key: [Developer API](./developer-api). App sign-in tokens are only issued to the official apps.
 
 ## Self-hosting
 

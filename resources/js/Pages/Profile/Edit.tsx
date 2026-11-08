@@ -1,6 +1,8 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { AppDevice, NotificationCategoryPreference, PageProps } from '@/types';
-import { Head } from '@inertiajs/react';
+import { ApiKeySummary, AppDevice, NotificationCategoryPreference, PageProps } from '@/types';
+import { Head, Link } from '@inertiajs/react';
+import { KeyRound } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import OfflineSettingCard from '@/components/offline/OfflineSettingCard';
 import AppDevices from './Partials/AppDevices';
@@ -19,12 +21,16 @@ export default function Edit({
     connectedApps = [],
     notificationCategories = [],
     appDevices = [],
+    apiKeys = [],
+    apiKeysEnabled = true,
 }: PageProps<{
     mustVerifyEmail: boolean;
     status?: string;
     connectedApps?: ConnectedApp[];
     notificationCategories?: NotificationCategoryPreference[];
     appDevices?: AppDevice[];
+    apiKeys?: ApiKeySummary[];
+    apiKeysEnabled?: boolean;
 }>) {
     return (
         <AppLayout>
@@ -85,13 +91,39 @@ export default function Edit({
                     </CardContent>
                 </Card>
 
+                <Card id="api-keys" className="scroll-mt-20">
+                    <CardHeader>
+                        <CardTitle>API keys</CardTitle>
+                        <CardDescription>Personal keys for the Brainitive API: use it from your own scripts and apps.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        {!apiKeysEnabled && (
+                            <p className="text-sm text-muted-foreground">API keys are turned off on this server by its administrator.</p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-3">
+                            <Button variant="outline" asChild>
+                                <Link href={route('profile.api-keys.index')}>
+                                    <KeyRound className="size-4" aria-hidden />
+                                    Manage API keys
+                                </Link>
+                            </Button>
+                            <span className="text-sm text-muted-foreground">
+                                {apiKeys.length === 0 ? 'No active keys' : `${apiKeys.length} active ${apiKeys.length === 1 ? 'key' : 'keys'}`}
+                            </span>
+                        </div>
+                    </CardContent>
+                </Card>
+
                 <Card>
                     <CardHeader>
                         <CardTitle>Connected apps</CardTitle>
-                        <CardDescription>AI connectors (MCP), the browser extension and the CLI that can access your account. Changing your password disconnects all of them.</CardDescription>
+                        <CardDescription>
+                            AI connectors (MCP), the browser extension, the CLI and your API keys that can access your account. Changing your password
+                            disconnects all of them and revokes your API keys.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <ConnectedAppsForm apps={connectedApps} className="max-w-xl" />
+                        <ConnectedAppsForm apps={connectedApps} apiKeys={apiKeys} className="max-w-xl" />
                     </CardContent>
                 </Card>
 

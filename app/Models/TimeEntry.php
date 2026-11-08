@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ScopedToApiKey;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use Illuminate\Database\Eloquent\Builder;
@@ -16,6 +17,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class TimeEntry extends Model
 {
+    use ScopedToApiKey;
+
     public const SOURCE_MANUAL = 'manual';
 
     public const SOURCE_TIMER = 'timer';
@@ -39,11 +42,13 @@ class TimeEntry extends Model
 
     protected static function booted(): void
     {
+        // the time_spent ledger is system work: never narrowed by a personal API key's Item scope (a Time-only key
+        // can't see issues, but its work logs must still move their totals)
         // legacy rows are backfilled from minutes that are already in time_spent; withTrashed: an
         // issue in the trash keeps a right total for when it is restored
         static::created(function (TimeEntry $entry) {
             if ($entry->item_id && $entry->source !== self::SOURCE_LEGACY) {
-                Item::withTrashed()->whereKey($entry->item_id)->increment('time_spent', $entry->minutes);
+                Item::withoutGlobalScope('api-key')->withTrashed()->whereKey($entry->item_id)->increment('time_spent', $entry->minutes);
             }
             if ($entry->source !== self::SOURCE_LEGACY) {
                 DomainEvents::emit($entry->workspace_id, 'time_entry.created', fn () => EventPayloads::timeEntry($entry)); // webhooks (BRAI-104)
@@ -57,16 +62,16 @@ class TimeEntry extends Model
             $oldItem = $entry->getOriginal('item_id');
             $oldMinutes = (int) $entry->getOriginal('minutes');
             if ($oldItem) {
-                Item::withTrashed()->whereKey($oldItem)->where('time_spent', '>=', $oldMinutes)->decrement('time_spent', $oldMinutes);
+                Item::withoutGlobalScope('api-key')->withTrashed()->whereKey($oldItem)->where('time_spent', '>=', $oldMinutes)->decrement('time_spent', $oldMinutes);
             }
             if ($entry->item_id) {
-                Item::withTrashed()->whereKey($entry->item_id)->increment('time_spent', $entry->minutes);
+                Item::withoutGlobalScope('api-key')->withTrashed()->whereKey($entry->item_id)->increment('time_spent', $entry->minutes);
             }
         });
 
         static::deleted(function (TimeEntry $entry) {
             if ($entry->item_id && $entry->source !== self::SOURCE_LEGACY) {
-                Item::withTrashed()->whereKey($entry->item_id)->where('time_spent', '>=', $entry->minutes)->decrement('time_spent', $entry->minutes);
+                Item::withoutGlobalScope('api-key')->withTrashed()->whereKey($entry->item_id)->where('time_spent', '>=', $entry->minutes)->decrement('time_spent', $entry->minutes);
             }
         });
     }

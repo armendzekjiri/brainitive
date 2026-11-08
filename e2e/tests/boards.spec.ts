@@ -447,22 +447,21 @@ test.describe('board filters, layouts and views', () => {
         await expect(column(page, 'Code review')).toBeVisible();
         await expect(column(page, 'Review')).toHaveCount(0);
 
-        // board settings: add another column, then rename it
+        // board settings → Columns & statuses: add another column, then rename it in place
         await page.getByRole('button', { name: 'Board settings' }).click();
         await expect(page).toHaveURL(/\/edit$/);
-        await page.getByRole('button', { name: 'Add Column' }).first().click();
-        const addDialog = page.getByRole('dialog', { name: 'Add Column' });
-        await addDialog.getByLabel('Column Name').fill('QA');
-        await addDialog.getByRole('button', { name: 'Create Column' }).click();
-        await expect(addDialog).toBeHidden();
-        const qaCard = page.locator('div.border', { has: page.getByRole('heading', { level: 4, name: 'QA', exact: true }) }).last();
-        await expect(qaCard).toBeVisible();
-        await qaCard.getByRole('button').first().click();
-        const editDialog = page.getByRole('dialog', { name: 'Edit Column' });
-        await editDialog.getByLabel('Column Name').fill('Quality check');
-        await editDialog.getByRole('button', { name: 'Save Changes' }).click();
-        await expect(editDialog).toBeHidden();
-        await expect(page.getByRole('heading', { level: 4, name: 'Quality check', exact: true })).toBeVisible();
+        await page.getByRole('tab', { name: 'Columns & statuses' }).click();
+        await page.getByLabel('New column name').fill('QA');
+        const added = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/columns'));
+        await page.getByRole('button', { name: 'Add column' }).click();
+        await added;
+        const qaRow = page.getByRole('listitem', { name: 'Column QA' });
+        await expect(qaRow).toBeVisible();
+        const renamed = page.waitForResponse((r) => r.request().method() === 'PUT' && /\/columns\/\d+$/.test(r.url()));
+        await qaRow.getByLabel('Column name').fill('Quality check');
+        await qaRow.getByLabel('Column name').press('Enter');
+        expect((await renamed).status()).toBeLessThan(400);
+        await expect(page.getByRole('listitem', { name: 'Column Quality check' })).toBeVisible();
 
         await page.goto(boardUrl);
         for (const name of ['To Do', 'In Progress', 'Done', 'Code review', 'Quality check']) {

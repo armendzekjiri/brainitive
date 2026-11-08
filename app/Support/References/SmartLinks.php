@@ -13,6 +13,8 @@ use App\Models\Project;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\ApiKeys\ApiKeyAccess;
+use App\Support\ApiKeys\ApiKeyGate;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -297,6 +299,11 @@ final class SmartLinks
     private static function answer(array &$out, array $refs, SmartLinkContext $context, Model $model, \Closure $data, ?\Closure $visible = null): void
     {
         if ($refs === []) {
+            return;
+        }
+        // a personal API key (Developer API): a target outside the key's scope, or of an area it can't read, stays
+        // exactly "not found" — no title, no "restricted" that would confirm it exists
+        if (($key = ApiKeyAccess::forUser($context->user)) !== null && ! ApiKeyGate::allows($key, 'view', [$model])) {
             return;
         }
         $projectId = (int) ($model instanceof Item ? $model->board?->project_id

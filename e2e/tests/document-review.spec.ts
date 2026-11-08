@@ -55,6 +55,9 @@ const banner = (page: Page) => page.getByTestId('page-review-banner');
 
 test.describe('Document review', () => {
     test('a member reviews a draft, the author revises it and publishes once a new review is approved', async ({ page, memberPage }) => {
+        // two sessions, ~10 page loads and two typed drafts: the nightly Firefox run finished every step and
+        // still ran out of the 90 s budget (~4 s per navigation, ~6 s per typed sentence on the runner)
+        test.slow();
         const name = uid('Launch plan');
         await addProjectContent(page, 'Page', name);
         await expect(page).toHaveURL(/\/pages\/[0-9a-f-]{36}$/);

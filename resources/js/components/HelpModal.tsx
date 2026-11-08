@@ -101,6 +101,27 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.52.0',
+        title: 'Developer API and workflow rules for boards',
+        tag: 'Major Feature',
+        date: '2026-11-07',
+        items: [
+            'Developer API: create your own API keys under Profile → API keys and use the Brainitive API from your scripts and apps — the same API the desktop and mobile apps use. Free on every plan and on self-hosted servers.',
+            'Fine-grained keys: choose where a key works (all your workspaces, chosen workspaces, projects or boards) and what it may do per area (issues & boards, docs, plans, My Work, time, calendar, helpdesk, snippets, members: none, read or read & write). Deleting is a separate permission, off by default.',
+            'A key acts as you and never reaches more than you can; the key is shown once, you get an email when one is created, and revoking it stops it at once. Changing your password revokes all your keys.',
+            'Workspace admins can turn API keys off for their workspace (Workspace settings → Legal → Developer API); self-hosted admins for the whole server (API_KEYS_ENABLED).',
+            'Public API reference at docs.brainitive.app/api, showing for every endpoint what a key needs, and a Developer API guide with curl, JavaScript and Python examples. API keys are also listed under Connected apps.',
+            'Workflow rules: decide per column who may move cards into it (people and/or roles, e.g. “only Armend can move cards to Done”), from which columns (“Done only from Testing”) and what a card needs first (an assignee, all subtasks done, a due date).',
+            'Rules apply everywhere cards move or are created — drag & drop, the issue dialog, bulk edits, the desktop and mobile apps, AI assistants (MCP) and automations. Nobody bypasses them, admins included; a refused move says why.',
+            'Only project admins change workflow rules (editors see them read-only), and every change is listed under “Rule changes”. GitHub merges respect the “from” and condition parts and show on the pull request when a card stayed.',
+            'On the board, columns a dragged card can’t enter are dimmed with the reason, column headers show a lock with the rule, and the issue dialog’s status list marks statuses you can’t pick.',
+            'Automations follow the rules too: a blocked “Move to column” shows the reason in the rule’s run history; recurring issues a rule refuses pause with the reason.',
+            'A new board settings page: sections for General, Columns & statuses (rename, recolour, done flag and WIP limit right in the list, drag to reorder), Workflow rules, Swimlanes and Danger zone — on phones as scrolling tabs.',
+            'AI assistants see each column’s rule in get_board and get_project_config; the App API lists it per column (`workflow`) and explains a refused move (`workflow_rule`).',
+            'Fixed: the nightly Firefox and WebKit test runs; the homepage background no longer slows Safari down, and leaving a doc while “who’s here” loads no longer shows an error.',
+        ]
+    },
+    {
         version: 'v1.51.0',
         title: 'Live whiteboards and polls in the mobile app',
         tag: 'Feature',

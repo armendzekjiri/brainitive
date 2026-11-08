@@ -10,6 +10,8 @@ use App\Models\Plan;
 use App\Models\Project;
 use App\Models\TaskList;
 use App\Models\User;
+use App\Support\ApiKeys\ApiKeyAccess;
+use App\Support\ApiKeys\ApiKeyAreas;
 use App\Support\Projects\RecentContent;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -40,7 +42,7 @@ class ProjectDetailResource extends JsonResource
             ...(new ProjectResource($project))->toArray($request),
             // the user's project role; null for workspace admins who aren't project members
             'role' => self::roleOf($user, $project),
-            'member_count' => $project->users()->count(),
+            'member_count' => ApiKeyAccess::reads('members') ? $project->users()->count() : null,
             'can' => [
                 'update' => $user->can('update', $project),
                 'manage_members' => $user->can('manageMembers', $project),
@@ -96,6 +98,9 @@ class ProjectDetailResource extends JsonResource
      */
     private function docs(Project $project, Request $request, array $params): array
     {
+        if (! ApiKeyAccess::readable($request->user(), 'docs')) {
+            return [];
+        }
         /** @var Collection<int, Page> $pages */
         $pages = Page::query()
             ->where('pages.project_id', $project->id)
@@ -148,13 +153,20 @@ class ProjectDetailResource extends JsonResource
      */
     private static function recentlyUpdated(Project $project, User $user): array
     {
-        return collect(RecentContent::for($project, $user))->map(fn (array $entry) => [
-            // board | list | plan | helpdesk | lead_form | page
-            'type' => (string) $entry['type'],
-            'id' => (int) $entry['id'],
-            'name' => (string) $entry['name'],
-            'url' => (string) $entry['url'],
-            'updated_at' => CarbonImmutable::parse($entry['updated_at'])->utc()->toIso8601ZuluString(),
-        ])->values()->all();
+        $boards = ($key = ApiKeyAccess::forUser($user))?->boardIds();
+        $areas = ['board' => 'issues', 'list' => 'work', 'plan' => 'plans', 'helpdesk' => 'helpdesk', 'lead_form' => 'helpdesk', 'page' => 'docs'];
+
+        return collect(RecentContent::for($project, $user))
+            // a personal API key: only the areas it can read (and its boards)
+            ->filter(fn (array $entry) => $key === null || ($key->can($areas[$entry['type']] ?? 'none', ApiKeyAreas::READ)
+                && ($entry['type'] !== 'board' || $boards === null || in_array((int) $entry['id'], $boards, true))))
+            ->map(fn (array $entry) => [
+                // board | list | plan | helpdesk | lead_form | page
+                'type' => (string) $entry['type'],
+                'id' => (int) $entry['id'],
+                'name' => (string) $entry['name'],
+                'url' => (string) $entry['url'],
+                'updated_at' => CarbonImmutable::parse($entry['updated_at'])->utc()->toIso8601ZuluString(),
+            ])->values()->all();
     }
 }

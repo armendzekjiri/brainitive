@@ -20,9 +20,11 @@ use App\Models\Item;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Release;
+use App\Support\ApiKeys\ApiKeyAccess;
 use App\Support\Boards\BoardCards;
 use App\Support\Boards\BoardFilters;
 use App\Support\Boards\BoardViewConfig;
+use App\Support\Boards\WorkflowRules;
 use App\Support\Work\WorkCompletion;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\Request;
@@ -52,8 +54,12 @@ class BoardController extends Controller
         $project = $this->visibleProject($request, $project);
         $since = $request->updatedSince();
 
+        $boards = ApiKeyAccess::forUser($request->user())?->boardIds();
+
         $page = Board::query()
             ->where('project_id', $project->id)
+            // a personal API key limited to boards: those boards only
+            ->when($boards !== null, fn ($q) => $q->whereIn('id', $boards))
             ->when($since, fn ($q) => $q->where('updated_at', '>=', $since))
             ->orderBy('position')
             ->orderBy('id')
@@ -64,7 +70,7 @@ class BoardController extends Controller
     }
 
     /**
-     * One board: columns (WIP limits, card counts), swimlanes, done retention, the running sprint, what the
+     * One board: columns (WIP limits, card counts, workflow rules), swimlanes, done retention, the running sprint, what the
      * user may do.
      *
      * @throws NotFoundHttpException the board doesn't exist or the user can't open it (404)
@@ -80,6 +86,9 @@ class BoardController extends Controller
 
         $board->load(['columns', 'activeSprint']);
         $board->columns->each(fn (BoardColumn $column) => $column->setAttribute('cards_count', (int) ($counts[$column->id] ?? 0)));
+        // workflow rule hints per column for this user (v1.52.0)
+        $workflow = WorkflowRules::clientPayload($board, $request->user());
+        $board->columns->each(fn (BoardColumn $column) => $column->setAttribute('workflow', $workflow[$column->id] ?? null));
 
         return new BoardDetailResource($board);
     }

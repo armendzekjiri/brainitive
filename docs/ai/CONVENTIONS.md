@@ -170,6 +170,12 @@ Full conventions and the endpoint registry: [`API.md`](./API.md); recipe:
 - Errors only through the central renderer (`AppApiErrors`): `{message, code, errors?}`. 404 instead of
   403 when existence must stay secret. A plan limit is 402 `limit_reached` — declare
   `@throws LimitReached` on the controller method so the spec shows it.
+- **Personal API keys (Developer API):** every new `/api/v1` route gets an entry in
+  `App\Support\ApiKeys\ApiKeyRoutes::MAP` — its area (`issues`, `docs`, …), `null` (no area, read only) or `false`
+  (never with a key: account, sessions, credentials, sockets, anything spanning every area); `ApiKeyRoutesTest` fails
+  without it. Lists that don't go through `User::accessibleProjectIds()` / policies filter with `ApiKeyAccess`
+  (`forUser()`, `boardIds()`, `limitIssues()`); a model a key may reach through a policy needs a line in
+  `ApiKeyLocator` (`MODEL_AREAS` + `ofModel`).
 - Every endpoint: `#[Group('<API.md module>', weight: n)]` on the controller, tests (incl. Passport
   token → 401, cross-workspace 404, 422), `composer openapi` (commits `docs/api/openapi.json`; the
   drift test fails otherwise), a row in `API.md`, and the `## API (ready)` section on its Mobile app card.

@@ -5,6 +5,7 @@ namespace App\Support\AppApi;
 use App\Models\AppDevice;
 use App\Models\AppDeviceRefreshUse;
 use App\Models\User;
+use App\Support\ApiKeys\ApiKeys;
 use App\Support\Live\Live;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -84,6 +85,11 @@ final class AppTokens
     /** Resolver of the `app` guard (AppServiceProvider): the bearer's user, its device on the request. */
     public static function userFromRequest(Request $request): ?User
     {
+        // personal API keys of the Developer API (`brai_…`, v1.52.0) share the guard
+        if (ApiKeys::looksLike($request->bearerToken())) {
+            return ApiKeys::userFromRequest($request);
+        }
+
         $device = self::deviceForAccessToken($request->bearerToken());
         if (! $device) {
             return null;

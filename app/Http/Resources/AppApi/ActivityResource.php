@@ -3,6 +3,7 @@
 namespace App\Http\Resources\AppApi;
 
 use App\Models\ActivityLog;
+use App\Support\ApiKeys\ApiKeyAccess;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -24,7 +25,8 @@ class ActivityResource extends JsonResource
         return [
             'id' => (int) $this->id,
             'action' => (string) $this->action,
-            'changes' => (object) ($this->changes ?? []),
+            // the fix version is Plans & releases: left out of an API key's view without it
+            'changes' => (object) (ApiKeyAccess::reads('plans') ? ($this->changes ?? []) : array_diff_key((array) ($this->changes ?? []), ['release_id' => true])),
             'metadata' => (object) ($this->metadata ?? []),
             // null for automations / imports, or when the account is gone
             'user' => $actor ? new PersonResource($actor) : null,

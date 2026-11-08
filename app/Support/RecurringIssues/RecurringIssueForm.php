@@ -3,12 +3,16 @@
 namespace App\Support\RecurringIssues;
 
 use App\Models\Board;
+use App\Models\BoardColumn;
+use App\Models\Item;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Project;
 use App\Models\RecurringIssue;
 use App\Models\User;
 use App\Rules\ProjectMember;
+use App\Support\Boards\WorkflowGuard;
+use App\Support\Boards\WorkflowRuleViolation;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 
@@ -95,6 +99,31 @@ class RecurringIssueForm
             'due_in_days' => $validated['due_in_days'] ?? null,
             ...self::normalizeSchedule($validated),
         ];
+    }
+
+    /**
+     * The board's workflow rules (v1.52.0) for the issues this template will create, checked for the person who
+     * saves it (who then runs it): a new issue in the template's column (or the first one), with its assignee and —
+     * when it sets one — a due date. Refused → 422 on `column_id`, so nobody saves a template that can only pause.
+     *
+     * @throws WorkflowRuleViolation
+     */
+    public static function ensureRulesAllow(RecurringIssue $template, Board $board, User $user): void
+    {
+        $column = $template->column_id ? $board->columns()->whereKey($template->column_id)->first() : null;
+        $column ??= $board->columns()->first();
+        if (! $column instanceof BoardColumn) {
+            return;
+        }
+        $probe = new Item([
+            'board_id' => $board->id,
+            'column_id' => $column->id,
+            'assigned_to' => $template->assigned_to,
+            'due_date' => $template->due_in_days !== null ? now()->toDateString() : null,
+        ]);
+        if ($violation = WorkflowGuard::instance()->violation($probe, $column, $user)) {
+            throw $violation->about('Issues this template creates would be refused: ');
+        }
     }
 
     /** @return array<string, mixed> */

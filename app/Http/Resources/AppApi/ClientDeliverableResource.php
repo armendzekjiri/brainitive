@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\AppApi;
 
+use App\Support\ApiKeys\ApiKeyAccess;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -24,7 +25,8 @@ class ClientDeliverableResource extends JsonResource
             'uuid' => (string) $d['uuid'],
             // page (a doc) | plan (a Gantt plan)
             'kind' => (string) $d['kind'],
-            'title' => (string) $d['title'],
+            // a doc's / plan's name: empty for an API key without Docs / Plans read
+            'title' => ApiKeyAccess::reads($d['kind'] === 'page' ? 'docs' : 'plans') ? (string) $d['title'] : '',
             'version' => (int) $d['version'],
             // awaiting | approved | changes_requested, or superseded (a newer version exists) / withdrawn
             'status' => (string) $d['status'],
