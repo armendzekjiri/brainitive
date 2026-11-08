@@ -1,3 +1,4 @@
+import { REMOTE } from '../env';
 import { expect, test } from '../fixtures';
 
 /**
@@ -6,6 +7,7 @@ import { expect, test } from '../fixtures';
  */
 test.describe('desktop download page', () => {
     test('a guest sees macOS, Windows and Linux as coming soon, in light and dark on a phone', async ({ browser }) => {
+        test.skip(REMOTE, 'on dev and production nginx sends /download to the marketing website, not this app page');
         for (const colorScheme of ['light', 'dark'] as const) {
             const context = await browser.newContext({ storageState: { cookies: [], origins: [] }, colorScheme, viewport: { width: 375, height: 812 } });
             const page = await context.newPage();
