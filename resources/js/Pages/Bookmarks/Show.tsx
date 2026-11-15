@@ -1,5 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { safeExternalHref } from '@/lib/sanitize';
+import { cn } from '@/lib/utils';
+import { BookmarkCollaborators } from '@/components/bookmarks/BookmarkCollaborators';
 import { Head, Link, router } from '@inertiajs/react';
 import { PageProps, Workspace, Bookmark, BookmarkItem, User as UserType } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -105,6 +107,93 @@ function getFilePreviewType(filename: string): PreviewType {
     if (image.includes(ext)) return 'image';
     if (video.includes(ext)) return 'video';
     return 'other';
+}
+
+/**
+ * The bookmark's description as a muted subtitle under the title (GitHub #152). People who may edit
+ * click it to edit in place ("Add a description" when empty); everyone else reads it, nothing when
+ * empty. Two lines at most in the header — the rest shows on "Show more" / in the editor.
+ */
+function BookmarkDescription({
+    description,
+    canEdit,
+    editing,
+    value,
+    onChange,
+    onEdit,
+    onCancel,
+    onSave,
+}: {
+    description: string;
+    canEdit: boolean;
+    editing: boolean;
+    value: string;
+    onChange: (value: string) => void;
+    onEdit: () => void;
+    onCancel: () => void;
+    onSave: () => void;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const long = description.length > 140 || description.includes('\n');
+
+    if (canEdit && editing) {
+        return (
+            <div className="mt-1.5 space-y-2">
+                <Textarea
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onSave(); }
+                    }}
+                    placeholder="Add a description"
+                    aria-label="Description"
+                    maxLength={2000}
+                    className="min-h-[64px] resize-y text-sm"
+                    rows={2}
+                    autoFocus
+                />
+                <div className="flex gap-2">
+                    <Button size="sm" className="h-7 text-xs" onClick={onSave}>Save</Button>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onCancel}>Cancel</Button>
+                </div>
+            </div>
+        );
+    }
+
+    if (canEdit) {
+        return (
+            <button
+                type="button"
+                onClick={onEdit}
+                aria-label={description ? 'Edit description' : 'Add a description'}
+                title={description ? 'Click to edit the description' : undefined}
+                className={cn(
+                    'mt-0.5 block max-w-3xl rounded-sm text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    description ? 'line-clamp-2 whitespace-pre-wrap break-words' : 'italic text-muted-foreground/70',
+                )}
+            >
+                {description || 'Add a description'}
+            </button>
+        );
+    }
+
+    if (!description) return null;
+    return (
+        <div className="mt-0.5 max-w-3xl">
+            <p
+                data-testid="bookmark-description"
+                className={cn('whitespace-pre-wrap break-words text-sm text-muted-foreground', !expanded && 'line-clamp-2')}
+            >
+                {description}
+            </p>
+            {long && (
+                <button type="button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded} className="text-xs font-medium text-muted-foreground hover:text-foreground">
+                    {expanded ? 'Show less' : 'Show more'}
+                </button>
+            )}
+        </div>
+    );
 }
 
 type DeleteTarget =
@@ -435,38 +524,6 @@ export default function BookmarksShow({ workspace, bookmark, workspaceMembers, c
         public: { label: 'Shared (view only)', icon: Globe },
     };
 
-    const [inviteUserId, setInviteUserId] = useState('');
-    const [inviteRole, setInviteRole] = useState<'viewer' | 'editor'>('viewer');
-    const collaborators = bookmark.collaborators ?? [];
-    const availableToInvite = workspaceMembers.filter(
-        (m) => m.id !== bookmark.created_by && !collaborators.some((c) => c.id === m.id)
-    );
-
-    const inviteCollaborator = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!inviteUserId) return;
-        router.post(
-            route('bookmarks.collaborators.invite', [workspace.slug, bookmark.slug]),
-            { user_id: Number(inviteUserId), role: inviteRole },
-            { preserveScroll: true, onSuccess: () => setInviteUserId('') }
-        );
-    };
-
-    const updateCollaboratorRole = (userId: number, role: 'viewer' | 'editor') => {
-        router.put(
-            route('bookmarks.collaborators.update', [workspace.slug, bookmark.slug, userId]),
-            { role },
-            { preserveScroll: true }
-        );
-    };
-
-    const removeCollaborator = (userId: number) => {
-        router.delete(
-            route('bookmarks.collaborators.remove', [workspace.slug, bookmark.slug, userId]),
-            { preserveScroll: true }
-        );
-    };
-
     const [addTab, setAddTab] = useState<AddTab>('link');
 
     return (
@@ -474,10 +531,11 @@ export default function BookmarksShow({ workspace, bookmark, workspaceMembers, c
             <Head title={bookmark.name} />
 
             <div className="min-h-screen bg-background">
-                {/* Top bar: back + title + visibility */}
+                {/* Top bar: back + title + description (GitHub #152) + collaborators + visibility.
+                    On phones the controls wrap to a second line instead of squeezing the title. */}
                 <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                     <div className="w-full px-4 sm:px-6 lg:px-8">
-                        <div className="flex h-14 sm:h-16 items-center gap-3 sm:gap-4">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5 sm:gap-x-4 sm:py-3">
                             <Link
                                 href={route('bookmarks.index', [workspace.slug])}
                                 className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors -ml-1 rounded-md px-2 py-1.5"
@@ -492,7 +550,7 @@ export default function BookmarksShow({ workspace, bookmark, workspaceMembers, c
                                     bookmark.icon_display || bookmark.icon || '📑'
                                 )}
                             </span>
-                            <div className="min-w-0 flex-1">
+                            <div className="min-w-0 flex-1 basis-40">
                                 {canEdit && editingTitle ? (
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <Input
@@ -500,6 +558,7 @@ export default function BookmarksShow({ workspace, bookmark, workspaceMembers, c
                                             onChange={(e) => setEditName(e.target.value)}
                                             className="h-8 text-base font-semibold border-0 px-0 shadow-none focus-visible:ring-0 rounded-none border-b flex-1 min-w-[120px]"
                                             placeholder="Title"
+                                            aria-label="Title"
                                             autoFocus
                                         />
                                         <div className="flex gap-1">
@@ -508,19 +567,48 @@ export default function BookmarksShow({ workspace, bookmark, workspaceMembers, c
                                         </div>
                                     </div>
                                 ) : (
-                                    <>
+                                    <div className="group/title flex min-w-0 items-center gap-1">
                                         <h1 className="text-lg sm:text-xl font-semibold tracking-tight truncate">
                                             {bookmark.name}
                                         </h1>
                                         {canEdit && (
-                                            <button type="button" onClick={() => { setEditName(bookmark.name); setEditingTitle(true); }} className="text-xs text-muted-foreground hover:text-foreground mt-0.5">
-                                                Edit title
-                                            </button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="size-7 shrink-0 text-muted-foreground opacity-60 hover:opacity-100 focus-visible:opacity-100 sm:opacity-0 sm:group-hover/title:opacity-100"
+                                                aria-label="Edit title"
+                                                onClick={() => { setEditName(bookmark.name); setEditingTitle(true); }}
+                                            >
+                                                <Pencil className="size-3.5" />
+                                            </Button>
                                         )}
-                                    </>
+                                    </div>
                                 )}
+                                <BookmarkDescription
+                                    description={bookmark.description ?? ''}
+                                    canEdit={canEdit}
+                                    editing={editingDescription}
+                                    value={editDescription}
+                                    onChange={setEditDescription}
+                                    onEdit={() => { setEditDescription(bookmark.description ?? ''); setEditingDescription(true); }}
+                                    onCancel={() => { setEditDescription(bookmark.description ?? ''); setEditingDescription(false); }}
+                                    onSave={() => {
+                                        router.put(
+                                            route('bookmarks.update', [workspace.slug, bookmark.slug]),
+                                            { name: bookmark.name, description: editDescription.trim() },
+                                            { preserveScroll: true, onSuccess: () => setEditingDescription(false) },
+                                        );
+                                    }}
+                                />
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="ml-auto flex items-center gap-2 shrink-0">
+                                <BookmarkCollaborators
+                                    workspaceSlug={workspace.slug}
+                                    bookmark={bookmark}
+                                    workspaceMembers={workspaceMembers}
+                                    canEdit={canEdit}
+                                    onRemove={openRemoveCollaboratorConfirm}
+                                />
                                 {canEdit && bookmark.visibility === 'public' && bookmark.uuid && (
                                     <Button size="sm" variant="ghost" className="hidden sm:flex gap-1.5" onClick={() => { const path = route('bookmarks.public.show', [bookmark.uuid]); const u = path.startsWith('http') ? path : `${window.location.origin}${path.startsWith('/') ? '' : '/'}${path}`; navigator.clipboard.writeText(u); }}>
                                         <Copy className="size-4" /> Copy link
@@ -557,7 +645,7 @@ export default function BookmarksShow({ workspace, bookmark, workspaceMembers, c
 
                 <div className="w-full px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
                     <div className={`flex flex-col gap-6 lg:gap-8 ${canEdit ? 'lg:flex-row' : ''}`}>
-                        {/* Left: Add form + Collaborators (sticky on lg, only when can edit) */}
+                        {/* Left: "Add to bookmark" (sticky on lg, only when can edit); description + people are in the header */}
                         {canEdit && (
                         <aside className="lg:w-72 xl:w-80 shrink-0 lg:sticky lg:top-[4.5rem] lg:self-start space-y-4">
                             {canEdit && (
@@ -623,97 +711,11 @@ export default function BookmarksShow({ workspace, bookmark, workspaceMembers, c
                                     </div>
                                 </div>
                             )}
-
-                            {canEdit && (bookmark.creator || collaborators.length > 0 || availableToInvite.length > 0) && (
-                                <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
-                                    <div className="px-4 py-3 border-b bg-muted/40">
-                                        <h2 className="text-sm font-medium">Collaborators</h2>
-                                    </div>
-                                    <div className="p-3 space-y-3">
-                                        {bookmark.creator && (
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="font-medium truncate">{bookmark.creator.name}</span>
-                                                <Badge variant="secondary" className="text-xs">Owner</Badge>
-                                            </div>
-                                        )}
-                                        {collaborators.map((c) => (
-                                            <div key={c.id} className="flex items-center justify-between gap-2 py-1">
-                                                <span className="text-sm truncate">{c.name}</span>
-                                                <div className="flex items-center gap-1 shrink-0">
-                                                    <Select value={(c as { pivot?: { role: string } }).pivot?.role ?? 'viewer'} onValueChange={(role) => updateCollaboratorRole(c.id, role as 'viewer' | 'editor')}>
-                                                        <SelectTrigger className="h-7 w-[82px] text-xs"><SelectValue /></SelectTrigger>
-                                                        <SelectContent><SelectItem value="viewer">Viewer</SelectItem><SelectItem value="editor">Editor</SelectItem></SelectContent>
-                                                    </Select>
-                                                    <Button variant="ghost" size="icon" className="size-7" onClick={() => openRemoveCollaboratorConfirm(c.id, c.name)}><Trash2 className="size-3.5" /></Button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {availableToInvite.length > 0 && (
-                                            <form onSubmit={inviteCollaborator} className="flex flex-wrap gap-2 pt-1 border-t">
-                                                <Select value={inviteUserId} onValueChange={setInviteUserId} required>
-                                                    <SelectTrigger className="h-8 flex-1 min-w-0 text-xs"><SelectValue placeholder="Invite…" /></SelectTrigger>
-                                                    <SelectContent>{availableToInvite.map((m) => <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>)}</SelectContent>
-                                                </Select>
-                                                <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as 'viewer' | 'editor')}>
-                                                    <SelectTrigger className="h-8 w-20 text-xs"><SelectValue /></SelectTrigger>
-                                                    <SelectContent><SelectItem value="viewer">Viewer</SelectItem><SelectItem value="editor">Editor</SelectItem></SelectContent>
-                                                </Select>
-                                                <Button type="submit" size="sm" className="h-8 text-xs">Invite</Button>
-                                            </form>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Description card */}
-                            <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
-                                <div className="px-4 py-3 border-b bg-muted/40 flex items-center justify-between">
-                                    <h2 className="text-sm font-medium">Description</h2>
-                                    {canEdit && !editingDescription && (
-                                        <button type="button" onClick={() => setEditingDescription(true)} className="text-xs text-muted-foreground hover:text-foreground">
-                                            Edit
-                                        </button>
-                                    )}
-                                </div>
-                                <div className="p-3">
-                                    {editingDescription ? (
-                                        <div className="space-y-2">
-                                            <Textarea
-                                                value={editDescription}
-                                                onChange={(e) => setEditDescription(e.target.value)}
-                                                placeholder="Add a description…"
-                                                className="min-h-[80px] text-sm resize-none"
-                                                rows={3}
-                                            />
-                                            <div className="flex gap-2">
-                                                <Button size="sm" className="h-8 text-xs" onClick={() => { router.put(route('bookmarks.update', [workspace.slug, bookmark.slug]), { name: bookmark.name, description: editDescription }, { preserveScroll: true, onSuccess: () => setEditingDescription(false) }); }}>
-                                                    Save
-                                                </Button>
-                                                <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => { setEditDescription(bookmark.description ?? ''); setEditingDescription(false); }}>
-                                                    Cancel
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap min-h-[2rem]">
-                                            {bookmark.description || (canEdit ? 'Add a description…' : '—')}
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
                         </aside>
                         )}
 
                         {/* Right: Content sections — full width 2x2 grid */}
                         <main className="flex-1 min-w-0">
-                        {!canEdit && bookmark.description && (
-                            <section className="mb-6">
-                                <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">Description</h2>
-                                <div className="rounded-xl border bg-card px-4 py-3 shadow-sm">
-                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{bookmark.description}</p>
-                                </div>
-                            </section>
-                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
                             {/* Links */}
                             <section className="rounded-xl border bg-card overflow-hidden shadow-sm flex flex-col min-h-0">

@@ -428,6 +428,15 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
   viewport. Options in the Move dialog start with the folder's emoji: match names without `^`; a disabled
   option (`aria-disabled`) needs `click({ force: true })`.
 
+### Bookmark header details (GitHub #152, 2026-11-15)
+- **`canEdit` on `Bookmarks/Show` is `isEditableBy`** (owner or editor collaborator); `BookmarkPolicy::update` /
+  `manageCollaborators` also allow workspace admins, who therefore see a private bookmark read-only although
+  the server would accept their changes. Pre-existing, left as is (follow-up in `tasks/feat-bookmark-header-details.md`).
+- **Phone width checks in e2e:** the app scrolls inside `AppLayout`'s `<main>`, so `documentElement.scrollWidth`
+  alone never shows a horizontal overflow — compare `scrollWidth` / `clientWidth` of the `main` elements too
+  (`bookmark-header.spec.ts`). A page's own `<header>` inside `<main>` is not a `banner` landmark: locate it with
+  `page.locator('header')`.
+
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
 means adding its param to `BoardViewConfig::PARAM_KEYS` + `normalize()` (allowlist) and, if it

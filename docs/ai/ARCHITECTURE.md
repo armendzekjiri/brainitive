@@ -191,7 +191,7 @@ Plan [`tasks/feat-document-review.md`](./tasks/feat-document-review.md). Ask col
 - **Models:** `Bookmark` (`uuid`-bound), `BookmarkItem`; metadata fetched async by `app/Jobs/FetchLinkMetadataJob.php`
 - **Controller:** `BookmarkController` (incl. public share `/share/bookmarks/{uuid}`, icon upload)
 - **Policy:** `BookmarkPolicy`
-- **Pages:** `Pages/Bookmarks/`
+- **Pages:** `Pages/Bookmarks/` — `Show.tsx`: the header holds the description (muted subtitle, `BookmarkDescription`, click to edit for `canEdit`) and the people (`components/bookmarks/BookmarkCollaborators.tsx`: avatar stack → popover with roles; invite / role / remove for `canEdit` through `bookmarks.collaborators.*`; "Invite" while the owner is alone); the left column is "Add to bookmark" only (GitHub #152, e2e `e2e/tests/bookmark-header.spec.ts`, PHPUnit `tests/Feature/Bookmarks/BookmarkHeaderDetailsTest.php`). `show()` loads `avatar` for creator + collaborators (`avatar_display`). `ShowPublic.tsx` shows the description under the title, never the people.
 
 ### Calendar (external calendars via providers, Google Tasks, ICS feed)
 - **Model:** `CalendarConnection` (per-user, *not* workspace-scoped; `provider`, `server_url`, `credentials` encrypted array + hidden, `sync_error` / `sync_error_at`; `upsertFor()`, `recordSyncError()` / `clearSyncError()`)
