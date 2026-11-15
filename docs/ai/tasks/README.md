@@ -45,6 +45,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 |---|---|
 | [Docker: uploaded icons 404 because storage:link fails as www-data (GitHub #153)](./fix-docker-storage-link.md) | done |
 | [Replacing an existing custom icon does nothing (GitHub #154)](./fix-icon-replace-cache.md) | done |
+| [A real menu on docs, whiteboards and folders in the sidebar (GitHub #155)](./feat-sidebar-item-menu.md) | done |
 | [Resizable columns in the board Timeline and List views](./feat-resizable-columns.md) | done |
 | [Right-click menu on issues in the board's list and kanban views (GitHub #143)](./feat-item-context-menu.md) | done |
 | [Workflow rules for boards + a new board settings page](./feat-board-workflow-rules.md) | done |

@@ -356,7 +356,16 @@ class PageController extends Controller
         }
 
         if ($validated !== []) {
+            // A rename (the sidebar's "Rename…", GitHub #155) follows MCP update_page: an open draft takes the
+            // new title too, so publishing it doesn't bring the old one back
+            if (isset($validated['name']) && $page->hasUnpublishedChanges()) {
+                $validated['draft_name'] = $validated['name'];
+            }
             $page->update($validated + ['last_edited_by' => Auth::id()]);
+            // … and a published page records the renamed version
+            if ($page->isPublished() && $page->wasChanged('name')) {
+                $page->recordVersion($request->user(), 'Renamed');
+            }
         }
 
         if ($request->wantsJson()) {
@@ -539,6 +548,11 @@ class PageController extends Controller
 
         $parentId = $page->parent_id;
         $page->delete();
+
+        // The sidebar's "Delete" (GitHub #155) stays on the page the user is on
+        if (request()->wantsJson()) {
+            return response()->json(['deleted' => true]);
+        }
 
         // Redirect to parent or project
         if ($parentId) {

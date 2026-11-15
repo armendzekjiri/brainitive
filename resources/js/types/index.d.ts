@@ -603,6 +603,8 @@ export interface Page {
     current_version?: number;
     /** When the live version last changed (newest version), sent by pages.show. */
     last_published_at?: string | null;
+    /** Sidebar tree only (GitHub #155): PagePolicy::delete for the signed-in user. */
+    can_delete?: boolean;
     created_at: string;
     updated_at: string;
 }

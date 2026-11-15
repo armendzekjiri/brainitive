@@ -100,8 +100,6 @@ import {
     PackageOpen,
     ArrowRight,
     BookOpen,
-    MoreHorizontal,
-    FolderInput,
 } from 'lucide-react';
 import { DOCS_URL } from '@/lib/docs';
 import { useTheme } from '@/hooks/useTheme';
@@ -129,6 +127,7 @@ import { PinIcon, resolvePins, type ResolvedPin, type SidebarProject } from '@/c
 import { reorderPins } from '@/lib/sidebarPreferences';
 import { SIDEBAR_GROUPS, openCustomizeSidebar, projectPreferences, useSidebarPreferences } from '@/lib/sidebarPreferences';
 import { PageTreeRow, RootDropZone, usePageTreeDnd, usePageTreeDndState } from '@/components/sidebar/PageTreeDnd';
+import { PageRowContextMenu, PageRowMenu, usePageItemMenuState } from '@/components/sidebar/PageItemMenu';
 import GitHubStarButton from '@/components/GitHubStarButton';
 import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks';
 
@@ -540,6 +539,8 @@ function ProjectContent({
 }) {
     // Page tree drag & drop + "Move…" (BRAI-431): the tree is optimistic while a move saves
     const pageDnd = usePageTreeDndState(workspace, project);
+    // The rows' ⋯ / right-click menu (GitHub #155): rename, duplicate and delete dialogs, mounted once
+    const pageMenu = usePageItemMenuState(workspace, project, currentPageUuid);
     const pageTree = pageDnd.tree;
     const hasContent = (project.boards && project.boards.length > 0) || (project.task_lists && project.task_lists.length > 0) || (project.plans && project.plans.length > 0) || pageTree.length > 0 || (project.helpdesks && project.helpdesks.length > 0) || (project.lead_forms?.length ?? 0) > 0;
     const [pinnedOpen, setPinnedOpen] = useExpandedState(`project-${project.id}-pinned`, true);
@@ -716,6 +717,7 @@ function ProjectContent({
 
     return (
         <pageDnd.Provider value={pageDnd.value}>
+        <pageMenu.Provider value={pageMenu.value}>
         <SidebarMenu className="space-y-0.5">
             {/* Pinned (BRAI-106) */}
             {showPinned && (
@@ -760,6 +762,8 @@ function ProjectContent({
             </SidebarMenuItem>
         </SidebarMenu>
         {pageDnd.dialogs}
+        {pageMenu.dialogs}
+        </pageMenu.Provider>
         </pageDnd.Provider>
     );
 }
@@ -1222,33 +1226,8 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
     );
 }
 
-// Page/Folder Tree Item
-// "⋯" on a sidebar page / whiteboard / folder row (BRAI-431): Move… for people who may edit pages.
-function PageRowMenu({ page }: { page: PageType }) {
-    const dnd = usePageTreeDnd();
-    if (!dnd?.enabled) return null;
-    return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-60"
-                    aria-label={`More actions for ${page.name}`}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <MoreHorizontal className="size-3.5" />
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-44">
-                <DropdownMenuItem onSelect={() => dnd.openMove(page)}>
-                    <FolderInput className="size-4 mr-2" />
-                    Move…
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
-    );
-}
+// Page/Folder Tree Item. The row's ⋯ and right-click menu live in components/sidebar/PageItemMenu (GitHub #155).
+const PAGE_ROW_CLASS = 'group/pin flex min-w-0 items-center group rounded-md data-[state=open]:bg-accent/60';
 
 function PageTreeItem({
     page,
@@ -1328,7 +1307,8 @@ function PageTreeItem({
         return (
             <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                 <PageTreeRow page={page} level={level}>
-                    <div className="group/pin flex min-w-0 items-center group">
+                    <PageRowContextMenu page={page}>
+                    <div className={PAGE_ROW_CLASS}>
                         <CollapsibleTrigger asChild>
                             <button
                                 className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-left text-sm"
@@ -1343,6 +1323,7 @@ function PageTreeItem({
                         <PageRowMenu page={page} />
                         {addButton}
                     </div>
+                    </PageRowContextMenu>
                 </PageTreeRow>
                 {hasChildren && <CollapsibleContent>{childLists()}</CollapsibleContent>}
             </Collapsible>
@@ -1354,7 +1335,8 @@ function PageTreeItem({
         return (
             <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                 <PageTreeRow page={page} level={level}>
-                    <div className="group/pin flex min-w-0 items-center group">
+                    <PageRowContextMenu page={page}>
+                    <div className={PAGE_ROW_CLASS}>
                         <CollapsibleTrigger asChild>
                             <button
                                 className="shrink-0 p-1 hover:bg-accent rounded transition-colors text-muted-foreground"
@@ -1374,6 +1356,7 @@ function PageTreeItem({
                         <PageRowMenu page={page} />
                         {addButton}
                     </div>
+                    </PageRowContextMenu>
                 </PageTreeRow>
                 <CollapsibleContent>{childLists()}</CollapsibleContent>
             </Collapsible>
@@ -1382,7 +1365,8 @@ function PageTreeItem({
 
     return (
         <PageTreeRow page={page} level={level}>
-            <div className="group/pin flex min-w-0 items-center group">
+            <PageRowContextMenu page={page}>
+            <div className={PAGE_ROW_CLASS}>
                 <Link
                     href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
                     className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
@@ -1395,6 +1379,7 @@ function PageTreeItem({
                 <PageRowMenu page={page} />
                 <span className="w-1 shrink-0" />
             </div>
+            </PageRowContextMenu>
         </PageTreeRow>
     );
 }
