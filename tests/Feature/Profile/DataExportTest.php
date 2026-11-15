@@ -20,6 +20,7 @@ use App\Notifications\DataExportReadyNotification;
 use App\Notifications\NotificationCatalog;
 use App\Support\Admin\UserDeletion;
 use App\Support\Mail\EmailPreviews;
+use App\Support\MyDay\MyDayPlan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -200,6 +201,19 @@ class DataExportTest extends TestCase
         $this->assertSame(3, $manifest['counts']['issues.json']);
         $this->assertSame(1, $manifest['counts']['whiteboards']);
         $this->assertStringContainsString('issues.json', $files['README.txt']);
+    }
+
+    public function test_my_week_notes_and_someday_lines_are_exported_with_their_text(): void
+    {
+        MyDayPlan::addNote($this->me, '2026-11-18', 'Call the bank', 'red');
+        MyDayPlan::addNote($this->me, null, 'Learn Rust');
+
+        $rows = json_decode($this->unzip($this->export())['my_day.json'], true);
+        $notes = collect($rows)->where('kind', 'note')->values();
+
+        $this->assertSame(['Call the bank', 'Learn Rust'], $notes->pluck('title')->all());
+        $this->assertSame(['2026-11-18', 'someday'], $notes->pluck('date')->all());
+        $this->assertSame('red', $notes[0]['color']);
     }
 
     public function test_no_secrets_and_no_other_peoples_data_are_in_the_zip(): void

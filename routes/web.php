@@ -238,6 +238,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/my-day', [MyDayController::class, 'destroy'])->name('my-day.destroy');
     Route::post('/my-day/reorder', [MyDayController::class, 'reorder'])->name('my-day.reorder');
     Route::post('/my-day/carry-over', [MyDayController::class, 'carryOver'])->name('my-day.carry-over');
+    Route::post('/my-day/entries', [MyDayController::class, 'storeEntry'])->name('my-day.entries.store');
+    Route::post('/my-day/entries/reorder', [MyDayController::class, 'reorderEntries'])->name('my-day.entries.reorder');
+    Route::patch('/my-day/entries/{entry}', [MyDayController::class, 'updateEntry'])->name('my-day.entries.update');
+    Route::delete('/my-day/entries/{entry}', [MyDayController::class, 'destroyEntry'])->name('my-day.entries.destroy');
+    Route::get('/my-day/search', [MyDayController::class, 'search'])->middleware([ReadOnlySession::class, 'throttle:240,1,my-day.search'])->name('my-day.search');
     // Offline mode (BRAI-82): one mutation from a device's outbox per request, idempotent per client uuid
     // background burst when the device is back online: never write the session (a form's flash would be lost)
     Route::post('/offline/sync', [OfflineSyncController::class, 'store'])->middleware([ReadOnlySession::class, 'throttle:240,1,offline.sync'])->name('offline.sync');

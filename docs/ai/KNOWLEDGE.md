@@ -534,6 +534,29 @@ Jira's "hide completed issues older than…" for Kanban boards: `boards.settings
   (`InvalidFormatException`) before `'Y-m-d H:i'` is tried. Jira's own format (`20/Oct/26 9:05 AM`) works.
   Not fixed here.
 
+### My Week: notes and Someday live in `my_day_entries`, and only the web sees them (v1.53.0)
+- A plan line is a `my_day_entries` row: linked work (`board` / `list` + `work_id`) or a free-form
+  `note` (`work_id` null). `plan_date` null = "Someday". No second table, so ordering and moving
+  between days is one `arrange()` for every kind.
+- **Everything outside the web ignores notes and Someday on purpose:** `MyDayPlan::forDate()`,
+  `carryOverCandidates()` and `resolve()` (without `withNotes`) only return entries with work, and all
+  date queries (`plan_date = …`, `between`) skip NULL dates. So the App API / mobile (`me/my-day`,
+  Today, `ChangeFeed`, `SyncRecords`), offline sync, the calendar feed and MCP payloads are unchanged.
+  Adding notes there later means new API fields + offline mutation types, not loosening those queries.
+- `MyDayEntry::TYPES` stays `['board','list']` (validators of the App API / offline appliers use it);
+  `MyDayEntry::NOTE` is separate.
+- Web "Bring over" **moves** unfinished notes of the last 30 days to today (tasks are still copied), so
+  the same note isn't offered again tomorrow. The apps' carry-over (`carryOver()` without `withNotes`)
+  leaves notes alone.
+- The unique index `(user, work_type, work_id, plan_date)` does not stop duplicate Someday rows (NULLs are
+  distinct), so the partial unique index `my_day_entries_someday_unique` (`… where plan_date is null and
+  work_id is not null`) does; `firstOrCreate` (→ `createOrFirst`) then returns the existing row on a race.
+  **Drop that index before any later `->change()` on this table:** on SQLite Laravel rebuilds indexes from
+  what it reads back and loses the `WHERE`, turning it into a full unique key.
+- Moves (`arrange()`) and carry-over lock the user row first (`lockPlan()`), so two moves of the same task
+  onto one day can't both miss each other. Each list holds at most `LIST_LIMIT` (200) lines — the most one
+  reorder call sends; store, move and carry-over all respect it.
+
 ### Board workflow rules: one guard, a model backstop, strict on purpose (v1.52.0, 2026-11-06)
 Rules per target column (who / allowed from / conditions), enforced by `Support\Boards\WorkflowGuard`.
 - **Two layers.** Explicit `ensure()` where a whole action must be refused up front with a clear message (drag & drop + the

@@ -387,6 +387,17 @@ Plan [`tasks/feat-legal-compliance.md`](./tasks/feat-legal-compliance.md); human
     board issues go through `boards.items.move` to the board's first done / open column
     (`board.done_column_id` / `open_column_id` in the My Work payload), list tasks through
     `task-lists.items.update` `status`. Done tasks sink to the bottom of My Day (v1.39.0).
+  - **My Week** (v1.53.0, plan [`tasks/feat-my-week.md`](./tasks/feat-my-week.md)): the same
+    `my_day_entries` over any date. Entries can be free-form notes (`work_type = note`, `work_id` null,
+    `title` / `color` / `completed_at`) and undated (`plan_date` null = the "Someday" list).
+    `MyDayPlan::forRange()` / `someday()` (with notes), `addNote()`, `arrange()` (order + move between
+    dates, merges a task planned twice), `moveToEnd()`, `weekStart()` (Monday, user zone), `plannable()`
+    (±366 days). Routes `my-day.entries.store|update|destroy|reorder` (by entry id, `plan_date` = Y-m-d or
+    `someday`) + `my-day.search` (issues + list tasks from the search index, for `#` linking).
+    `MyWorkController` sends `myDay.notes` always and `myWeek` (`start`, `days`, `someday`) only with
+    `?plan=week[&week=Y-m-d]`. UI: `components/my-day/{MyWeekBoard,PlanLineCard,AddPlanLine}.tsx`,
+    helpers `lib/myWeek.ts`; Day | Week switch in `MyDaySection`; My Work rows drag onto days
+    (`MY_WORK_MIME`). Tests `tests/Feature/MyDay/MyWeekTest.php`, e2e `e2e/tests/my-week.spec.ts`.
   - **Focus timer:** `WorkTimer` (`work_timers`, unique `user_id` = one running timer),
     `WorkTimerController` (`work-timer.start/stop/discard`), shared prop `activeTimer` →
     `components/WorkTimerPill.tsx` in the top bar. Stop logs through `Item::logWork()` (also

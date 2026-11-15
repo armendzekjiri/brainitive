@@ -48,6 +48,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 | [Workflow rules for boards + a new board settings page](./feat-board-workflow-rules.md) | done |
 | [Mobile push: Expo push receipts + "Send a test notification"](./feat-mobile-push-receipts.md) | done |
 | [Revoke the Apple authorization when an account is deleted](./feat-apple-revoke-on-delete.md) | done |
+| [My Week: free-form week planner with linked tasks and Someday](./feat-my-week.md) | done |
 | [My Work: real filters (search, project, source, priority, labels, status, sort)](./feat-my-work-filters.md) | done |
 | [Release v1.51.0: live whiteboards + poll votes for the mobile app (server side)](./release-v1.51.0.md) | in progress |
 | [App API: live whiteboard drawing + poll votes for native clients](./feat-api-whiteboard-live.md) | done |
