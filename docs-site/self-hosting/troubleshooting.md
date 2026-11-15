@@ -48,6 +48,7 @@ Run `php artisan` commands as `sudo -u www-data php artisan …` to avoid this.
 ## Uploaded images don't show
 
 - Manual install: run `php artisan storage:link` once. It links `public/storage` to `storage/app/public`.
+- Docker: images before v1.53.0 couldn't create that link, so every uploaded icon and image answered 404. Update the image (`docker compose pull && docker compose up -d`). If the `app` container logs `WARNING: public/storage is missing`, the link is still missing; create it with `docker compose exec -u root app ln -s /app/storage/app/public /app/public/storage`.
 - Check that `APP_URL` matches the address in the browser. Upload links are built from it.
 
 ## "Your session expired" or wrong `http://` links behind a proxy

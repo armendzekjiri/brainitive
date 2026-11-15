@@ -866,6 +866,14 @@ must arrive through a migration that calls the idempotent seeder (see
 `2026_10_23_150000_ensure_default_item_priorities.php`, BRAI-85) — otherwise pickers are
 empty in production while tests and Docker look fine.
 
+### Docker: the container can't write /app/public — make web-root files at build time (GitHub #153)
+The image runs as `USER www-data`, but `/app` (incl. `public/`) belongs to root; only `storage`, `bootstrap/cache`,
+`/data`, `/config` and `/collab` are chowned. `public/storage` → `storage/app/public` is therefore created in the
+`Dockerfile`'s root `RUN` block (`ln -sfn`); the entrypoint's old `storage:link >/dev/null 2>&1 || true` failed
+silently and every upload (icons, logos, images) answered 404. The entrypoint now runs `storage:link` only when the
+link is missing and prints a `WARNING` when it can't. Anything else that must exist in the web root or outside the
+chowned folders: create it at build time too, never at runtime. `tests/Unit/DockerStorageLinkTest.php` guards it.
+
 ### Docker self-hosting runs PostgreSQL — the migrations don't run on MySQL / MariaDB
 `compose.yaml` shipped MariaDB 11.4 until 2026-10-25, but no fresh install ever got past
 `2026_02_23_140000_move_bookmarks_to_workspace` (MariaDB error 1553: the unique index it drops
