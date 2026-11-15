@@ -428,6 +428,22 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
   viewport. Options in the Move dialog start with the folder's emoji: match names without `^`; a disabled
   option (`aria-disabled`) needs `click({ force: true })`.
 
+### Sidebar row menu: permissions and staying put (GitHub #155, 2026-11-15)
+- **`can_delete` is computed, not a policy call per page.** `markEditablePages` reads the user's project
+  roles once and marks every node of the (already `visibleTo`) tree with `PagePolicy::delete`'s rule: admins,
+  or the author while they may still edit. `SidebarPageMenuTest` compares it with `$user->can('delete', …)` for
+  every role — change the policy and that test tells you to change the flag. The server still authorizes.
+- **Rename through `pages.update`** used to set `name` only: a published page with an open draft kept the
+  old title in `draft_name`, and publishing the draft brought it back. It now follows MCP `update_page`
+  (draft title follows, published page records a "Renamed" version); "review required" pages keep the new
+  title in the draft (the response's `name` is then the old one, which the menu reports).
+- **Delete keeps you where you are:** `pages.destroy` answers JSON when asked (axios), so deleting another
+  item doesn't jump to its parent. Deleting the open page or one of its ancestors uses the normal redirect.
+- **Right-click replaces the browser's link menu** on the row (the row is mostly an `<a>`), hence "Open in
+  new tab" and "Copy link" in ours. It's off on touch screens (`pointer: coarse`), like the board's issue menu.
+- The ⋯ now shows for viewers too (Open / Copy link), so e2e must scope "More actions for …" to a row or use
+  `exact: true` for the page header's "More actions".
+
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
 means adding its param to `BoardViewConfig::PARAM_KEYS` + `normalize()` (allowlist) and, if it
