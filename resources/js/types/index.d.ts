@@ -180,6 +180,14 @@ export interface TaskListItem {
     updated_at: string;
 }
 
+export interface BookmarkCollaborator {
+    id: number;
+    name: string;
+    email?: string;
+    avatar_display?: string | null;
+    pivot?: { role: 'viewer' | 'editor' };
+}
+
 export interface Bookmark {
     id: number;
     uuid: string;
@@ -190,7 +198,7 @@ export interface Bookmark {
     icon?: string;
     icon_display?: string; // emoji or full URL for stored image
     visibility: 'private' | 'public';
-    collaborators?: Array<{ id: number; name: string; email?: string; pivot?: { role: 'viewer' | 'editor' } }>;
+    collaborators?: BookmarkCollaborator[];
     creator?: User;
     position: number;
     created_by?: number;

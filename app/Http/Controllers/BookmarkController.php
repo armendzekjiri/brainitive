@@ -57,8 +57,9 @@ class BookmarkController extends Controller
 
         $bookmark->load([
             'items' => fn ($q) => $q->orderBy('position'),
-            'collaborators:id,name,email',
-            'creator:id,name,email',
+            // avatar → avatar_display for the header's collaborator stack (GitHub #152)
+            'collaborators:id,name,email,avatar',
+            'creator:id,name,email,avatar',
         ]);
 
         foreach ($bookmark->items->where('type', 'file') as $item) {
