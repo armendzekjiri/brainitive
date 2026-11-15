@@ -62,6 +62,29 @@ class Uploads
         return self::IMAGE[strtolower((string) $file->guessExtension())] ?? 'bin';
     }
 
+    /**
+     * `icon-<random>.<ext>` for a project / bookmark icon (GitHub #154). Every upload gets a new name: a replaced
+     * icon must change its URL, or the icon form stays clean and browsers / CDNs keep the cached old picture.
+     */
+    public static function iconName(UploadedFile $file): string
+    {
+        return self::iconFileName(self::imageExtension($file));
+    }
+
+    public static function iconFileName(string $extension): string
+    {
+        return 'icon-'.Str::lower(Str::random(16)).'.'.$extension;
+    }
+
+    /**
+     * An icon file stored under `$directory` (e.g. `project-icons/12`): the new `icon-<random>.<ext>` names and
+     * the `icon.<ext>` of uploads before v1.53.0. Only such a path may be kept or deleted as the owner's icon.
+     */
+    public static function isOwnIconPath(string $directory, string $path): bool
+    {
+        return (bool) preg_match('#^'.preg_quote(rtrim($directory, '/'), '#').'/icon(-[a-z0-9]{8,40})?(\.[a-z0-9]{1,5})?$#i', $path);
+    }
+
     /** Programs, installers and scripts (any OS) — refused on public uploads (NotExecutableUpload). */
     public const EXECUTABLE = [
         'exe', 'msi', 'msp', 'msix', 'appx', 'com', 'scr', 'pif', 'cpl', 'dll', 'sys', 'lnk', 'reg', 'inf',
