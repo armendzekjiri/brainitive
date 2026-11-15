@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Replacing an existing custom icon does nothing (GitHub #154)](./fix-icon-replace-cache.md) | done |
 | [Resizable columns in the board Timeline and List views](./feat-resizable-columns.md) | done |
 | [Right-click menu on issues in the board's list and kanban views (GitHub #143)](./feat-item-context-menu.md) | done |
 | [Workflow rules for boards + a new board settings page](./feat-board-workflow-rules.md) | done |

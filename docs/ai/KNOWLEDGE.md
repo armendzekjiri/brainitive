@@ -616,6 +616,15 @@ extension in the name + the content-detected MIME type); the browser forms pre-c
 `resources/js/lib/blockedUploads.ts` (same list — change both together). Logged-in uploads keep
 the allowlist renaming only.
 
+### A replaced upload needs a new file name (GitHub #154)
+Project and bookmark icons used to be stored as `…/{id}/icon.<ext>` on every upload. Replacing one gave the same
+path / URL: the settings form wasn't dirty (nothing to save) and browsers / CDNs kept the cached old image. Each
+upload is now `icon-<random>.<ext>` (`Uploads::iconName()` / `iconFileName()`); `Uploads::isOwnIconPath()` accepts
+that and the pre-v1.53.0 `icon.<ext>`, so an old icon is still deleted when replaced. A project settings form that
+sends back another own icon path than the current one (opened before a newer upload) keeps the current icon. Any
+new "replace the file" upload: give it a fresh name and `WorkspaceFiles::forget()` the old one, never overwrite in
+place.
+
 ### Accounts, invitations and connected apps
 - An email is "proven" only by `email_verified_at` (raw column — `hasVerifiedEmail()` is always
   true when the instance doesn't require verification), a provider-verified social email, or the
