@@ -63,7 +63,16 @@ if [ "${CONTAINER_ROLE:-app}" = "app" ]; then
     if [ ! -f storage/oauth-private.key ]; then
         php artisan passport:keys --force
     fi
-    php artisan storage:link >/dev/null 2>&1 || true
+    # Uploads (icons, logos, images) are served from public/storage → storage/app/public. The image
+    # creates that link at build time; /app/public belongs to root, so as www-data this can only repair a
+    # missing link where public/ is writable (GitHub #153). Never fail silently: without it uploads 404.
+    if [ ! -L public/storage ] && [ ! -e public/storage ]; then
+        if ! php artisan storage:link; then
+            echo "WARNING: public/storage is missing and couldn't be created, so uploaded images and icons will 404." >&2
+            echo "         Update to the current image, or create it as root:" >&2
+            echo "         docker compose exec -u root app ln -s /app/storage/app/public /app/public/storage" >&2
+        fi
+    fi
     # Live co-editing: hand the realtime service its secret (COLLAB_SECRET, else derived from APP_KEY)
     if [ -d /collab ]; then
         php -r '$s = getenv("COLLAB_SECRET") ?: hash_hmac("sha256", "brainitive-collab", (string) getenv("APP_KEY")); file_put_contents("/collab/secret.tmp", $s);' \

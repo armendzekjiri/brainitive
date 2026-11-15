@@ -921,11 +921,13 @@ Code name "entitlements", never "plan" (`App\Models\Plan` is the Gantt plan).
 ## Self-hosting (Docker)
 - `Dockerfile` — multi-stage: composer → node (frontend; needs `vendor/tightenco/ziggy` for
   `tsc`) → `dunglas/frankenphp` runtime (Caddy + PHP 8.4, non-root, extensions installed
-  with `install-php-extensions`).
+  with `install-php-extensions`). Creates `public/storage` → `storage/app/public` as root at build
+  time (the www-data runtime can't write `public/`).
 - `docker/entrypoint.sh` — `CONTAINER_ROLE=app|queue|scheduler`; without `APP_KEY` the app role
   generates one into `storage/app.key` (the others wait for it); the app role waits for the
   DB, migrates, runs `search:ensure` (v1.43.0: queues the first search index build), seeds item
-  types / priorities / instance settings, creates Passport keys and runs `optimize`.
+  types / priorities / instance settings, creates Passport keys, runs `storage:link` only when
+  `public/storage` is missing (warning when it can't) and runs `optimize`.
 - `compose.yaml` + `.env.docker.example` — app, queue, scheduler, PostgreSQL 16, Redis 7.
   `compose.yaml` runs the published image (`BRAINITIVE_IMAGE`, default
   `ghcr.io/armendzekjiri/brainitive`; the GHCR package is public), so the **quick start** in
