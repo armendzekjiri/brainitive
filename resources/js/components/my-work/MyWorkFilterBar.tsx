@@ -178,7 +178,7 @@ export default function MyWorkFilterBar({ filters, options, onChange, onClear, s
                         {active > 0 ? `Filters (${active})` : 'Filters'}
                     </button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="max-h-[75vh] w-[min(20rem,calc(100vw-2rem))] space-y-4 overflow-y-auto p-4">
+                <PopoverContent align="end" collisionPadding={8} className="max-h-[min(75vh,var(--radix-popover-content-available-height))] w-[min(20rem,calc(100vw-2rem))] space-y-4 overflow-y-auto p-4">
                     <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filters</p>
                         {anything && (

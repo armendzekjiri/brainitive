@@ -113,6 +113,7 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Workflow:** Confluence-style draft → publish → versions; see [`CONVENTIONS.md`](./CONVENTIONS.md#page-workflow-draft--publish--versions)
 - **Pages (UI):** `Pages/Pages/`
 - **Moving (BRAI-431):** `App\Support\Pages\PageMover::move()` is the one tree-change path (same project, no cycles, `before_id` / `after_id` sibling anchors, positions renumbered in old + new parent, slug de-duplicated per parent, project row locked). Used by `POST pages/{page}/move` (`pages.move`, `PageController::move`), `pages.update` with `parent_id` and MCP `update_page` (`parent_uuid`, null = top level). `pages.reorder` only reorders within a parent (a changed parent is a 422). UI: `components/page/MovePageDialog.tsx` ("Move…": searchable folder tree + "Top level", full path, disabled self / descendants / current location; `requestPageMove()`), opened from the page header ⋯ (`Pages/Pages/Show.tsx`) and the sidebar row ⋯; sidebar drag & drop in `components/sidebar/PageTreeDnd.tsx` (`usePageTreeDndState` per project: optimistic tree, drop zones, confirmation `AlertDialog`; `PageTreeRow` per row header, `RootDropZone` on the top-level group headers), tree helpers in `lib/pageTree.ts` (`moveTreeNode`, `folderDestinations`, `destinationPath`, `pageKind`). Sidebar projects carry `can_edit_pages` (`HandleInertiaRequests::markEditablePages`). The page tree has no live channel: others see a move on their next navigation. e2e `e2e/tests/page-move.spec.ts`, PHPUnit `tests/Feature/Pages/PageMoveTest.php`.
+- **Sidebar row menu (GitHub #155):** `components/sidebar/PageItemMenu.tsx` — `usePageItemMenuState(workspace, project, currentPageUuid)` per project in `ProjectContent` (context + rename / duplicate-with-subpages / delete dialogs mounted once), `PageRowMenu` (the row's ⋯) and `PageRowContextMenu` (right-click on the row, off on `pointer: coarse`), one action list for both: Open, Open in new tab, Copy link (everyone); Rename… (`PUT pages.update` JSON), Duplicate (`pages.duplicate`, opens the copy), Move… (`can_edit_pages`); Delete (`DELETE pages.destroy` JSON — `{deleted: true}`, the user stays put; the open page / an ancestor of it uses the normal redirect) for `can_delete`, set per page node of the sidebar tree by `HandleInertiaRequests::markEditablePages` with `PagePolicy::delete`'s rule. A rename through `pages.update` keeps an open draft's title in step and records a version on published pages (same as MCP `update_page`). Tests `tests/Feature/Pages/SidebarPageMenuTest.php`, e2e `e2e/tests/sidebar-item-menu.spec.ts`. Boards / lists / plans / helpdesks / lead forms have no row menu yet (follow-up in `tasks/feat-sidebar-item-menu.md`).
 - **Page icons:** an emoji or an uploaded image stored as a `data:` URL. Render them only through `components/page/PageIcon.tsx` (`PageIcon`, `isImageIcon`), never as text (v1.41.2 fix; e2e `e2e/tests/page-icons.spec.ts`).
 - **Document width (v1.42.0):** docs open full width by default; "Exit full width" is remembered per doc and browser in localStorage `page-full-width-<uuid>` (`Pages/Pages/Show.tsx`; e2e `e2e/tests/document-width.spec.ts`).
 - **Smart links in the editor (v1.42.0, BRAI-143):** `components/editor/nodes/SmartLinkNode.tsx` + `components/editor/smartLinks/` (`SmartLinkPlugin` paste / "/link" / side "+" menu, `SmartLinkPicker`, `SmartLinkChip`, `smartLinkStore.ts` batched fetch, `smartLinkRefs.ts` URL parser + context). Enabled by the `smartLinks={{ workspaceSlug, projectSlug }}` editor prop (`Pages/Pages/Show.tsx`, `components/item/ItemDetail.tsx`); server side see "Linked content" below. The side "+" block menu lives in `components/editor/RichLexicalEditorFull.tsx`.
@@ -191,7 +192,7 @@ Plan [`tasks/feat-document-review.md`](./tasks/feat-document-review.md). Ask col
 - **Models:** `Bookmark` (`uuid`-bound), `BookmarkItem`; metadata fetched async by `app/Jobs/FetchLinkMetadataJob.php`
 - **Controller:** `BookmarkController` (incl. public share `/share/bookmarks/{uuid}`, icon upload)
 - **Policy:** `BookmarkPolicy`
-- **Pages:** `Pages/Bookmarks/`
+- **Pages:** `Pages/Bookmarks/` — `Show.tsx`: the header holds the description (muted subtitle, `BookmarkDescription`, click to edit for `canEdit`) and the people (`components/bookmarks/BookmarkCollaborators.tsx`: avatar stack → popover with roles; invite / role / remove for `canEdit` through `bookmarks.collaborators.*`; "Invite" while the owner is alone); the left column is "Add to bookmark" only (GitHub #152, e2e `e2e/tests/bookmark-header.spec.ts`, PHPUnit `tests/Feature/Bookmarks/BookmarkHeaderDetailsTest.php`). `show()` loads `avatar` for creator + collaborators (`avatar_display`). `ShowPublic.tsx` shows the description under the title, never the people.
 
 ### Calendar (external calendars via providers, Google Tasks, ICS feed)
 - **Model:** `CalendarConnection` (per-user, *not* workspace-scoped; `provider`, `server_url`, `credentials` encrypted array + hidden, `sync_error` / `sync_error_at`; `upsertFor()`, `recordSyncError()` / `clearSyncError()`)
@@ -387,6 +388,17 @@ Plan [`tasks/feat-legal-compliance.md`](./tasks/feat-legal-compliance.md); human
     board issues go through `boards.items.move` to the board's first done / open column
     (`board.done_column_id` / `open_column_id` in the My Work payload), list tasks through
     `task-lists.items.update` `status`. Done tasks sink to the bottom of My Day (v1.39.0).
+  - **My Week** (v1.53.0, plan [`tasks/feat-my-week.md`](./tasks/feat-my-week.md)): the same
+    `my_day_entries` over any date. Entries can be free-form notes (`work_type = note`, `work_id` null,
+    `title` / `color` / `completed_at`) and undated (`plan_date` null = the "Someday" list).
+    `MyDayPlan::forRange()` / `someday()` (with notes), `addNote()`, `arrange()` (order + move between
+    dates, merges a task planned twice), `moveToEnd()`, `weekStart()` (Monday, user zone), `plannable()`
+    (±366 days). Routes `my-day.entries.store|update|destroy|reorder` (by entry id, `plan_date` = Y-m-d or
+    `someday`) + `my-day.search` (issues + list tasks from the search index, for `#` linking).
+    `MyWorkController` sends `myDay.notes` always and `myWeek` (`start`, `days`, `someday`) only with
+    `?plan=week[&week=Y-m-d]`. UI: `components/my-day/{MyWeekBoard,PlanLineCard,AddPlanLine}.tsx`,
+    helpers `lib/myWeek.ts`; Day | Week switch in `MyDaySection`; My Work rows drag onto days
+    (`MY_WORK_MIME`). Tests `tests/Feature/MyDay/MyWeekTest.php`, e2e `e2e/tests/my-week.spec.ts`.
   - **Focus timer:** `WorkTimer` (`work_timers`, unique `user_id` = one running timer),
     `WorkTimerController` (`work-timer.start/stop/discard`), shared prop `activeTimer` →
     `components/WorkTimerPill.tsx` in the top bar. Stop logs through `Item::logWork()` (also
@@ -921,11 +933,13 @@ Code name "entitlements", never "plan" (`App\Models\Plan` is the Gantt plan).
 ## Self-hosting (Docker)
 - `Dockerfile` — multi-stage: composer → node (frontend; needs `vendor/tightenco/ziggy` for
   `tsc`) → `dunglas/frankenphp` runtime (Caddy + PHP 8.4, non-root, extensions installed
-  with `install-php-extensions`).
+  with `install-php-extensions`). Creates `public/storage` → `storage/app/public` as root at build
+  time (the www-data runtime can't write `public/`).
 - `docker/entrypoint.sh` — `CONTAINER_ROLE=app|queue|scheduler`; without `APP_KEY` the app role
   generates one into `storage/app.key` (the others wait for it); the app role waits for the
   DB, migrates, runs `search:ensure` (v1.43.0: queues the first search index build), seeds item
-  types / priorities / instance settings, creates Passport keys and runs `optimize`.
+  types / priorities / instance settings, creates Passport keys, runs `storage:link` only when
+  `public/storage` is missing (warning when it can't) and runs `optimize`.
 - `compose.yaml` + `.env.docker.example` — app, queue, scheduler, PostgreSQL 16, Redis 7.
   `compose.yaml` runs the published image (`BRAINITIVE_IMAGE`, default
   `ghcr.io/armendzekjiri/brainitive`; the GHCR package is public), so the **quick start** in

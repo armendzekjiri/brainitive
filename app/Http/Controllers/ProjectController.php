@@ -281,15 +281,19 @@ class ProjectController extends Controller
         // an icon is an emoji / icon name, or a file of THIS project — a path to any other file
         // would later be deleted from the public disk when a new icon is uploaded
         if (! empty($validated['icon']) && $validated['icon'] !== $project->getRawOriginal('icon')
-            && (str_contains($validated['icon'], '/') || str_contains($validated['icon'], '\\'))
-            && ! self::ownIconPath($project, $validated['icon'])) {
-            throw ValidationException::withMessages(['icon' => 'Upload the icon image instead of linking a file.']);
+            && (str_contains($validated['icon'], '/') || str_contains($validated['icon'], '\\'))) {
+            if (! self::ownIconPath($project, $validated['icon'])) {
+                throw ValidationException::withMessages(['icon' => 'Upload the icon image instead of linking a file.']);
+            }
+            // Another own icon file than the current one: a form opened before a newer upload (each upload has a
+            // new name since #154, the old file is deleted). Keep the current icon instead of a missing file.
+            unset($validated['icon']);
         }
 
         if ($request->hasFile('icon_image')) {
             $file = $request->file('icon_image');
             $ext = Uploads::imageExtension($file);
-            $path = WorkspaceFiles::store($workspace, $file, 'project-icons/'.$project->id, 'icon.'.$ext, 'project_icon', $request->user());
+            $path = WorkspaceFiles::store($workspace, $file, 'project-icons/'.$project->id, Uploads::iconFileName($ext), 'project_icon', $request->user());
             $previousIcon = $project->getRawOriginal('icon');
             if ($previousIcon !== $path && $previousIcon && self::ownIconPath($project, $previousIcon)) {
                 WorkspaceFiles::forget($workspace, $previousIcon, 'project-icons/'.$project->id.'/'); // superseded (Codex web review C)
@@ -322,7 +326,7 @@ class ProjectController extends Controller
         $file = $request->file('icon');
         $ext = Uploads::imageExtension($file);
         $previousIcon = $project->getRawOriginal('icon');
-        $path = WorkspaceFiles::store($workspace, $file, 'project-icons/'.$project->id, 'icon.'.$ext, 'project_icon', $request->user());
+        $path = WorkspaceFiles::store($workspace, $file, 'project-icons/'.$project->id, Uploads::iconFileName($ext), 'project_icon', $request->user());
         $project->update(['icon' => $path]);
         if ($previousIcon !== $path && $previousIcon && self::ownIconPath($project, $previousIcon)) {
             WorkspaceFiles::forget($workspace, $previousIcon, 'project-icons/'.$project->id.'/'); // superseded (Codex web review C)
@@ -635,9 +639,9 @@ class ProjectController extends Controller
         return back()->with('success', 'Item type deleted.');
     }
 
-    /** project-icons/{id}/icon.<ext> — the only file an icon may point to (and so be deleted). */
+    /** project-icons/{id}/icon-<random>.<ext> (or the older icon.<ext>) — the only file an icon may point to (and so be deleted). */
     private static function ownIconPath(Project $project, string $path): bool
     {
-        return (bool) preg_match('#^project-icons/'.$project->id.'/icon(\.[a-z0-9]{1,5})?$#i', $path);
+        return Uploads::isOwnIconPath('project-icons/'.$project->id, $path);
     }
 }

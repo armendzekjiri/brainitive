@@ -15,6 +15,8 @@ Whiteboards are an endless canvas for diagrams, retros and brainstorms, built on
 
 The new whiteboard opens with **Start from a template**: pick one, or close the picker to start blank.
 
+To rename, duplicate, move, copy the link of or delete a whiteboard without opening it, use its **⋯** in the sidebar or right-click the row (see [the sidebar menu](./docs#the-sidebar-menu)).
+
 ## Templates
 
 | Template | What you get |

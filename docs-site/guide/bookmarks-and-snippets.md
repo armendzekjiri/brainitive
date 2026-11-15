@@ -33,10 +33,18 @@ Open a collection and use **Add to bookmark**. You can add:
 Quickest of all: press **Ctrl+V** (**⌘V** on Mac) on the collection page to paste a link, text or file straight from your
 clipboard. You can also drop files onto it.
 
+### Description
+
+The description shows in the collection's header, right under its name. If you can edit the collection, click it
+to change it (or click **Add a description** when there is none); **⌘/Ctrl+Enter** saves, **Esc** cancels. A long
+description shows two lines; viewers click **Show more** to read the rest.
+
 ### Collaborators
 
-Invite workspace members to a private collection as **Viewer** or **Editor**, change their role or remove them at any
-time.
+The people on a collection show as small avatars next to **Private** / **Shared** in the header (the owner first).
+Click them to see everyone and their role: **Owner**, **Editor** or **Viewer**. If you can edit the collection, you
+invite workspace members there as **Viewer** or **Editor**, change their role or remove them at any time. While
+you're the only one on it, the header shows **Invite** instead.
 
 ## Snippets
 

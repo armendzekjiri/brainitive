@@ -203,6 +203,7 @@ class CalendarFeedBuilder
             return;
         }
         $entries = MyDayEntry::where('user_id', $this->user->id)
+            ->whereIn('work_type', MyDayEntry::TYPES) // free-form lines (My Week) aren't in the feed
             ->whereBetween('plan_date', [$this->from->toDateString(), $this->to->toDateString()])
             ->orderBy('plan_date')->orderBy('position')->orderBy('id')
             ->limit($this->room())

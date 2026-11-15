@@ -22,6 +22,21 @@ To move a doc, whiteboard or folder:
 
 A folder can't go into one of its own subfolders. Viewers can't move content.
 
+## The sidebar menu
+
+Every doc, whiteboard and folder in the sidebar has a **⋯** menu. **Right-click** the row for the same menu (on touch screens, tap the ⋯):
+
+| Action | What it does |
+|---|---|
+| **Open** / **Open in new tab** | Open the item here or in a new browser tab. |
+| **Copy link** | Copy the item's link to share it with teammates. |
+| **Rename…** | Give it a new name without opening it. On a page that needs a review, the new name waits in the draft until it's published. |
+| **Duplicate** | Make a copy and open it. If it has subpages, choose the item only or the whole tree. |
+| **Move…** | Put it in another folder or at the top level (see above). |
+| **Delete** | Delete it after a confirmation, together with everything inside. You stay on the page you're on, unless you deleted it. |
+
+You only see what you may do: viewers get **Open**, **Open in new tab** and **Copy link**; deleting is for project admins and the item's author.
+
 ## Writing
 
 Start typing. The page title is edited in place; <kbd>Enter</kbd> jumps into the text.
