@@ -109,7 +109,7 @@ export default function BookmarksShowPublic({ bookmark }: Props) {
                                 <div className="min-w-0 flex-1">
                                     <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{bookmark.name}</h1>
                                     {bookmark.description && (
-                                        <p className="text-muted-foreground mt-2">{bookmark.description}</p>
+                                        <p className="text-muted-foreground mt-2 whitespace-pre-wrap break-words">{bookmark.description}</p>
                                     )}
                                     {bookmark.creator && (
                                         <p className="text-sm text-muted-foreground mt-3">by {bookmark.creator.name}</p>

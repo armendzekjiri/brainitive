@@ -97,25 +97,48 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * `can_edit_pages` per sidebar project (BRAI-431): drag handles and "Move…" only for people who
-     * may change pages. Same rule as PagePolicy::create (workspace owner / admin, project admin /
-     * editor), in two queries instead of a policy call per project.
+     * `can_edit_pages` per sidebar project (BRAI-431): drag handles, "Move…", "Rename…" and
+     * "Duplicate" only for people who may change pages. Same rule as PagePolicy::create (workspace
+     * owner / admin, project admin / editor), in two queries instead of a policy call per project.
+     *
+     * `can_delete` per page of the tree (GitHub #155, the sidebar row's "Delete"): PagePolicy::delete —
+     * admins (workspace owner / admin, project admin), or the page's author while they may still edit
+     * pages. The tree only holds pages the user can view, so the policy's view check is already done.
      */
     private function markEditablePages(Workspace $workspace, User $user): void
     {
         $workspaceAdmin = $workspace->owner_id === $user->id
             || $user->workspaces()->where('workspace_id', $workspace->id)->wherePivot('role', 'admin')->exists();
 
-        $editable = $workspaceAdmin
-            ? null
+        /** @var array<int, string> $roles project id => admin | editor */
+        $roles = $workspaceAdmin
+            ? []
             : $user->projects()
                 ->whereIn('projects.id', $workspace->projects->pluck('id'))
                 ->wherePivotIn('role', ['admin', 'editor'])
-                ->pluck('projects.id')
+                ->pluck('project_user.role', 'projects.id')
                 ->all();
 
         foreach ($workspace->projects as $project) {
-            $project->setAttribute('can_edit_pages', $editable === null || in_array($project->id, $editable, true));
+            $canEdit = $workspaceAdmin || isset($roles[$project->id]);
+            $isAdmin = $workspaceAdmin || ($roles[$project->id] ?? null) === 'admin';
+            $project->setAttribute('can_edit_pages', $canEdit);
+            if ($project->relationLoaded('pages')) {
+                $this->markDeletablePages($project->pages, $user, $canEdit, $isAdmin);
+            }
+        }
+    }
+
+    /**
+     * @param  iterable<Page>  $pages
+     */
+    private function markDeletablePages(iterable $pages, User $user, bool $canEdit, bool $isAdmin): void
+    {
+        foreach ($pages as $page) {
+            $page->setAttribute('can_delete', $isAdmin || ($canEdit && $page->created_by === $user->id));
+            if ($page->relationLoaded('children')) {
+                $this->markDeletablePages($page->children, $user, $canEdit, $isAdmin);
+            }
         }
     }
 

@@ -180,6 +180,14 @@ export interface TaskListItem {
     updated_at: string;
 }
 
+export interface BookmarkCollaborator {
+    id: number;
+    name: string;
+    email?: string;
+    avatar_display?: string | null;
+    pivot?: { role: 'viewer' | 'editor' };
+}
+
 export interface Bookmark {
     id: number;
     uuid: string;
@@ -190,7 +198,7 @@ export interface Bookmark {
     icon?: string;
     icon_display?: string; // emoji or full URL for stored image
     visibility: 'private' | 'public';
-    collaborators?: Array<{ id: number; name: string; email?: string; pivot?: { role: 'viewer' | 'editor' } }>;
+    collaborators?: BookmarkCollaborator[];
     creator?: User;
     position: number;
     created_by?: number;
@@ -603,6 +611,8 @@ export interface Page {
     current_version?: number;
     /** When the live version last changed (newest version), sent by pages.show. */
     last_published_at?: string | null;
+    /** Sidebar tree only (GitHub #155): PagePolicy::delete for the signed-in user. */
+    can_delete?: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -817,11 +827,50 @@ export interface TimesheetWeek {
 }
 
 /** Today's hand-picked plan on My Work (BRAI-74). `keys` = "board:12" / "list:5". */
+export type PlanProject = Pick<MyWorkProject, 'id' | 'name' | 'slug' | 'color' | 'workspace'>;
+
 export interface MyDayPlan {
     date: string;
-    rows: { item: MyWorkItem; project: Pick<MyWorkProject, 'id' | 'name' | 'slug' | 'color' | 'workspace'> }[];
+    /** linked work planned for today (also what offline mode keeps) */
+    rows: { item: MyWorkItem; project: PlanProject; entry_id: number; position: number }[];
+    /** today's free-form lines (My Week, v1.53.0) */
+    notes: PlanLine[];
     keys: string[];
     carryOverCount: number;
+}
+
+export type PlanNoteColor = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink';
+
+/** One line of the plan (My Week, v1.53.0): a free-form note, or an issue / list task it links. */
+export interface PlanLine {
+    id: number;
+    kind: 'note' | 'board' | 'list';
+    position: number;
+    /** note text (null for linked lines) */
+    title: string | null;
+    color: PlanNoteColor | null;
+    /** note ticked (linked lines: see item) */
+    done: boolean;
+    item: MyWorkItem | null;
+    project: PlanProject | null;
+}
+
+/** My Week: seven days from Monday (`start`), each with its lines in order, plus the undated Someday list. */
+export interface MyWeekPlan {
+    start: string;
+    days: { date: string; lines: PlanLine[] }[];
+    someday: PlanLine[];
+}
+
+/** A hit of `my-day.search` (link an issue / list task to a plan line). */
+export interface PlanLinkResult {
+    work_type: 'board' | 'list';
+    work_id: number;
+    key: string | null;
+    title: string;
+    project: string | null;
+    context: string | null;
+    done: boolean;
 }
 
 /** My Work page: project with assigned items */

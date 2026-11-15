@@ -543,8 +543,10 @@ final class PersonalDataArchive
 
     private function myDay(): void
     {
-        $entries = DB::table('my_day_entries')->where('user_id', $this->user->id)->orderBy('plan_date')->orderBy('position')
-            ->get(['work_type', 'work_id', 'plan_date', 'position', 'created_at']);
+        // My Day / My Week lines: linked work, free-form notes (their own text), Someday (date null)
+        $entries = DB::table('my_day_entries')->where('user_id', $this->user->id)
+            ->orderByRaw('plan_date is null')->orderBy('plan_date')->orderBy('position')->orderBy('id')
+            ->get(['work_type', 'work_id', 'plan_date', 'position', 'title', 'color', 'completed_at', 'created_at']);
 
         // titles only for work the person can still open
         $issues = DB::table('items as i')->join('boards as b', 'b.id', '=', 'i.board_id')
@@ -555,11 +557,23 @@ final class PersonalDataArchive
             ->get(['ti.id', 'ti.title'])->keyBy('id');
 
         $rows = $entries->map(function ($r) use ($issues, $tasks) {
+            if ($r->work_type === 'note') {
+                return [
+                    'date' => $r->plan_date ?? 'someday',
+                    'kind' => 'note',
+                    'issue' => null,
+                    'title' => $r->title,
+                    'color' => $r->color,
+                    'done_at' => self::ts($r->completed_at),
+                    'position' => (int) $r->position,
+                    'added_at' => self::ts($r->created_at),
+                ];
+            }
             $issue = $r->work_type === 'board' ? $issues->get($r->work_id) : null;
             $task = $r->work_type === 'list' ? $tasks->get($r->work_id) : null;
 
             return [
-                'date' => $r->plan_date,
+                'date' => $r->plan_date ?? 'someday',
                 'kind' => $r->work_type === 'board' ? 'issue' : 'task',
                 'issue' => $issue?->key,
                 'title' => $issue?->title ?? $task?->title,

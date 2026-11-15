@@ -266,6 +266,23 @@ class MyWorkTest extends TestCase
         $this->getJson('/api/v1/me/my-day', $this->appHeaders($this->token))->assertOk()->assertJsonCount(0, 'data.items');
     }
 
+    public function test_free_form_notes_of_the_week_planner_never_reach_the_apps(): void
+    {
+        $item = $this->item();
+        MyDayPlan::add($this->editor, 'board', $item->id);
+        MyDayPlan::addNote($this->editor, '2026-11-10', 'Call the bank');
+        MyDayPlan::addNote($this->editor, '2026-11-09', 'Unfinished yesterday');
+
+        $this->getJson('/api/v1/me/my-day', $this->appHeaders($this->token))->assertOk()
+            ->assertJsonCount(1, 'data.items')
+            ->assertJsonPath('data.items.0.id', "issue:{$item->id}")
+            ->assertJsonPath('data.carry_over_count', 0);
+
+        // the apps' "Bring over" leaves notes where they are
+        $this->postJson('/api/v1/me/my-day/carry-over', [], $this->appHeaders($this->token))->assertOk();
+        $this->assertSame('2026-11-09', MyDayEntry::where('title', 'Unfinished yesterday')->sole()->plan_date->toDateString());
+    }
+
     public function test_carry_over_brings_unfinished_work_of_earlier_days(): void
     {
         $open = $this->item();

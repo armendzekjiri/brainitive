@@ -972,6 +972,13 @@ export default function Welcome({
                     isNew: true,
                 },
                 {
+                    icon: CalendarDays,
+                    title: 'My Week planner',
+                    description:
+                        'Plan Monday to Sunday plus a Someday list: free-form lines next to linked issues and tasks, dragged between days.',
+                    isNew: true,
+                },
+                {
                     icon: Sun,
                     title: 'My Day & focus timer',
                     description:

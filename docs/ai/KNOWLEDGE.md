@@ -428,6 +428,31 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
   viewport. Options in the Move dialog start with the folder's emoji: match names without `^`; a disabled
   option (`aria-disabled`) needs `click({ force: true })`.
 
+### Sidebar row menu: permissions and staying put (GitHub #155, 2026-11-15)
+- **`can_delete` is computed, not a policy call per page.** `markEditablePages` reads the user's project
+  roles once and marks every node of the (already `visibleTo`) tree with `PagePolicy::delete`'s rule: admins,
+  or the author while they may still edit. `SidebarPageMenuTest` compares it with `$user->can('delete', …)` for
+  every role — change the policy and that test tells you to change the flag. The server still authorizes.
+- **Rename through `pages.update`** used to set `name` only: a published page with an open draft kept the
+  old title in `draft_name`, and publishing the draft brought it back. It now follows MCP `update_page`
+  (draft title follows, published page records a "Renamed" version); "review required" pages keep the new
+  title in the draft (the response's `name` is then the old one, which the menu reports).
+- **Delete keeps you where you are:** `pages.destroy` answers JSON when asked (axios), so deleting another
+  item doesn't jump to its parent. Deleting the open page or one of its ancestors uses the normal redirect.
+- **Right-click replaces the browser's link menu** on the row (the row is mostly an `<a>`), hence "Open in
+  new tab" and "Copy link" in ours. It's off on touch screens (`pointer: coarse`), like the board's issue menu.
+- The ⋯ now shows for viewers too (Open / Copy link), so e2e must scope "More actions for …" to a row or use
+  `exact: true` for the page header's "More actions".
+
+### Bookmark header details (GitHub #152, 2026-11-15)
+- **`canEdit` on `Bookmarks/Show` is `isEditableBy`** (owner or editor collaborator); `BookmarkPolicy::update` /
+  `manageCollaborators` also allow workspace admins, who therefore see a private bookmark read-only although
+  the server would accept their changes. Pre-existing, left as is (follow-up in `tasks/feat-bookmark-header-details.md`).
+- **Phone width checks in e2e:** the app scrolls inside `AppLayout`'s `<main>`, so `documentElement.scrollWidth`
+  alone never shows a horizontal overflow — compare `scrollWidth` / `clientWidth` of the `main` elements too
+  (`bookmark-header.spec.ts`). A page's own `<header>` inside `<main>` is not a `banner` landmark: locate it with
+  `page.locator('header')`.
+
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
 means adding its param to `BoardViewConfig::PARAM_KEYS` + `normalize()` (allowlist) and, if it
@@ -534,6 +559,29 @@ Jira's "hide completed issues older than…" for Kanban boards: `boards.settings
   (`InvalidFormatException`) before `'Y-m-d H:i'` is tried. Jira's own format (`20/Oct/26 9:05 AM`) works.
   Not fixed here.
 
+### My Week: notes and Someday live in `my_day_entries`, and only the web sees them (v1.53.0)
+- A plan line is a `my_day_entries` row: linked work (`board` / `list` + `work_id`) or a free-form
+  `note` (`work_id` null). `plan_date` null = "Someday". No second table, so ordering and moving
+  between days is one `arrange()` for every kind.
+- **Everything outside the web ignores notes and Someday on purpose:** `MyDayPlan::forDate()`,
+  `carryOverCandidates()` and `resolve()` (without `withNotes`) only return entries with work, and all
+  date queries (`plan_date = …`, `between`) skip NULL dates. So the App API / mobile (`me/my-day`,
+  Today, `ChangeFeed`, `SyncRecords`), offline sync, the calendar feed and MCP payloads are unchanged.
+  Adding notes there later means new API fields + offline mutation types, not loosening those queries.
+- `MyDayEntry::TYPES` stays `['board','list']` (validators of the App API / offline appliers use it);
+  `MyDayEntry::NOTE` is separate.
+- Web "Bring over" **moves** unfinished notes of the last 30 days to today (tasks are still copied), so
+  the same note isn't offered again tomorrow. The apps' carry-over (`carryOver()` without `withNotes`)
+  leaves notes alone.
+- The unique index `(user, work_type, work_id, plan_date)` does not stop duplicate Someday rows (NULLs are
+  distinct), so the partial unique index `my_day_entries_someday_unique` (`… where plan_date is null and
+  work_id is not null`) does; `firstOrCreate` (→ `createOrFirst`) then returns the existing row on a race.
+  **Drop that index before any later `->change()` on this table:** on SQLite Laravel rebuilds indexes from
+  what it reads back and loses the `WHERE`, turning it into a full unique key.
+- Moves (`arrange()`) and carry-over lock the user row first (`lockPlan()`), so two moves of the same task
+  onto one day can't both miss each other. Each list holds at most `LIST_LIMIT` (200) lines — the most one
+  reorder call sends; store, move and carry-over all respect it.
+
 ### Board workflow rules: one guard, a model backstop, strict on purpose (v1.52.0, 2026-11-06)
 Rules per target column (who / allowed from / conditions), enforced by `Support\Boards\WorkflowGuard`.
 - **Two layers.** Explicit `ensure()` where a whole action must be refused up front with a clear message (drag & drop + the
@@ -615,6 +663,15 @@ programs and scripts outright: `App\Rules\NotExecutableUpload` → `Uploads::isE
 extension in the name + the content-detected MIME type); the browser forms pre-check with
 `resources/js/lib/blockedUploads.ts` (same list — change both together). Logged-in uploads keep
 the allowlist renaming only.
+
+### A replaced upload needs a new file name (GitHub #154)
+Project and bookmark icons used to be stored as `…/{id}/icon.<ext>` on every upload. Replacing one gave the same
+path / URL: the settings form wasn't dirty (nothing to save) and browsers / CDNs kept the cached old image. Each
+upload is now `icon-<random>.<ext>` (`Uploads::iconName()` / `iconFileName()`); `Uploads::isOwnIconPath()` accepts
+that and the pre-v1.53.0 `icon.<ext>`, so an old icon is still deleted when replaced. A project settings form that
+sends back another own icon path than the current one (opened before a newer upload) keeps the current icon. Any
+new "replace the file" upload: give it a fresh name and `WorkspaceFiles::forget()` the old one, never overwrite in
+place.
 
 ### Accounts, invitations and connected apps
 - An email is "proven" only by `email_verified_at` (raw column — `hasVerifiedEmail()` is always
@@ -842,6 +899,14 @@ priorities, the git-deployed server didn't. Reference rows the app needs (types,
 must arrive through a migration that calls the idempotent seeder (see
 `2026_10_23_150000_ensure_default_item_priorities.php`, BRAI-85) — otherwise pickers are
 empty in production while tests and Docker look fine.
+
+### Docker: the container can't write /app/public — make web-root files at build time (GitHub #153)
+The image runs as `USER www-data`, but `/app` (incl. `public/`) belongs to root; only `storage`, `bootstrap/cache`,
+`/data`, `/config` and `/collab` are chowned. `public/storage` → `storage/app/public` is therefore created in the
+`Dockerfile`'s root `RUN` block (`ln -sfn`); the entrypoint's old `storage:link >/dev/null 2>&1 || true` failed
+silently and every upload (icons, logos, images) answered 404. The entrypoint now runs `storage:link` only when the
+link is missing and prints a `WARNING` when it can't. Anything else that must exist in the web root or outside the
+chowned folders: create it at build time too, never at runtime. `tests/Unit/DockerStorageLinkTest.php` guards it.
 
 ### Docker self-hosting runs PostgreSQL — the migrations don't run on MySQL / MariaDB
 `compose.yaml` shipped MariaDB 11.4 until 2026-10-25, but no fresh install ever got past

@@ -14,6 +14,7 @@ const NEW_FEATURES = [
     'Custom fields',
     'Releases & release notes',
     'Quick capture',
+    'My Week planner',
     'My Day & focus timer',
     'Command palette',
     'Related content & backlinks',

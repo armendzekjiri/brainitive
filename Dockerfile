@@ -61,10 +61,13 @@ COPY --from=assets /app/public/js/helpdesk-widget.js /app/public/js/helpdesk-wid
 COPY --from=realtime /realtime/node_modules /app/realtime/node_modules
 COPY docker/entrypoint.sh /usr/local/bin/brainitive-entrypoint
 
+# Uploads are served from public/storage → storage/app/public (in the storage volume). The link is made
+# here, as root: /app/public belongs to root, so `storage:link` as www-data at runtime can't (GitHub #153).
 RUN chmod +x /usr/local/bin/brainitive-entrypoint \
     && rm -rf node_modules excalidraw-build tests .github docs \
     && php artisan package:discover --ansi \
     && mkdir -p storage/app/public storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
+    && ln -sfn /app/storage/app/public /app/public/storage \
     && mkdir -p /collab \
     && chown -R www-data:www-data storage bootstrap/cache /data /config /collab
 

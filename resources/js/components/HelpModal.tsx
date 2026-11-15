@@ -101,6 +101,24 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.53.0',
+        title: 'My Week planner, a real sidebar menu and bookmark headers',
+        tag: 'Feature',
+        date: '2026-11-15',
+        items: [
+            'My Week: switch My Day to “Week” on My Work and plan Monday to Sunday like a paper planner — five weekdays on top, Saturday, Sunday and a wide Someday list below.',
+            'Write free-form lines on any day (“Call the bank”, “Gym”) — no project needed. Click a line to edit it, tick it when done, give it a colour from its ⋯ menu.',
+            'Link real work: type # in a day’s “Add a line…” and pick an issue or list task, or drag a row from My Work onto a day. Ticking a linked line completes the issue or task itself.',
+            'Drag lines within a day and between days, or use ⋯ → Move to. Planning never changes a task’s due date, status or assignee.',
+            'Someday holds lines without a day yet — drag them onto a day when it’s time. Browse weeks with ‹ › and “This week”; each day shows how much of it is done.',
+            'My Day shows today’s free-form lines too, with its own “Add a line…”, and “Bring over … unfinished” also brings yesterday’s open lines.',
+            'Docs, whiteboards and folders in the sidebar now have a full menu on ⋯ or right-click — open, open in a new tab, copy link, rename, duplicate, move and delete without opening the item.',
+            'Bookmark collections show their description under the title and their collaborators as avatars in the header, so the content gets the full width.',
+            'Fixed: replacing a custom project or bookmark icon with a new image now works right away — the new icon shows immediately and the settings form can be saved.',
+            'Fixed (Docker): uploaded icons and images no longer show as broken — the image creates the storage link itself and the container logs a clear warning if it is ever missing.',
+        ],
+    },
+    {
         version: 'v1.52.0',
         title: 'Developer API and workflow rules for boards',
         tag: 'Major Feature',

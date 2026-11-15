@@ -1,6 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
-import { PageProps, MyWorkProject, MyWorkItem, MyDayPlan } from '@/types';
+import { PageProps, MyWorkProject, MyWorkItem, MyDayPlan, MyWeekPlan } from '@/types';
+import { MY_WORK_MIME } from '@/lib/myWeek';
 import MyDaySection from '@/components/MyDaySection';
 import WorkDoneToggle from '@/components/WorkDoneToggle';
 import { toast } from 'sonner';
@@ -44,6 +45,8 @@ interface Props extends PageProps {
     counts: { all: number; today: number; overdue: number; week: number };
     scopeCounts: { assigned: number; created: number };
     myDay: MyDayPlan;
+    plan: 'day' | 'week';
+    myWeek: MyWeekPlan | null;
 }
 
 const dueFilters: { key: FilterKey; label: string; icon: typeof Calendar }[] = [
@@ -175,6 +178,12 @@ function ItemRow({
     return (
         // The title link stretches over the whole row; the ☀ button sits above it (no button inside a link).
         <div
+            // My Week (v1.53.0): drop a row onto a day of the week to plan it there
+            draggable
+            onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'copyLink';
+                e.dataTransfer.setData(MY_WORK_MIME, `${item.work_type}:${item.id}`);
+            }}
             className={cn(
                 'group relative grid gap-2 border-b border-border/70 px-3.5 py-[9px] text-[12.5px] transition-colors last:border-b-0 hover:bg-background',
                 ROW_GRID,
@@ -254,7 +263,7 @@ function ItemRow({
     );
 }
 
-export default function MyWorkIndex({ auth, scope, filter, projects, counts, scopeCounts, myDay }: Props) {
+export default function MyWorkIndex({ auth, scope, filter, projects, counts, scopeCounts, myDay, plan, myWeek }: Props) {
     const plannedKeys = new Set(myDay.keys);
     // Offline mode (BRAI-82): today's plan, for My Day without internet (a no-op while it's off).
     useOfflineSnapshot('myday', 'today', () => myDaySnapshot(myDay), [myDay]);
@@ -285,12 +294,16 @@ export default function MyWorkIndex({ auth, scope, filter, projects, counts, sco
     );
     const onlyStatusHides = activeFilterCount(filters) === 0 && filters.q.trim() === '' && filters.status === 'open';
     // scope / due chips are server visits: carry the client filters along
-    const visit = (params: { scope: ScopeKey; filter: string }) =>
+    const visit = (params: { scope: ScopeKey; filter: string }) => {
+        // stay on the week the planner shows (My Week, v1.53.0)
+        const url = new URLSearchParams(window.location.search);
+        const planParams = Object.fromEntries(['plan', 'week'].flatMap((k) => (url.get(k) ? [[k, url.get(k)!]] : [])));
         router.get(
             route('my-work.index'),
-            { ...params, ...Object.fromEntries(Object.entries(myWorkFilterParams(filters)).filter(([, v]) => v)) },
+            { ...params, ...planParams, ...Object.fromEntries(Object.entries(myWorkFilterParams(filters)).filter(([, v]) => v)) },
             { preserveState: true, preserveScroll: true },
         );
+    };
     const firstName = auth.user.name?.split(' ')[0] || 'there';
     const isCreatedScope = scope === 'created';
     const currentDate = new Date().toLocaleDateString(undefined, {
@@ -355,7 +368,7 @@ export default function MyWorkIndex({ auth, scope, filter, projects, counts, sco
                     </div>
                 </div>
 
-                <MyDaySection plan={myDay} />
+                <MyDaySection plan={myDay} mode={plan} week={myWeek} />
 
                 <div className="flex flex-wrap items-center gap-2">
                     <div className="inline-flex rounded-[7px] border border-border bg-secondary p-[3px]">
