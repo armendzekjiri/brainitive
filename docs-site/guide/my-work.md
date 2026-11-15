@@ -1,10 +1,10 @@
 ---
-title: My Work, My Day and quick capture
-description: "See everything assigned to you across Brainitive projects, plan your day with My Day and a focus timer, track your time and capture ideas with one key."
+title: My Work, My Day, My Week and quick capture
+description: "See everything assigned to you across Brainitive projects, plan your day and week with My Day and My Week, run a focus timer, track your time and capture ideas with one key."
 order: 56
 ---
 
-# My Work, My Day and quick capture
+# My Work, My Day, My Week and quick capture
 
 These are your personal views: what's on your plate across every project, what you plan to do today, and a private
 inbox for ideas you don't want to file yet.
@@ -30,6 +30,26 @@ My Day sits at the top of My Work. It's your plan for today:
 
 Planning never changes a task: its status, due date and assignee stay as they are. Unfinished items don't come back on
 their own the next day — click **Bring over … unfinished** when you want yesterday's leftovers on today's list.
+
+You can also write a free-form line under the list (**Add a line…**) — for things that aren't a task anywhere, like
+"Call the bank".
+
+## My Week
+
+Switch My Day to **Week** to plan the whole week like a paper planner: Monday to Friday side by side, and below them
+Saturday, Sunday and **Someday** (things without a day yet).
+
+- **Write a line:** click **Add a line…** under a day, type and press Enter. Click a line to edit it; tick its circle
+  when it's done; give it a colour from its **⋯** menu.
+- **Link an issue or task:** type `#` followed by a few letters in **Add a line…** and pick the issue or list task. You
+  can also drag a row from the My Work list below onto a day. A linked line shows the issue key and project; ticking it
+  completes the issue (moves it to its board's done column) or the list task.
+- **Move lines:** drag them within a day, to another day or to Someday — or use **⋯ → Move to**. If a task is already
+  on that day, the two lines become one.
+- **Other weeks:** use **‹ ›** and **This week**. Each day shows how many of its lines are done.
+
+Like My Day, the week is only your plan: due dates, status and assignees of linked tasks don't change. Free-form lines
+and Someday are on the web for now; the desktop and mobile apps show today's linked tasks.
 
 ## Focus timer
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Board;
 use App\Models\Item;
+use App\Models\MyDayEntry;
 use App\Models\Project;
 use App\Models\TaskList;
 use App\Models\TaskListItem;
@@ -15,6 +16,63 @@ use Inertia\Response;
 
 class MyWorkController extends Controller
 {
+    /** What a planned issue / list task needs on My Day and My Week. */
+    private const PLAN_BOARD_WITH = [
+        'board:id,project_id,name,slug',
+        'board.columns:id,board_id,position,is_done_column',
+        'board.project:id,workspace_id,name,slug,key,color',
+        'board.project.workspace:id,name,slug',
+        'column:id,name,is_done_column',
+        'itemType',
+        'priority',
+        'assignee:id,name,email',
+        'labels:id,name,color',
+    ];
+
+    private const PLAN_LIST_WITH = [
+        'taskList:id,project_id,name,slug',
+        'taskList.project:id,workspace_id,name,slug,key,color',
+        'taskList.project.workspace:id,name,slug',
+        'assignee:id,name,email',
+    ];
+
+    /** A planned issue / list task: the My Work row + its project. */
+    private function planWork(Item|TaskListItem $work): array
+    {
+        $project = $work instanceof Item ? $work->board->project : $work->taskList->project;
+
+        return [
+            'item' => $work instanceof Item ? $this->mapBoardItem($work) : $this->mapListItem($work),
+            'project' => [
+                'id' => $project->id,
+                'name' => $project->name,
+                'slug' => $project->slug,
+                'color' => $project->color,
+                'workspace' => $project->workspace ? ['id' => $project->workspace->id, 'name' => $project->workspace->name, 'slug' => $project->workspace->slug] : null,
+            ],
+        ];
+    }
+
+    /**
+     * One line of the plan (week view, today's notes): a note or linked work.
+     *
+     * @param  array{entry: MyDayEntry, work: Item|TaskListItem|null}  $row
+     */
+    private function planLine(array $row): array
+    {
+        $entry = $row['entry'];
+
+        return [
+            'id' => $entry->id,
+            'kind' => $entry->work_type,
+            'position' => $entry->position,
+            'title' => $entry->title,
+            'color' => $entry->color,
+            'done' => $entry->completed_at !== null,
+            ...($row['work'] ? $this->planWork($row['work']) : ['item' => null, 'project' => null]),
+        ];
+    }
+
     private function applyBoardScope($query, string $scope, int $userId)
     {
         return $scope === 'created'
@@ -274,39 +332,35 @@ class MyWorkController extends Controller
             return $boardCount + $listCount;
         };
 
-        // My Day (BRAI-74): the hand-picked plan for the user's local today, in their order.
+        // My Day (BRAI-74): the hand-picked plan for the user's local today, in their order — linked
+        // work in `rows` (also read by the offline snapshot), free-form lines in `notes`.
         $planDate = MyDayPlan::today($user);
-        $plan = MyDayPlan::forDate($user, $planDate, [
-            'board:id,project_id,name,slug',
-            'board.columns:id,board_id,position,is_done_column',
-            'board.project:id,workspace_id,name,slug,key,color',
-            'board.project.workspace:id,name,slug',
-            'column:id,name,is_done_column',
-            'itemType',
-            'priority',
-            'assignee:id,name,email',
-            'labels:id,name,color',
-        ], [
-            'taskList:id,project_id,name,slug',
-            'taskList.project:id,workspace_id,name,slug,key,color',
-            'taskList.project.workspace:id,name,slug',
-            'assignee:id,name,email',
-        ]);
-        $myDay = $plan->map(function (array $row) {
-            $work = $row['work'];
-            $project = $work instanceof Item ? $work->board->project : $work->taskList->project;
+        $todayLines = MyDayPlan::forRange($user, $planDate, $planDate, self::PLAN_BOARD_WITH, self::PLAN_LIST_WITH);
+        $linked = $todayLines->filter(fn (array $row) => $row['work'] !== null)->values();
+        $myDay = $linked->map(fn (array $row) => [
+            ...$this->planWork($row['work']),
+            'entry_id' => $row['entry']->id,
+            'position' => $row['entry']->position,
+        ])->values();
 
-            return [
-                'item' => $work instanceof Item ? $this->mapBoardItem($work) : $this->mapListItem($work),
-                'project' => [
-                    'id' => $project->id,
-                    'name' => $project->name,
-                    'slug' => $project->slug,
-                    'color' => $project->color,
-                    'workspace' => $project->workspace ? ['id' => $project->workspace->id, 'name' => $project->workspace->name, 'slug' => $project->workspace->slug] : null,
-                ],
+        // My Week (v1.53.0): seven days from Monday, only when the week view is open.
+        $plan = $request->string('plan')->toString() === 'week' ? 'week' : 'day';
+        $myWeek = null;
+        if ($plan === 'week') {
+            $start = MyDayPlan::weekStart($user, $request->string('week')->toString() ?: null);
+            $end = Carbon::parse($start)->addDays(6)->toDateString();
+            $lines = MyDayPlan::forRange($user, $start, $end, self::PLAN_BOARD_WITH, self::PLAN_LIST_WITH)
+                ->groupBy(fn (array $row) => $row['entry']->plan_date->toDateString());
+            $myWeek = [
+                'start' => $start,
+                'someday' => MyDayPlan::someday($user, self::PLAN_BOARD_WITH, self::PLAN_LIST_WITH)->map(fn (array $row) => $this->planLine($row))->values(),
+                'days' => collect(range(0, 6))->map(function (int $offset) use ($start, $lines) {
+                    $date = Carbon::parse($start)->addDays($offset)->toDateString();
+
+                    return ['date' => $date, 'lines' => ($lines->get($date) ?? collect())->map(fn (array $row) => $this->planLine($row))->values()];
+                }),
             ];
-        })->values();
+        }
 
         return Inertia::render('MyWork/Index', [
             'scope' => $scope,
@@ -315,9 +369,12 @@ class MyWorkController extends Controller
             'myDay' => [
                 'date' => $planDate,
                 'rows' => $myDay,
-                'keys' => $plan->map(fn (array $row) => $row['entry']->work_type.':'.$row['entry']->work_id)->values(),
-                'carryOverCount' => MyDayPlan::carryOverCandidates($user, $planDate)->count(),
+                'notes' => $todayLines->filter(fn (array $row) => $row['work'] === null)->map(fn (array $row) => $this->planLine($row))->values(),
+                'keys' => $linked->map(fn (array $row) => $row['entry']->work_type.':'.$row['entry']->work_id)->values(),
+                'carryOverCount' => MyDayPlan::carryOverCandidates($user, $planDate)->count() + MyDayPlan::carryOverNotes($user, $planDate)->count(),
             ],
+            'plan' => $plan,
+            'myWeek' => $myWeek,
             'counts' => [
                 'all' => $countFor($scope, 'all'),
                 'today' => $countFor($scope, 'today'),
